@@ -1,0 +1,203 @@
+// UI building blocks drawn in the "overalls" style: denim panels with yellow
+// stitching and chunky cartoon buttons.
+(function () {
+  const D = MT.Draw;
+  const OL = D.OL;
+
+  const BTN = {
+    green: ['#7be35a', '#3fae2a', '#24751a'],
+    yellow: ['#ffe680', '#ffc61a', '#c98d00'],
+    red: ['#ff8a7a', '#e2463a', '#9b2219'],
+    blue: ['#7fb6ff', '#3a7fe0', '#1f4c94'],
+    purple: ['#c89bff', '#8a3fd8', '#55208f'],
+    gray: ['#c9cfd6', '#8c96a1', '#59616b'],
+    dark: ['#4a5566', '#2c3440', '#161b22'],
+  };
+
+  function btnKey(scene, w, h, style) {
+    const key = `btn_${style}_${w}x${h}`;
+    D.make(scene, key, w, h + 5, (ctx) => {
+      const c = BTN[style] || BTN.green;
+      const r = Math.min(14, h / 2.4);
+      // lip
+      D.rrPath(ctx, 1.5, 5, w - 3, h - 2, r);
+      D.fs(ctx, c[2], OL, 2.5);
+      // face
+      D.rrPath(ctx, 1.5, 1.5, w - 3, h - 3, r);
+      ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, c[0]], [0.55, c[1]], [1, c[1]]]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // gloss
+      D.rrPath(ctx, 6, 4.5, w - 12, h * 0.36, r * 0.7);
+      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      ctx.fill();
+    });
+    return key;
+  }
+
+  function panelKey(scene, w, h, style) {
+    const key = `panel_${style}_${w}x${h}`;
+    D.make(scene, key, w, h, (ctx) => {
+      const r = style === 'card' ? 10 : 16;
+      D.rrPath(ctx, 2, 2, w - 4, h - 4, r);
+      if (style === 'denim' || style === 'card') {
+        const c = style === 'card' ? ['#5689cf', '#3b6db3'] : ['#3c6fb6', '#244a83'];
+        ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, c[0]], [1, c[1]]]);
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+        ctx.lineWidth = 1;
+        for (let i = -h; i < w; i += 4) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i + h, h);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 3;
+        D.rrPath(ctx, 2, 2, w - 4, h - 4, r);
+        ctx.stroke();
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = 'rgba(255,209,102,0.85)';
+        ctx.lineWidth = 1.6;
+        D.rrPath(ctx, 8, 8, w - 16, h - 16, Math.max(4, r - 6));
+        ctx.stroke();
+        ctx.restore();
+      } else if (style === 'yellow') {
+        ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, '#ffe680'], [1, '#ffc61a']]);
+        ctx.fill();
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      } else if (style === 'dark') {
+        ctx.fillStyle = 'rgba(16,22,36,0.82)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else if (style === 'cream') {
+        ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, '#fff8e6'], [1, '#f1dfb5']]);
+        ctx.fill();
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+    });
+    return key;
+  }
+
+  function panel(scene, x, y, w, h, style = 'denim') {
+    return scene.add.image(x, y, panelKey(scene, w, h, style)).setOrigin(0).setScale(1 / D.S);
+  }
+
+  class Button extends Phaser.GameObjects.Container {
+    constructor(scene, x, y, w, h, opts = {}) {
+      super(scene, x, y);
+      this.opts = opts;
+      this.w = w;
+      this.h = h;
+      this.style = opts.style || 'green';
+      this.enabled = true;
+      this.bg = scene.add.image(0, 2.5, btnKey(scene, w, h, this.style)).setScale(1 / D.S);
+      this.add(this.bg);
+      if (opts.icon) {
+        const ix = opts.label ? -w / 2 + h * 0.55 : 0;
+        this.icon = scene.add.image(ix, 0, opts.icon).setScale((opts.iconScale || h * 0.62 / 32) / D.S * 2 / 2);
+        this.icon.setDisplaySize(h * (opts.iconSize || 0.62), h * (opts.iconSize || 0.62));
+        this.add(this.icon);
+      }
+      if (opts.label != null) {
+        const lx = opts.icon ? h * 0.3 : 0;
+        this.label = MT.text(scene, lx, opts.sub ? -h * 0.13 : 0, opts.label, opts.size || Math.round(h * 0.42), { title: opts.title !== false, color: opts.color || '#ffffff' });
+        this.add(this.label);
+      }
+      if (opts.sub != null) {
+        this.sub = MT.text(scene, opts.icon ? h * 0.3 : 0, h * 0.22, opts.sub, opts.subSize || Math.round(h * 0.26), { color: opts.subColor || '#ffffff' });
+        this.add(this.sub);
+      }
+      this.setSize(w, h);
+      this.setInteractive({ useHandCursor: true });
+      this.on('pointerover', () => {
+        if (!this.enabled) return;
+        this.setScale(1.04);
+        opts.onHover && opts.onHover(true);
+      });
+      this.on('pointerout', () => {
+        this.setScale(1);
+        this.bg.y = 2.5;
+        opts.onHover && opts.onHover(false);
+      });
+      this.on('pointerdown', () => {
+        if (!this.enabled) return;
+        this.bg.y = 4;
+      });
+      this.on('pointerup', () => {
+        this.bg.y = 2.5;
+        if (!this.enabled) {
+          MT.Audio.play('error');
+          opts.onDisabledClick && opts.onDisabledClick();
+          return;
+        }
+        MT.Audio.play('click');
+        opts.onClick && opts.onClick(this);
+      });
+      scene.add.existing(this);
+    }
+    setEnabled(b) {
+      this.enabled = b;
+      this.bg.setTint(b ? 0xffffff : 0x8a8a8a);
+      if (this.label) this.label.setAlpha(b ? 1 : 0.7);
+      return this;
+    }
+    setStyle(style) {
+      if (style === this.style) return this;
+      this.style = style;
+      this.bg.setTexture(btnKey(this.scene, this.w, this.h, style));
+      return this;
+    }
+    setLabel(t) {
+      if (this.label) this.label.setText(t);
+      return this;
+    }
+    setSub(t) {
+      if (this.sub) this.sub.setText(t);
+      return this;
+    }
+  }
+
+  // Simple floating tooltip
+  class Tooltip {
+    constructor(scene) {
+      this.scene = scene;
+      this.c = scene.add.container(0, 0).setDepth(20000).setVisible(false);
+      this.bg = scene.add.graphics();
+      this.title = MT.text(scene, 12, 10, '', 16, { title: true, ox: 0, oy: 0, color: '#ffd83a' });
+      this.body = MT.text(scene, 12, 34, '', 13, { ox: 0, oy: 0, wrap: 236, strokeThickness: 3 });
+      this.c.add([this.bg, this.title, this.body]);
+    }
+    show(x, y, title, body) {
+      this.title.setText(title);
+      this.body.setText(body || '');
+      const w = 260;
+      const h = 44 + (body ? this.body.height : 0);
+      this.bg.clear();
+      this.bg.fillStyle(0x101624, 0.94);
+      this.bg.fillRoundedRect(0, 0, w, h, 10);
+      this.bg.lineStyle(2, 0xffd166, 0.9);
+      this.bg.strokeRoundedRect(0, 0, w, h, 10);
+      const px = Phaser.Math.Clamp(x, 6, MT.CFG.W - w - 6);
+      const py = Phaser.Math.Clamp(y, 6, MT.CFG.H - h - 6);
+      this.c.setPosition(px, py).setVisible(true);
+    }
+    hide() {
+      this.c.setVisible(false);
+    }
+  }
+
+  MT.UI = { btnKey, panelKey, panel, Button, Tooltip, BTN };
+})();
