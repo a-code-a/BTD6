@@ -1,6 +1,7 @@
-// Visual effects layer: pops, explosions, rings, beams, floating text.
+// Visual effects layer: pops, explosions, rings, beams, lightning, floating text.
 (function () {
   const S = MT.Draw.S;
+  const W = MT.CFG.MAP_W, H = MT.CFG.H;
 
   class Effects {
     constructor(scene) {
@@ -37,12 +38,28 @@
         speed: { min: 0, max: 15 }, scale: { start: 0.25, end: 0.6 }, alpha: { start: 0.5, end: 0 }, lifespan: 400,
         tint: [0xffffff, 0xd0d0d0],
       }).setDepth(2990);
+      // additive glow used for coloured trails, sparkles and muzzle flashes
+      this.glow = P('fx_puff', {
+        speed: { min: 0, max: 20 }, scale: { start: 0.32, end: 0 }, alpha: { start: 0.8, end: 0 }, lifespan: 300,
+        blendMode: 'ADD', maxAliveParticles: 260,
+      }).setDepth(3010);
+      this.debris = P('fx_chunk', {
+        speed: { min: 140, max: 340 }, angle: { min: 200, max: 340 }, gravityY: 700, scale: { start: 0.9, end: 0.4 },
+        rotate: { min: 0, max: 360 }, lifespan: 750, tint: [0x7b2fb0, 0x9b59d0, 0x5e2585, 0xc490ea],
+      }).setDepth(4003);
+      this.notes = P('fx_note', {
+        speedY: { min: -70, max: -30 }, speedX: { min: -25, max: 25 }, scale: { start: 0.8, end: 0.3 }, alpha: { start: 1, end: 0 },
+        lifespan: 900, tint: [0xff4081, 0x40c4ff, 0xffd83a, 0x7be35a, 0xb388ff],
+      }).setDepth(4004);
       this.popPool = [];
       this.activePops = 0;
       this.beams = [];
       this.beamG = scene.add.graphics().setDepth(3500);
       this.ringPool = [];
-      this.active = { boom: 0, ring: 0, text: 0 };
+      this.active = { boom: 0, ring: 0, text: 0, stomp: 0, swirl: 0 };
+      // full-map overlays for flashes and danger vignettes (never covers the HUD)
+      this.flashRect = scene.add.rectangle(0, 0, W, H, 0xffffff, 1).setOrigin(0).setDepth(6800).setAlpha(0).setVisible(false);
+      this.vig = scene.add.image(W / 2, H / 2, 'fx_vignette').setDisplaySize(W, H).setDepth(6790).setAlpha(0).setVisible(false);
     }
 
     pop(x, y, big) {
@@ -95,12 +112,113 @@
     }
 
     beam(x1, y1, x2, y2, color, width = 3, life = 0.12) {
-      if (this.beams.length > 60) this.beams.shift();
+      if (this.beams.length > 80) this.beams.shift();
       this.beams.push({ x1, y1, x2, y2, color, width, life, max: life });
+    }
+
+    // jagged electric bolt, re-randomised every frame so it crackles
+    lightning(x1, y1, x2, y2, color, width = 2.2, life = 0.16) {
+      if (this.beams.length > 80) this.beams.shift();
+      this.beams.push({ x1, y1, x2, y2, color, width, life, max: life, jag: true });
     }
 
     clank(x, y) {
       this.sparks.explode(3, x, y);
+    }
+
+    glowTrail(x, y, color) {
+      this.glow.particleTint = color;
+      this.glow.explode(1, x, y);
+    }
+
+    sparkle(x, y, color) {
+      this.glow.particleTint = color;
+      this.glow.explode(1, x, y);
+    }
+
+    muzzle(x, y, color) {
+      this.glow.particleTint = color;
+      this.glow.explode(3, x, y);
+    }
+
+    stomp(x, y, r) {
+      if (this.active.stomp > 14) return;
+      this.dust.explode(r > 50 ? 3 : 2, x, y);
+    }
+
+    splat(x, y, r, color) {
+      this.goo.particleTint = color;
+      this.goo.explode(9, x, y);
+      this.goo.particleTint = 0xff4f7b;
+      this.ring(x, y, r, color, { disc: true, dur: 260 });
+    }
+
+    // spinning gas tornado for the Fartnado
+    swirl(x, y, r, color) {
+      if (this.active.swirl > 6) return;
+      this.active.swirl++;
+      const img = this.scene.add.image(x, y - 6, 'fx_swirl').setDepth(2945).setTint(color).setAlpha(0.75).setScale((r * 0.5) / 64);
+      this.scene.tweens.add({
+        targets: img, scale: r / 64, angle: 220, alpha: 0, duration: 420, ease: 'Quad.easeOut',
+        onComplete: () => { img.destroy(); this.active.swirl--; },
+      });
+      this.gas.explode(3, x + (Math.random() - 0.5) * r, y + (Math.random() - 0.5) * r * 0.6);
+    }
+
+    // a short full-map colour flash (alpha-limited, never blinding)
+    screenFlash(color, alpha = 0.35, dur = 300) {
+      const r = this.flashRect;
+      this.scene.tweens.killTweensOf(r);
+      r.setFillStyle(color, 1).setAlpha(alpha).setVisible(true);
+      this.scene.tweens.add({ targets: r, alpha: 0, duration: dur, ease: 'Quad.easeOut', onComplete: () => r.setVisible(false) });
+    }
+
+    // coloured edge vignette (used for leaks and boss warnings)
+    vignette(color, alpha = 0.4, dur = 400) {
+      const v = this.vig;
+      if (v.visible && v.alpha > alpha) return;
+      this.scene.tweens.killTweensOf(v);
+      v.setTint(color).setAlpha(alpha).setVisible(true);
+      this.scene.tweens.add({ targets: v, alpha: 0, duration: dur, ease: 'Sine.easeOut', onComplete: () => v.setVisible(false) });
+    }
+
+    shockwave(x, y, r, color, dur = 450) {
+      const img = this.scene.add.image(x, y, 'fx_shock').setDepth(4006).setTint(color).setAlpha(0.95).setScale((r * 0.15) / 64);
+      this.scene.tweens.add({ targets: img, scale: r / 64, alpha: 0, duration: dur, ease: 'Cubic.easeOut', onComplete: () => img.destroy() });
+    }
+
+    // the big multi-stage explosion when a giant goes down
+    bossDeath(x, y, r, color, big) {
+      const s = this.scene;
+      // size class: 1 = mega-sized, 2 = titan and up, 3 = final boss
+      const tier = big ? 3 : r >= 44 ? 2 : 1;
+      // when lots of giants pop together, keep it readable instead of a white-out
+      const now = s.time.now;
+      this.deathLog = (this.deathLog || []).filter((t) => now - t < 600);
+      this.deathLog.push(now);
+      const crowded = this.deathLog.length > 4 && tier < 3;
+      this.puffs.explode(tier === 3 ? 30 : tier === 2 ? 16 : 10, x, y);
+      this.sparks.explode(tier === 3 ? 30 : tier === 2 ? 12 : 6, x, y);
+      this.smoke.explode(tier === 3 ? 16 : tier === 2 ? 8 : 4, x, y);
+      this.debris.explode(Math.min(28, Math.round(r / (tier === 1 ? 4 : 2.5))), x, y - r * 0.3);
+      if (crowded) {
+        this.pop(x, y, true);
+        return;
+      }
+      this.shockwave(x, y, r * (tier === 3 ? 5 : tier === 2 ? 3 : 2.3), color, tier === 3 ? 700 : 420);
+      if (tier >= 2) {
+        const flash = s.add.image(x, y, 'fx_disc').setDepth(4007).setTint(tier === 3 ? 0xffffff : color).setAlpha(tier === 3 ? 0.85 : 0.5).setScale((r * 1.1) / 64);
+        if (tier === 3) flash.setBlendMode(Phaser.BlendModes.ADD);
+        s.tweens.add({ targets: flash, scale: (r * 2.3) / 64, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+      }
+      const n = tier === 3 ? 8 : tier === 2 ? 3 : 1;
+      for (let i = 0; i < n; i++) {
+        s.time.delayedCall(70 + i * (big ? 110 : 80), () => {
+          const a = Math.random() * Math.PI * 2, d = Math.random() * r * (big ? 1.1 : 0.8);
+          this.boom(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7 - r * 0.2, r * (big ? 1.1 : 0.7));
+        });
+      }
+      this.pop(x, y, true);
     }
 
     floatText(x, y, str, color = '#ffd83a', size = 18) {
@@ -111,6 +229,19 @@
         targets: t, y: y - 36, alpha: 0, duration: 900, ease: 'Quad.easeOut',
         onComplete: () => { t.destroy(); this.active.text--; },
       });
+    }
+
+    // big punchy title in the middle of the map (fusion, boss defeated, ...)
+    bigText(str, color = '#ffd83a', size = 54, sub) {
+      const s = this.scene;
+      const c = s.add.container(W / 2, H * 0.4).setDepth(6900);
+      const t = MT.text(s, 0, 0, str, size, { title: true, color, strokeThickness: Math.round(size / 6) });
+      c.add(t);
+      if (sub) c.add(MT.text(s, 0, size * 0.8, sub, 20, { color: '#ffffff' }));
+      c.setScale(0.2).setAlpha(0);
+      s.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 320, ease: 'Back.easeOut' });
+      s.tweens.add({ targets: c, alpha: 0, y: H * 0.4 - 30, delay: 1500, duration: 400, onComplete: () => c.destroy() });
+      return c;
     }
 
     speech(x, y, str) {
@@ -148,6 +279,16 @@
           continue;
         }
         const a = b.life / b.max;
+        if (b.jag) {
+          const pts = jaggedPoints(b.x1, b.y1, b.x2, b.y2);
+          g.lineStyle(b.width * 3.2, b.color, 0.22 * a);
+          g.strokePoints(pts, false);
+          g.lineStyle(b.width, b.color, 0.95 * a);
+          g.strokePoints(pts, false);
+          g.lineStyle(Math.max(1, b.width * 0.4), 0xffffff, a);
+          g.strokePoints(pts, false);
+          continue;
+        }
         g.lineStyle(b.width * 2.6, b.color, 0.25 * a);
         g.lineBetween(b.x1, b.y1, b.x2, b.y2);
         g.lineStyle(b.width, b.color, 0.9 * a);
@@ -156,6 +297,21 @@
         g.lineBetween(b.x1, b.y1, b.x2, b.y2);
       }
     }
+  }
+
+  function jaggedPoints(x1, y1, x2, y2) {
+    const dx = x2 - x1, dy = y2 - y1;
+    const len = Math.hypot(dx, dy) || 1;
+    const n = Math.max(3, Math.min(12, Math.round(len / 18)));
+    const nx = -dy / len, ny = dx / len;
+    const pts = [{ x: x1, y: y1 }];
+    for (let i = 1; i < n; i++) {
+      const t = i / n;
+      const off = (Math.random() - 0.5) * Math.min(26, len * 0.22);
+      pts.push({ x: x1 + dx * t + nx * off, y: y1 + dy * t + ny * off });
+    }
+    pts.push({ x: x2, y: y2 });
+    return pts;
   }
 
   MT.Effects = Effects;

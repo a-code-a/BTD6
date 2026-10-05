@@ -6,6 +6,9 @@
   const TARGET_MODES = ['First', 'Last', 'Close', 'Strong'];
   const CELL = 80, GOX = 120, GOY = 120;
   const GCOLS = Math.ceil((CFG.MAP_W + GOX * 2) / CELL), GROWS = Math.ceil((CFG.H + GOY * 2) / CELL);
+  // screen shake: maximum offset in logical px at full trauma, and how fast it fades
+  const SHAKE_PX = 6;
+  const SHAKE_DECAY = 1.6;
 
   class GameScene extends Phaser.Scene {
     constructor() {
@@ -15,10 +18,16 @@
     init(data) {
       this.mapDef = MT.MAPS.find((m) => m.id === data.map) || MT.MAPS[0];
       this.diff = MT.DIFFS[data.diff] || MT.DIFFS.medium;
+      const hero = data.hero || MT.Save.settings().hero;
+      this.heroId = MT.HEROES[hero] ? hero : 'gru';
+      this.heroDef = MT.HEROES[this.heroId];
     }
 
     create() {
-      MT.setupCamera(this);
+      const cam = MT.setupCamera(this);
+      this.camBase = { x: cam.scrollX, y: cam.scrollY };
+      this.trauma = 0;
+      this.slowmo = 0;
       this.uid = 0;
       this.paths = this.mapDef.paths.map((p) => new MT.Path(p));
       this.layout = MT.MapArt.layout(this.mapDef, this.paths);
@@ -32,6 +41,10 @@
       this.projectiles = [];
       this.pickups = [];
       this.timed = [];
+      this.runners = [];
+      this.biters = [];
+      this.seenBoss = {};
+      this.fusionHinted = {};
       this.money = CFG.START_CASH;
       this.lives = this.diff.lives;
       this.round = 0;
@@ -51,6 +64,7 @@
       this.heroPlaced = false;
       this.placing = null;
       this.selected = null;
+      this.fuseHover = null;
       this.pointer = { x: -100, y: -100 };
       this.grid = Array.from({ length: GCOLS * GROWS }, () => []);
       this.originCache = {};
@@ -58,6 +72,7 @@
       this.fx = new MT.Effects(this);
       this.gBars = this.add.graphics().setDepth(5000);
       this.gRange = this.add.graphics().setDepth(2900);
+      this.gTop = this.add.graphics().setDepth(7000);
       this.ghost = this.add.image(0, 0, MT.TowerArt.key(this, 'banana', [0, 0, 0])).setScale(1 / S).setAlpha(0.75).setVisible(false).setDepth(5900);
 
       this.hud = new MT.HUD(this);
@@ -96,13 +111,33 @@
       return d;
     }
 
+    defOf(type) {
+      return MT.HEROES[type] || MT.TOWERS[type];
+    }
+
     placeCost(type, x, y) {
-      const def = type === 'gru' ? MT.HERO : MT.TOWERS[type];
-      return this.price(def.cost, x, y);
+      return this.price(this.defOf(type).cost, x, y);
     }
 
     addMoney(v) {
       this.money += v;
+    }
+
+    cheatMoney() {
+      if (this.over) return;
+      this.money += CFG.CHEAT_MONEY;
+      MT.Audio.play('coin');
+      this.hud.toast(`CHEAT: +${U.money(CFG.CHEAT_MONEY)} bananas!`, 1600);
+      this.hud.flashMoney();
+    }
+
+    // Gentle, capped screen shake. Amounts add up but never exceed a few pixels,
+    // and the player can turn it down or off in the pause menu.
+    shake(amount) {
+      const mode = MT.Save.settings().shake;
+      if (mode === 'off') return;
+      const k = mode === 'low' ? 0.45 : 1;
+      this.trauma = Math.min(1, this.trauma + amount * k);
     }
 
     canPlace(x, y, size) {
@@ -171,12 +206,13 @@
           return;
         }
         const up = k.toUpperCase();
-        if (up === MT.HERO.key) return this.startPlacing('gru');
+        if (up === this.heroDef.key) return this.startPlacing(this.heroId);
         for (const id of MT.TOWER_ORDER) if (MT.TOWERS[id].key === up) return this.startPlacing(id);
         if (this.selected) {
           if (k === ',') this.buyUpgrade(this.selected, 0);
           if (k === '.') this.buyUpgrade(this.selected, 1);
           if (k === '/') this.buyUpgrade(this.selected, 2);
+          if (up === 'F') MT.Fusion.fuse(this, this.selected);
           if (k === 'Tab') {
             ev.preventDefault && ev.preventDefault();
             this.cycleTarget(this.selected, 1);
@@ -188,8 +224,9 @@
 
     startPlacing(type) {
       if (this.over) return;
-      if (type === 'gru' && this.heroPlaced) {
-        this.hud.toast('Gru is already on the map!');
+      const hero = MT.isHero(type);
+      if (hero && this.heroPlaced) {
+        this.hud.toast(this.heroDef.name + ' is already on the map!');
         MT.Audio.play('error');
         return;
       }
@@ -201,8 +238,8 @@
       }
       this.select(null);
       this.placing = { type };
-      const key = type === 'gru' ? MT.TowerArt.gruKey(this, 1) : MT.TowerArt.key(this, type, [0, 0, 0]);
-      this.ghost.setTexture(key).setOrigin(0.5, type === 'gru' ? 64 / 110 : type === 'farm' || type === 'lab' ? 58 / 92 : 49 / 92).setVisible(true);
+      const key = hero ? MT.TowerArt.heroKey(this, type, 1) : MT.TowerArt.key(this, type, [0, 0, 0]);
+      this.ghost.setTexture(key).setOrigin(0.5, hero ? 64 / 110 : type === 'farm' || type === 'lab' ? 58 / 92 : 49 / 92).setVisible(true);
       this.hud.setPlacing(type);
     }
 
@@ -215,8 +252,8 @@
     tryPlace(x, y) {
       if (!this.placing) return;
       const type = this.placing.type;
-      const hero = type === 'gru';
-      const def = hero ? MT.HERO : MT.TOWERS[type];
+      const hero = MT.isHero(type);
+      const def = this.defOf(type);
       const cost = this.placeCost(type, x, y);
       if (!this.canPlace(x, y, def.size)) {
         MT.Audio.play('error');
@@ -236,10 +273,8 @@
       this.recalcBuffs();
       this.fx.dust.explode(10, x, y + 14);
       MT.Audio.play(hero ? 'bello' : 'place');
-      const lines = hero ? ['Lightbulb!', 'Minions, assemble!', 'Freeze ray: ready.'] : type === 'farm' || type === 'lab' ? null : ['Bello!', 'Banana!', 'Bee-do!', 'Tank yu!', 'Poopaye!', 'Tulaliloo!', 'Bapples!'];
+      const lines = hero ? def.quotes : type === 'farm' || type === 'lab' ? null : ['Bello!', 'Banana!', 'Bee-do!', 'Tank yu!', 'Poopaye!', 'Tulaliloo!', 'Bapples!'];
       if (lines) this.fx.speech(x, y - (hero ? 70 : 54), U.pick(lines));
-      t.sprite.setScale(0);
-      this.tweens.add({ targets: t.sprite, scale: 1 / S, duration: 220, ease: 'Back.easeOut' });
       const shift = this.shiftKey && this.shiftKey.isDown;
       if (!shift || hero || this.placeCost(type) > this.money) this.cancelPlacing();
       this.hud.onTowersChanged();
@@ -248,6 +283,7 @@
     select(t) {
       if (this.placing && t) this.cancelPlacing();
       this.selected = t;
+      this.fuseHover = null;
       if (t) {
         MT.Audio.play('click');
         this.hud.showTower(t);
@@ -255,7 +291,7 @@
     }
 
     buyUpgrade(t, pi) {
-      if (t.hero) return;
+      if (t.hero || t.fused) return;
       const state = t.pathState(pi);
       if (state !== 'open') {
         MT.Audio.play('error');
@@ -277,13 +313,17 @@
       this.fx.ring(t.x, t.y, 50, 0xffd83a, { dur: 400 });
       MT.Audio.play('upgrade');
       if (t.type !== 'farm' && t.type !== 'lab') this.fx.speech(t.x, t.y - 54, U.pick(['Bee-do bee-do!', 'Kanpai!', 'Whaaa!', 'Gelato!', 'Bananaaa!']));
+      if (t.tiers[pi] === 4) {
+        this.fx.ring(t.x, t.y, 90, 0xffffff, { dur: 600, force: true });
+        MT.Fusion.checkHint(this, t.type);
+      }
       this.hud.showTower(t);
       this.hud.onTowersChanged();
     }
 
     heroLevelCost(t) {
       if (t.level >= 10) return 0;
-      return U.round5((MT.HERO.xp[t.level] - t.xp) * 2 * this.diff.price);
+      return U.round5((MT.HERO_XP[t.level] - t.xp) * 2 * this.diff.price);
     }
 
     buyHeroLevel(t) {
@@ -294,13 +334,13 @@
       }
       this.money -= cost;
       t.spent += Math.floor(cost * 0.5);
-      this.gainHeroXp(t, MT.HERO.xp[t.level] - t.xp);
+      this.gainHeroXp(t, MT.HERO_XP[t.level] - t.xp);
     }
 
     gainHeroXp(t, amount) {
       t.xp += amount;
       let leveled = false;
-      while (t.level < 10 && t.xp >= MT.HERO.xp[t.level]) {
+      while (t.level < 10 && t.xp >= MT.HERO_XP[t.level]) {
         t.level++;
         leveled = true;
       }
@@ -308,9 +348,10 @@
         t.recompute();
         t.refreshTexture();
         this.recalcBuffs();
-        this.fx.ring(t.x, t.y, 60, 0x7fdbff, { dur: 500 });
+        const col = U.hexInt(t.def.color || '#7fdbff');
+        this.fx.ring(t.x, t.y, 60, col, { dur: 500 });
         this.fx.sparks.explode(18, t.x, t.y - 20);
-        this.fx.floatText(t.x, t.y - 50, 'LEVEL ' + t.level + '!', '#7fdbff', 20);
+        this.fx.floatText(t.x, t.y - 50, 'LEVEL ' + t.level + '!', t.def.color || '#7fdbff', 20);
         MT.Audio.play('upgrade');
         this.hud.onTowersChanged();
       }
@@ -445,7 +486,7 @@
       e.leaked = true;
       e.destroy();
       MT.Audio.play('leak');
-      this.cameras.main.flash(120, 255, 40, 40, false);
+      this.fx.vignette(0xff2020, e.boss ? 0.55 : 0.32, e.boss ? 600 : 300);
       if (this.lives <= 0) this.defeat();
     }
 
@@ -473,13 +514,18 @@
     }
 
     findTarget(t) {
+      return this.findTargetFrom(t, t.x, t.y, t.stats.range);
+    }
+
+    // best enemy for tower t (respecting its targeting mode) around a point
+    findTargetFrom(t, x, y, range) {
       const s = t.stats;
       const mode = TARGET_MODES[t.targetMode];
       let best = null, bestScore = -Infinity;
       for (const e of this.enemies) {
         if (e.dead || (e.camo && !s.camo)) continue;
-        const rr = s.range + e.radius * 0.6;
-        const d2 = U.dist2(t.x, t.y, e.x, e.y);
+        const rr = range + e.radius * 0.6;
+        const d2 = U.dist2(x, y, e.x, e.y);
         if (d2 > rr * rr) continue;
         let score;
         if (mode === 'First') score = -e.remaining;
@@ -524,19 +570,20 @@
         return null;
       }
       if (p.slow && (!e.boss || p.slow.moab)) {
-        const mul = e.boss ? Math.max(p.slow.mul, tower && tower.type === 'jelly' && tower.tiers[2] >= 4 ? 0.5 : 0.7) : p.slow.mul;
-        e.applySlow(mul, p.slow.dur, p.slow.soak, tower && tower.type === 'jelly' && tower.tiers[0] >= 1);
+        const strong = tower && ((tower.type === 'jelly' && tower.tiers[2] >= 4) || tower.fused);
+        const mul = e.boss ? Math.max(p.slow.mul, strong ? 0.5 : 0.7) : p.slow.mul;
+        e.applySlow(mul, p.slow.dur, p.slow.soak, tower && tower.type === 'jelly' && (tower.tiers[0] >= 1 || tower.fused));
       }
       if (p.dot && (!e.boss || !p.slow || p.slow.moab)) e.applyDot(p.dot, tower);
       if (p.freeze) {
         if (!e.boss) {
           e.freeze = Math.max(e.freeze, p.freeze.dur);
           e.brittle = !!p.brittle;
-        } else if (p.freeze.moab) e.stun = Math.max(e.stun, p.freeze.moab);
+        } else if (p.freeze.moab) e.tryStun(p.freeze.moab);
       }
       if (p.stun) {
         if (!e.boss) e.stun = Math.max(e.stun, p.stun.dur);
-        else if (p.stun.moab) e.stun = Math.max(e.stun, p.stun.dur * 0.6);
+        else if (p.stun.moab) e.tryStun(p.stun.dur * 0.6);
       }
       if (p.knock && !e.boss) e.dist = Math.max(0, e.dist - p.knock * 3);
       let d = dmgOverride != null ? dmgOverride : p.dmg;
@@ -552,6 +599,10 @@
       e.hp -= d;
       if (e.hp > 0) {
         e.setDamageState();
+        if (e.boss) {
+          e.onHurt();
+          if (e.def.phases) MT.Bosses.checkPhase(this, e);
+        }
         return [];
       }
       const overflow = -e.hp;
@@ -570,9 +621,9 @@
       this.money += this.cashMul;
       this.totalPops++;
       if (tower) tower.pops++;
-      this.fx.pop(e.x, e.y, e.boss);
+      if (e.boss) MT.Bosses.death(this, e);
+      else this.fx.pop(e.x, e.y, false);
       MT.Audio.play(e.boss ? 'bigpop' : 'pop');
-      if (e.boss) this.cameras.main.shake(160, 0.004);
     }
 
     spawnChildren(e) {
@@ -580,13 +631,14 @@
       const n = e.def.children.length;
       e.def.children.forEach((type, i) => {
         const off = (i - (n - 1) / 2) * (e.boss ? 16 : 6);
-        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, e.dist + off), camo: e.camo });
+        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, e.dist + off), camo: e.camo, burst: e.boss });
         if (e.slowSoak && e.slowT > 0) {
           k.applySlow(e.slowMul, e.slowT, true, e.slowAcid);
           if (e.dot) k.dot = Object.assign({}, e.dot);
         }
         this.enemies.push(k);
         kids.push(k);
+        if (k.boss) MT.Bosses.onSpawn(this, k);
       });
       return kids;
     }
@@ -608,12 +660,21 @@
         const kids = this.applyHit(list[i][1], ep, tower);
         if (hitSet && kids) kids.forEach((k) => hitSet.add(k.id));
       }
-      if (p.tex === 'p_ice') {
+      if (p.quiet) {
+        // the caller draws its own effect (lightning strikes, ...)
+      } else if (p.tex === 'p_ice') {
         this.fx.ring(x, y, ex.r, 0x9fe6ff, { disc: true, dur: 300 });
         this.fx.snow.explode(8, x, y);
         MT.Audio.play('freeze');
       } else if (p.tex === 'p_jelly' || p.tex === 'p_jelly_acid') {
         this.fx.goo.explode(8, x, y);
+        if (ex.r > 50) this.fx.ring(x, y, ex.r, 0x9be15d, { disc: true, dur: 260 });
+      } else if (p.tex === 'p_goo') {
+        this.fx.splat(x, y, ex.r, 0x8bdc3a);
+        MT.Audio.play('splat');
+      } else if (p.tex === 'p_squid') {
+        this.fx.splat(x, y, ex.r, 0x3b2f5c);
+        MT.Audio.play('splat');
       } else {
         this.fx.boom(x, y, ex.r);
         MT.Audio.play('boom');
@@ -632,9 +693,14 @@
       const s = t.stats;
       let p = s.proj;
       if (p.crit && t.shots % p.crit.every === p.crit.every - 1) p = Object.assign({}, p, { dmg: p.dmg * p.crit.mult });
-      const sx = t.x + t.facing * 18, sy = t.y - 8;
-      const col = t.type === 'lab' ? 0xe040fb : 0xff1744;
-      this.fx.beam(sx, sy, target.x, target.y, col, t.type === 'lab' ? 2.5 : 3);
+      const m = t.muzzle();
+      const sx = m.x, sy = m.y;
+      const col = t.fused ? U.hexInt(t.def.fusion.color) : t.type === 'lab' ? 0xe040fb : 0xff1744;
+      const width = t.fused ? 4.5 : t.type === 'lab' ? 2.5 : 3;
+      if (t.fused && t.type === 'sniper') {
+        // the satellite fires from the sky
+        this.fx.beam(target.x + 40, -20, target.x, target.y, col, width + 2);
+      } else this.fx.beam(sx, sy, target.x, target.y, col, width);
       this.fx.sparks.explode(3, target.x, target.y);
       MT.Audio.play('laser');
       const hit = new Set([target.id]);
@@ -663,6 +729,32 @@
       }
     }
 
+    // chain lightning: hit the target, then jump to the nearest un-hit mutant
+    chainHit(t, target) {
+      const s = t.stats;
+      const p = s.proj;
+      const ch = p.chain || { jumps: 2, range: 80 };
+      const col = t.fused ? 0xd1b3ff : 0x80d8ff;
+      const w = t.fused ? 3.4 : 2.2;
+      const m = t.muzzle();
+      const hit = new Set([target.id]);
+      this.fx.lightning(t.x, t.y - 34, target.x, target.y, col, w);
+      const kids = this.applyHit(target, p, t);
+      if (kids) kids.forEach((k) => hit.add(k.id));
+      let cur = target;
+      for (let j = 0; j < ch.jumps; j++) {
+        const nxt = this.nearestEnemy(cur.x, cur.y, ch.range, s.camo, hit);
+        if (!nxt) break;
+        this.fx.lightning(cur.x, cur.y, nxt.x, nxt.y, col, w * 0.8);
+        hit.add(nxt.id);
+        const k2 = this.applyHit(nxt, p, t);
+        if (k2) k2.forEach((k) => hit.add(k.id));
+        cur = nxt;
+      }
+      this.fx.sparks.explode(2, m.x, m.y - 20);
+      MT.Audio.play('zap');
+    }
+
     enemiesInRange(x, y, r, camo) {
       const out = [];
       for (const e of this.enemies) {
@@ -679,7 +771,7 @@
       const n = Math.min(list.length, s.proj.pierce);
       for (let i = 0; i < n; i++) this.applyHit(list[i], s.proj, t);
       this.fx.ring(t.x, t.y, s.range, 0xb3ecff, { disc: true, dur: 380 });
-      this.fx.snow.explode(10, t.x, t.y);
+      this.fx.snow.explode(t.fused ? 22 : 10, t.x, t.y);
       MT.Audio.play('freeze');
     }
 
@@ -689,6 +781,11 @@
       const n = Math.min(list.length, s.proj.pierce + t.bonusPierce);
       for (let i = 0; i < n; i++) this.applyHit(list[i], s.proj, t);
       const fire = s.ring === 'fire';
+      if (s.ring === 'nado') {
+        this.fx.swirl(t.x, t.y, s.range, 0x9be15d);
+        MT.Audio.play('fart');
+        return;
+      }
       this.fx.ring(t.x, t.y, s.range, fire ? 0xff7a1a : 0x9be15d, { disc: true, dur: Math.min(450, s.rate * 900) });
       if (!fire) this.fx.gas.explode(4, t.x, t.y);
       MT.Audio.play(fire ? 'rocket' : 'fart');
@@ -729,95 +826,7 @@
       }
       t.abilityCd[id] = A.cd;
       MT.Audio.play('ability');
-      const all = this.enemies.filter((e) => !e.dead);
-      const strongestBoss = () => all.filter((e) => e.boss).sort((a, b) => b.def.rbe - a.def.rbe || b.hp - a.hp)[0];
-      switch (id) {
-        case 'bananaFrenzy':
-          this.timed.push({ type: id, t: 12 });
-          for (const tw of this.towers) if (tw.type === 'banana') this.fx.ring(tw.x, tw.y, 40, 0xffd83a);
-          break;
-        case 'overdrive':
-          this.timed.push({ type: id, t: 15, x: t.x, y: t.y, r: t.stats.range });
-          this.fx.ring(t.x, t.y, t.stats.range, 0xffeb3b, { disc: true, dur: 600, force: true });
-          break;
-        case 'megaMissile': {
-          const target = strongestBoss() || this.findStrongest(all);
-          this.launchMissile(t, target, 'p_missile', (tg) => {
-            if (tg && !tg.dead) {
-              if (tg.boss) this.damageEnemy(tg, 1500, t);
-              else this.explode(tg.x, tg.y, { tex: 'p_rocket', type: 'explosive', explode: { r: 110, dmg: 20, pierce: 200 } }, t);
-            }
-          });
-          break;
-        }
-        case 'moonHeist': {
-          const target = strongestBoss();
-          const img = this.add.image(-80, -80, 'fx_moon').setScale(1.4 / S).setDepth(6500);
-          const tx = target ? target.x : CFG.MAP_W / 2, ty = target ? target.y : CFG.H / 2;
-          this.tweens.add({
-            targets: img, x: tx, y: ty, angle: 360, duration: 900, ease: 'Quad.easeIn',
-            onComplete: () => {
-              img.destroy();
-              this.fx.boom(tx, ty, 140);
-              this.cameras.main.shake(300, 0.012);
-              if (target && !target.dead) this.damageEnemy(target, 3000, t);
-              this.enemies.filter((e) => !e.dead).forEach((e) => this.damageEnemy(e, 5, t));
-            },
-          });
-          break;
-        }
-        case 'snowstorm':
-          all.forEach((e) => {
-            if (!e.boss) {
-              e.freeze = Math.max(e.freeze, 4);
-              e.brittle = true;
-            }
-          });
-          this.timed.push({ type: id, t: 6 });
-          this.fx.snow.explode(60, CFG.MAP_W / 2, CFG.H / 2);
-          this.cameras.main.flash(300, 200, 240, 255);
-          break;
-        case 'jellyStorm':
-          all.forEach((e) => {
-            e.applySlow(e.boss ? 0.75 : 0.4, 10, false, true);
-            e.applyDot({ dmg: 1, every: 1, dur: 10 }, t);
-          });
-          this.timed.push({ type: id, t: 10 });
-          this.cameras.main.flash(300, 160, 255, 120);
-          break;
-        case 'supplyDrop': {
-          const x = U.clamp(t.x + U.rand(-120, 120), 40, CFG.MAP_W - 40), y = U.clamp(t.y + U.rand(-80, 80), 60, CFG.H - 40);
-          const crate = this.add.image(x, y - 300, 'fx_crate').setScale(1 / S).setDepth(6500);
-          this.tweens.add({
-            targets: crate, y, duration: 1100, ease: 'Sine.easeIn',
-            onComplete: () => {
-              this.fx.smoke.explode(10, x, y + 12);
-              const v = U.round5(1500 * Math.min(1, this.cashMul * 2 + 0.3));
-              this.money += v;
-              this.fx.floatText(x, y - 30, '+' + U.money(v), '#7CFF6B', 24);
-              MT.Audio.play('coin');
-              this.tweens.add({ targets: crate, alpha: 0, delay: 500, duration: 400, onComplete: () => crate.destroy() });
-            },
-          });
-          break;
-        }
-        case 'darkDome':
-          this.cameras.main.flash(500, 60, 0, 90);
-          this.fx.ring(t.x, t.y, 900, 0x7c4dff, { disc: true, dur: 700, depth: 6000, force: true });
-          all.forEach((e) => {
-            if (!e.boss) this.damageEnemy(e, 99999, t);
-            else this.damageEnemy(e, 3000, t);
-          });
-          break;
-        case 'shrinkRay':
-          this.fx.ring(t.x, t.y, 1100, 0x40c4ff, { disc: true, dur: 700, depth: 6000, force: true });
-          all.forEach((e) => {
-            this.fx.sparks.explode(2, e.x, e.y);
-            if (!e.boss) this.damageEnemy(e, 1, t);
-            else this.damageEnemy(e, Math.min(400, Math.ceil(e.maxHp * 0.1)), t);
-          });
-          break;
-      }
+      MT.Abilities.use(this, t, id);
       this.hud.onTowersChanged();
     }
 
@@ -825,20 +834,29 @@
       return list.sort((a, b) => b.def.rbe - a.def.rbe)[0] || null;
     }
 
-    launchMissile(t, target, tex, onHit) {
-      const img = this.add.image(t.x, t.y - 20, tex).setScale(1 / S).setDepth(6400);
+    launchMissile(t, target, tex, onHit, delay = 0) {
+      const sx = t.x, sy = t.y - 20;
+      const img = this.add.image(sx, sy, tex).setScale(1 / S).setDepth(6400).setVisible(delay === 0);
       const tx = target ? target.x : CFG.MAP_W / 2, ty = target ? target.y : CFG.H / 2;
-      img.rotation = Math.atan2(ty - t.y, tx - t.x);
+      img.rotation = Math.atan2(ty - sy, tx - sx);
+      // arc up first, then dive onto the target
+      const state = { k: 0 };
       this.tweens.add({
-        targets: img, x: tx, y: ty, duration: 650, ease: 'Quad.easeIn',
+        targets: state, k: 1, duration: 750, delay, ease: 'Quad.easeIn',
+        onStart: () => img.setVisible(true),
         onUpdate: () => {
-          this.fx.trail.explode(1, img.x, img.y);
-          if (target && !target.dead) img.rotation = Math.atan2(target.y - img.y, target.x - img.x);
+          const gx = target && !target.dead ? target.x : tx, gy = target && !target.dead ? target.y : ty;
+          const k = state.k;
+          const nx = U.lerp(sx, gx, k), ny = U.lerp(sy, gy, k) - Math.sin(k * Math.PI) * 120;
+          img.rotation = Math.atan2(ny - img.y, nx - img.x);
+          img.setPosition(nx, ny);
+          this.fx.trail.explode(1, nx, ny);
         },
         onComplete: () => {
           img.destroy();
           this.fx.boom(img.x, img.y, 90);
-          this.cameras.main.shake(200, 0.008);
+          this.fx.ring(img.x, img.y, 110, 0xffab40, { dur: 420, force: true });
+          this.shake(0.12);
           MT.Audio.play('boom');
           onHit(target);
         },
@@ -879,8 +897,13 @@
 
     // ------------------------------------------------------------------ loop
     update(time, delta) {
+      const real = Math.min(delta, 50) / 1000;
       if (!this.paused && !this.over) {
-        const dt = (Math.min(delta, 50) / 1000) * this.speed;
+        let dt = real * this.speed;
+        if (this.slowmo > 0) {
+          this.slowmo -= real;
+          dt *= 0.3;
+        }
         const steps = Math.max(1, Math.ceil(dt / (1 / 60) - 1e-6));
         const h = dt / steps;
         for (let i = 0; i < steps; i++) this.step(h);
@@ -894,7 +917,9 @@
         const list = this.spawnList;
         while (this.spawnIdx < list.length && list[this.spawnIdx].t <= this.roundTime) {
           const s = list[this.spawnIdx++];
-          this.enemies.push(new MT.Enemy(this, s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort }));
+          const e = new MT.Enemy(this, s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort });
+          this.enemies.push(e);
+          if (e.boss) MT.Bosses.onSpawn(this, e);
         }
         for (const t of this.towers) {
           if (t.bananaTimes && t.bananaTimes.length && t.bananaTimes[0] <= this.roundTime) {
@@ -908,6 +933,7 @@
       this.rebuildGrid();
       for (const t of this.towers) t.update(dt);
       for (const p of this.projectiles) if (!p.dead) p.update(dt);
+      MT.Abilities.step(this, dt);
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.projectiles = this.projectiles.filter((p) => !p.dead);
       for (let i = this.timed.length - 1; i >= 0; i--) {
@@ -926,14 +952,24 @@
     }
 
     renderFrame(time, dt) {
-      for (const e of this.enemies) if (!e.dead) e.render(time);
-      for (const p of this.projectiles) if (!p.dead) p.render();
+      for (const e of this.enemies) if (!e.dead) e.render(time, dt);
+      for (const p of this.projectiles) if (!p.dead) p.render(dt);
+      for (const t of this.towers) t.render(dt, time);
+      MT.Abilities.render(this, dt, time);
       this.fx.update(dt);
+      // screen shake (applied as a small camera offset)
+      const cam = this.cameras.main;
+      if (this.trauma > 0) {
+        this.trauma = Math.max(0, this.trauma - dt * SHAKE_DECAY);
+        const amp = SHAKE_PX * Math.pow(this.trauma, 1.6);
+        const n = time * 0.045;
+        cam.setScroll(this.camBase.x + Math.sin(n * 1.7) * Math.cos(n * 0.9) * amp, this.camBase.y + Math.sin(n * 1.3 + 2) * Math.cos(n * 1.1) * amp);
+      } else if (cam.scrollX !== this.camBase.x || cam.scrollY !== this.camBase.y) cam.setScroll(this.camBase.x, this.camBase.y);
       // boss health bars
       const g = this.gBars;
       g.clear();
       for (const e of this.enemies) {
-        if (!e.boss || e.dead) continue;
+        if (!e.boss || e.dead || e.def.final) continue;
         const w = e.radius * 1.8, x = e.x - w / 2, y = e.y - e.radius * 1.75 - 10;
         g.fillStyle(0x1a1a1a, 0.8);
         g.fillRoundedRect(x - 2, y - 2, w + 4, 9, 4);
@@ -941,18 +977,19 @@
         g.fillStyle(f > 0.5 ? 0x7be35a : f > 0.25 ? 0xffc61a : 0xff4a3a, 1);
         g.fillRoundedRect(x, y, Math.max(2, w * f), 5, 2.5);
       }
+      MT.Bosses.drawBar(this, this.gTop, time);
       // range / placement preview
       const rg = this.gRange;
       rg.clear();
       if (this.placing) {
         const type = this.placing.type;
-        const def = type === 'gru' ? MT.HERO : MT.TOWERS[type];
+        const def = this.defOf(type);
         const x = this.pointer.x, y = this.pointer.y;
         const ok = x < CFG.MAP_W && this.canPlace(x, y, def.size) && this.placeCost(type, x, y) <= this.money;
         this.ghost.setPosition(x, y).setVisible(x < CFG.MAP_W);
         this.ghost.setTint(ok ? 0xffffff : 0xff8080);
         if (x < CFG.MAP_W) {
-          const r = def.base.range > 1000 ? 0 : def.base.range;
+          const r = def.base.range > 1000 ? 0 : def.base.range + (def.base.attack === 'plane' ? def.base.orbit : 0);
           if (r) {
             rg.fillStyle(ok ? 0xffffff : 0xff3030, 0.16);
             rg.fillCircle(x, y, r);
@@ -964,7 +1001,7 @@
         }
       } else if (this.selected) {
         const t = this.selected;
-        const r = t.stats.range > 1000 ? 0 : t.stats.range;
+        const r = t.stats.range > 1000 ? 0 : t.stats.range + (t.stats.attack === 'plane' ? t.stats.orbit : 0);
         if (r) {
           rg.fillStyle(0xffffff, 0.14);
           rg.fillCircle(t.x, t.y, r);
@@ -974,6 +1011,18 @@
         if (t.stats.buffRange) {
           rg.lineStyle(2, 0x7fdbff, 0.5);
           rg.strokeCircle(t.x, t.y, t.stats.buffRange);
+        }
+        if (this.fuseHover) {
+          // highlight the towers that would be fused
+          const pulse = 0.55 + Math.sin(time * 0.012) * 0.35;
+          this.fuseHover.forEach((f) => {
+            rg.lineStyle(4, 0xe040fb, pulse);
+            rg.strokeCircle(f.x, f.y - 8, 30);
+            if (f !== t) {
+              rg.lineStyle(2, 0xe040fb, pulse * 0.7);
+              rg.lineBetween(f.x, f.y - 8, t.x, t.y - 8);
+            }
+          });
         }
       }
       this.hud.update(dt);

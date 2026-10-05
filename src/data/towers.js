@@ -165,6 +165,84 @@
       ],
     },
 
+    tesla: {
+      name: 'Tesla Minion', cost: 600, key: 'A', size: 16,
+      desc: 'Zaps mutants with chain lightning that jumps from one to the next. Lightning burns through armor.',
+      base: { range: 125, rate: 1.1, attack: 'chain', count: 1, proj: P({ dmg: 1, pierce: 1, type: 'energy', chain: { jumps: 3, range: 85 } }) },
+      paths: [
+        { name: 'High Voltage', ups: [
+          up('Copper Coils', 250, 'Lightning jumps 2 more times.', (s) => { s.proj.chain.jumps += 2; }),
+          up('Overvolt', 550, 'Zaps deal 2 damage.', (s) => { s.proj.dmg = 2; }),
+          up('Arc Reactor', 1900, '4 damage, 4 more jumps, +6 damage to barrels.', (s) => { s.proj.dmg = 4; s.proj.chain.jumps += 4; s.proj.bruteDmg = 6; }),
+          up('Storm Lord', 6500, '8 damage, +15 to giants. Ability: Lightning Storm.', (s) => { s.proj.dmg = 8; s.proj.moabDmg = 15; s.ability = 'lightningStorm'; }),
+        ] },
+        { name: 'Overcharge', ups: [
+          up('Fast Capacitor', 220, 'Zaps 25% faster.', (s) => { s.rate *= 0.75; }),
+          up('Static Shock', 400, 'Zaps stun small mutants for a moment.', (s) => { s.proj.stun = { dur: 0.35 }; }),
+          up('Triple Coil', 2200, 'Fires 3 lightning chains at once.', (s) => { s.count = 3; }),
+          up('EMP Overload', 5200, 'Zaps twice as fast and briefly stun giants too.', (s) => { s.rate *= 0.5; s.proj.stun = { dur: 0.5, moab: true }; }),
+        ] },
+        { name: 'Coil Tech', ups: [
+          up('Long Wires', 150, '+20 range and longer jumps.', (s) => { s.range += 20; s.proj.chain.range += 20; }),
+          up('Spark Sensors', 300, 'Can zap Camo mutants.', (s) => { s.camo = true; }),
+          up('Plasma Arc', 1500, '+30 range, +1 damage, jumps much further.', (s) => { s.range += 30; s.proj.dmg += 1; s.proj.chain.range += 50; }),
+          up('Giga Coil', 5500, '+40 damage to giants and zaps them first.', (s) => { s.proj.moabDmg = (s.proj.moabDmg || 0) + 40; s.preferBoss = true; }),
+        ] },
+      ],
+    },
+
+    pilot: {
+      name: 'Minion Pilot', cost: 800, key: 'S', size: 18,
+      desc: 'Circles the area in a little propeller plane and strafes mutants from above.',
+      base: { range: 120, rate: 0.5, attack: 'plane', planes: 1, orbit: 62, planeSpeed: 1.5, proj: P({ tex: 'p_dart', speed: 760, dmg: 1, pierce: 2, r: 5 }) },
+      paths: [
+        { name: 'Firepower', ups: [
+          up('Twin Guns', 300, 'Fires two darts at once.', (s) => { s.count = 2; s.spread = 5; }),
+          up('Hot Rounds', 550, '+1 damage and +1 pierce.', (s) => { s.proj.dmg += 1; s.proj.pierce += 1; }),
+          up('Rocket Pods', 1700, 'Every 3rd volley also fires an explosive rocket.', (s) => { s.alt = { every: 3, proj: P({ tex: 'p_rocket', speed: 560, dmg: 0, pierce: 1, type: 'explosive', r: 7, explode: { r: 48, dmg: 3, pierce: 20 }, moabDmg: 6 }) }; }),
+          up('Gunship', 7000, 'Heavy gunship: 4 guns, 3 damage, a rocket every volley.', (s) => { s.count = 4; s.spread = 8; s.proj.dmg = 3; s.proj.moabDmg = 4; if (s.alt) s.alt.every = 1; }),
+        ] },
+        { name: 'Squadron', ups: [
+          up('Turbo Prop', 250, 'Flies faster and fires 20% faster.', (s) => { s.planeSpeed *= 1.4; s.rate *= 0.8; }),
+          up('Wingman', 1100, 'A second plane joins the patrol.', (s) => { s.planes = 2; }),
+          up('Squadron', 3600, 'A third plane joins. All planes fire faster.', (s) => { s.planes = 3; s.rate *= 0.8; }),
+          up('Ace Squadron', 9000, 'Elite aces: 2x fire rate, +2 pierce, +1 damage.', (s) => { s.rate *= 0.5; s.proj.pierce += 2; s.proj.dmg += 1; }),
+        ] },
+        { name: 'Recon', ups: [
+          up('Radar', 200, 'Can see Camo mutants.', (s) => { s.camo = true; }),
+          up('Long Patrol', 350, 'Wider patrol circle and more range.', (s) => { s.orbit += 30; s.range += 20; }),
+          up('Homing Darts', 1500, 'Darts chase mutants and pierce armor.', (s) => { s.proj.homing = true; s.proj.armored = true; }),
+          up('Bombing Run', 6200, 'Ability: a bomber squadron carpet-bombs the whole track.', (s) => { s.ability = 'bombingRun'; s.proj.moabDmg = (s.proj.moabDmg || 0) + 3; }),
+        ] },
+      ],
+    },
+
+    rockstar: {
+      name: 'Rock Star Minion', cost: 425, key: 'D', size: 16,
+      desc: 'Shreds a banana guitar. Sound waves pierce through whole crowds of mutants.',
+      base: { range: 115, rate: 1.25, attack: 'proj', proj: P({ tex: 'p_wave', speed: 380, dmg: 1, pierce: 6, type: 'normal', r: 12, life: 1.0 }) },
+      paths: [
+        { name: 'Loud', ups: [
+          up('Amplifier', 200, 'Waves hit 4 more mutants.', (s) => { s.proj.pierce += 4; }),
+          up('Power Chords', 450, 'Waves deal 2 damage.', (s) => { s.proj.dmg = 2; }),
+          up('Heavy Metal', 1600, 'Huge 4 damage waves, +6 to barrels.', (s) => { s.proj.dmg = 4; s.proj.r = 16; s.proj.pierce += 6; s.proj.bruteDmg = 6; }),
+          up('Rock God', 6000, '8 damage, 30 pierce, +10 to giants.', (s) => { s.proj.dmg = 8; s.proj.pierce = 30; s.proj.moabDmg = 10; s.proj.r = 19; }),
+        ] },
+        { name: 'Tempo', ups: [
+          up('Fast Strum', 180, 'Plays 20% faster.', (s) => { s.rate *= 0.8; }),
+          up('Power Trio', 500, 'Fires 3 waves in a fan.', (s) => { s.count = 3; s.spread = 20; }),
+          up('Minion Band', 2100, 'The band joins! Nearby towers attack 15% faster.', (s) => { s.rate *= 0.8; s.buff = { range: 0, rate: 0.15, pierce: 0, camo: false, armored: false, discount: 0 }; s.buffRange = 150; }),
+          up('World Tour', 7500, 'Ability: the Papoy Song makes every mutant dance in place.', (s) => { s.ability = 'papoySong'; s.rate *= 0.8; }),
+        ] },
+        { name: 'Disco', ups: [
+          up('Funky Beat', 150, 'Waves slow mutants briefly.', (s) => { s.proj.slow = { mul: 0.7, dur: 1.2 }; }),
+          up('Disco Lights', 300, 'Can see Camo mutants. +15 range.', (s) => { s.camo = true; s.range += 15; }),
+          up('Disco Ball', 1400, 'Waves stun small mutants for 0.5s.', (s) => { s.proj.stun = { dur: 0.5 }; }),
+          up('Night Fever', 4800, 'Knockback, longer stuns, and slows giants too.', (s) => { s.proj.stun = { dur: 0.9 }; s.proj.knock = 4; s.proj.slow = { mul: 0.6, dur: 2, moab: true }; }),
+        ] },
+      ],
+    },
+
     farm: {
       name: 'Banana Farm', cost: 1250, key: 'U', size: 26,
       desc: 'Grows bananas worth cash every round. Collect them!',
@@ -244,28 +322,92 @@
     },
   };
 
-  MT.TOWER_ORDER = ['banana', 'fart', 'rocket', 'freeze', 'jelly', 'sniper', 'farm', 'lab', 'super'];
+  MT.TOWER_ORDER = ['banana', 'fart', 'rocket', 'freeze', 'jelly', 'sniper', 'tesla', 'pilot', 'rockstar', 'farm', 'lab', 'super'];
 
-  // ---------------------------------------------------------------- hero
-  MT.HERO = {
-    id: 'gru', name: 'Gru', cost: 540, key: 'H', size: 18,
-    desc: 'Hero. Levels up every round. Freeze ray, Shrink Ray and more!',
-    base: { range: 140, rate: 0.6, attack: 'proj', proj: P({ tex: 'p_freezebolt', speed: 650, pierce: 3, type: 'normal', r: 7, slow: { mul: 0.75, dur: 1 } }) },
-    xp: [0, 120, 300, 560, 900, 1350, 1950, 2700, 3700, 5000],
-    levels: [
-      null,
-      { desc: 'Freeze ray: slows what it hits.' },
-      { desc: '+15 range.', fx: (s) => { s.range += 15; } },
-      { desc: 'Ability: SHRINK RAY shrinks every mutant on screen.', fx: (s) => { s.ability = 'shrinkRay'; } },
-      { desc: '+2 pierce.', fx: (s) => { s.proj.pierce += 2; } },
-      { desc: 'Bigger freeze ray: 33% faster.', fx: (s) => { s.rate *= 0.75; } },
-      { desc: 'Camo detection, +1 damage.', fx: (s) => { s.camo = true; s.proj.dmg += 1; } },
-      { desc: 'Freeze ray freezes small mutants briefly.', fx: (s) => { s.proj.freeze = { dur: 0.4 }; } },
-      { desc: 'Minion towers near Gru attack 10% faster.', fx: (s) => { s.buff = { range: 0, rate: 0.1, pierce: 0, camo: false, armored: false, discount: 0 }; s.buffRange = 160; } },
-      { desc: '+1 damage, +15 range.', fx: (s) => { s.proj.dmg += 1; s.range += 15; } },
-      { desc: 'Ability: MOON HEIST rams the moon into the biggest giant!', fx: (s) => { s.ability2 = 'moonHeist'; s.rate *= 0.8; } },
-    ],
+  // ---------------------------------------------------------------- super fusions
+  // Three towers of the same kind with a tier-4 upgrade can be fused into one
+  // far stronger tower. The two partners are consumed.
+  const FUSIONS = {
+    banana: {
+      name: 'Banana Overlord', cost: 9000, color: '#ffc400',
+      desc: 'A golden god of bananas. Hurls 5 giant golden balls at once that smash armor, barrels and giants.',
+      base: { range: 210, rate: 0.16, attack: 'proj', count: 5, spread: 10, camo: true, ability: 'bananaApocalypse',
+        proj: P({ tex: 'p_jugg', speed: 520, dmg: 4, pierce: 60, r: 16, spin: 10, armored: true, bruteDmg: 6, moabDmg: 8, life: 1.5, scale: 1.15, trail: 0xffc400 }) },
+    },
+    fart: {
+      name: 'Fartnado', cost: 16000, color: '#76d13a',
+      desc: 'A roaring tornado of toxic gas. Shreds and poisons everything around it and blows mutants back.',
+      base: { range: 150, rate: 0.14, attack: 'ring', ring: 'nado', camo: true, ability: 'nuclearToot',
+        proj: P({ dmg: 4, pierce: 400, type: 'normal', knock: 3, dot: { dmg: 2, every: 0.5, dur: 4 }, moabDmg: 6 }) },
+    },
+    rocket: {
+      name: 'Doomsday Launcher', cost: 22000, color: '#ff5722',
+      desc: 'Triple homing warheads with cluster bombs. Giants melt. Ability: Armageddon.',
+      base: { range: 240, rate: 0.3, attack: 'proj', count: 3, spread: 14, preferBoss: true, camo: true, ability: 'armageddon',
+        proj: P({ tex: 'p_rocket', scale: 1.5, speed: 520, dmg: 0, pierce: 1, type: 'explosive', r: 9, homing: true, trail: 0xff7043,
+          explode: { r: 100, dmg: 12, pierce: 80 }, moabDmg: 120, bruteDmg: 10, cluster: { n: 10, r: 30, dmg: 3, pierce: 12 } }) },
+    },
+    freeze: {
+      name: 'Absolute Zero', cost: 16000, color: '#4fc3f7',
+      desc: 'Pure cold. A huge aura that freezes everything, even giants, and shatters armor. Ability: Ice Age.',
+      base: { range: 220, rate: 0.9, attack: 'aura', camo: true, ability: 'iceAge', slowAura: { mul: 0.35, moabMul: 0.55 },
+        proj: P({ dmg: 8, pierce: 600, type: 'cold', armored: true, brittle: true, freeze: { dur: 2.2, moab: 0.7 }, moabDmg: 40 }) },
+    },
+    jelly: {
+      name: 'Jelly Kraken', cost: 16000, color: '#ec407a',
+      desc: 'A many-armed jelly monster. 4 homing acid blobs that slow giants and dissolve anything.',
+      base: { range: 210, rate: 0.16, attack: 'proj', count: 4, spread: 18, camo: true, ability: 'jellyTsunami',
+        proj: P({ tex: 'p_jelly_acid', scale: 1.4, speed: 520, dmg: 2, pierce: 3, type: 'normal', r: 9, homing: true, armored: true,
+          slow: { mul: 0.3, dur: 8, soak: true, moab: true }, dot: { dmg: 8, every: 0.3, dur: 6 }, explode: { r: 55, dmg: 3, pierce: 20 }, moabDmg: 10 }) },
+    },
+    sniper: {
+      name: 'Orbital Laser', cost: 24000, color: '#40c4ff',
+      desc: 'A laser satellite in orbit. Rapid 40 damage beams that bounce and stun giants. Ability: Orbital Strike.',
+      base: { range: 2000, rate: 0.06, attack: 'instant', camo: true, preferBoss: true, ability: 'orbitalStrike',
+        proj: P({ dmg: 40, pierce: 1, type: 'energy', moabDmg: 40, bruteDmg: 30, bounce: 4, stun: { dur: 0.6, moab: true }, shrapnel: { n: 4, dmg: 4, pierce: 4 } }) },
+    },
+    tesla: {
+      name: 'Thunder God', cost: 20000, color: '#b388ff',
+      desc: 'Commands the storm: three massive lightning chains that jump to 10 mutants each. Ability: Wrath of Zeus.',
+      base: { range: 200, rate: 0.12, attack: 'chain', count: 3, camo: true, ability: 'wrathOfZeus',
+        proj: P({ dmg: 8, pierce: 1, type: 'energy', moabDmg: 30, bruteDmg: 10, chain: { jumps: 10, range: 120 }, stun: { dur: 0.25 } }) },
+    },
+    pilot: {
+      name: 'Minion Air Force', cost: 22000, color: '#ffd83a',
+      desc: 'Three golden jets with homing darts and missiles circle the battlefield. Ability: Carpet Bomb.',
+      base: { range: 150, rate: 0.12, attack: 'plane', planes: 3, orbit: 95, planeSpeed: 2.2, camo: true, count: 2, spread: 6, ability: 'carpetBomb',
+        proj: P({ tex: 'p_dart', speed: 900, dmg: 4, pierce: 4, r: 5, armored: true, homing: true, moabDmg: 6 }),
+        alt: { every: 4, proj: P({ tex: 'p_rocket', speed: 600, dmg: 0, pierce: 1, type: 'explosive', r: 8, homing: true, explode: { r: 60, dmg: 6, pierce: 30 }, moabDmg: 40 }) } },
+    },
+    rockstar: {
+      name: 'Rock Legend', cost: 18000, color: '#ff4081',
+      desc: 'A stadium-sized concert. Five giant sound waves, stuns, knockback, and the whole band buffs nearby towers.',
+      base: { range: 200, rate: 0.18, attack: 'proj', count: 5, spread: 18, camo: true, ability: 'encore',
+        buff: { range: 0.1, rate: 0.15, pierce: 1, camo: false, armored: false, discount: 0 }, buffRange: 200,
+        proj: P({ tex: 'p_wave', speed: 460, dmg: 6, pierce: 40, type: 'normal', r: 18, life: 1.1, knock: 4, stun: { dur: 0.4 }, moabDmg: 10, bruteDmg: 6 }) },
+    },
+    farm: {
+      name: 'Banana Republic', cost: 45000, color: '#ffca28',
+      desc: 'A whole banana nation. 24 golden bananas per round, auto-collected, plus $6000 every round.',
+      base: { range: 70, rate: 999, attack: 'none', bananas: 24, value: 120, valueMul: 2.5, golden: true, autoCollect: true, flat: 6000, ability: 'bananaRain' },
+    },
+    lab: {
+      name: "Nefario's Doomsday Lab", cost: 50000, color: '#e040fb',
+      desc: 'Massive buffs (+20% range, 30% faster, +2 pierce, camo, armor) in a huge radius, 25% discounts and a doom-laser turret.',
+      base: { range: 280, rate: 0.07, attack: 'instant', camo: true, ability: 'labOverload', flat: 1000,
+        buff: { range: 0.2, rate: 0.3, pierce: 2, camo: true, armored: true, discount: 0.25 },
+        proj: P({ dmg: 20, pierce: 1, type: 'energy', moabDmg: 30, bounce: 2 }) },
+    },
+    super: {
+      name: 'Banana Galaxy God', cost: 120000, color: '#fff176',
+      desc: 'The ultimate minion. Homing star blasts with 30 damage and 30 pierce. Ability: Supernova.',
+      base: { range: 280, rate: 0.04, attack: 'proj', count: 3, spread: 6, camo: true, ability: 'supernova',
+        proj: P({ tex: 'p_sun', speed: 1100, dmg: 30, pierce: 30, type: 'energy', r: 11, homing: true, moabDmg: 50, bruteDmg: 10, knock: 2, trail: 0xffe082 }) },
+    },
   };
+  Object.keys(FUSIONS).forEach((k) => {
+    MT.TOWERS[k].fusion = FUSIONS[k];
+  });
 
   // ---------------------------------------------------------------- abilities
   MT.ABILITIES = {
@@ -276,7 +418,32 @@
     supplyDrop: { name: 'Supply Drop', cd: 60, icon: 'ab_crate', desc: 'Drops $1500 in cash.' },
     overdrive: { name: 'Lab Overdrive', cd: 60, icon: 'ab_bolt', desc: 'Nearby towers attack 2x faster for 15s.' },
     darkDome: { name: 'Dark Dome', cd: 90, icon: 'ab_dark', desc: 'Destroys every small mutant on screen, 3000 damage to giants.' },
+    lightningStorm: { name: 'Lightning Storm', cd: 45, icon: 'ab_zap', desc: '18 lightning bolts strike mutants all over the map.' },
+    bombingRun: { name: 'Bombing Run', cd: 50, icon: 'ab_bomber', desc: 'Bombers carpet-bomb the whole track.' },
+    papoySong: { name: 'Papoy Song', cd: 50, icon: 'ab_note', desc: 'Every mutant dances in place for 4s (giants 2s).' },
+    // heroes
     shrinkRay: { name: 'Shrink Ray', cd: 40, icon: 'ab_shrink', desc: 'Every mutant on screen shrinks one layer.' },
     moonHeist: { name: 'Moon Heist', cd: 60, icon: 'ab_moon', desc: '3000 damage to the biggest giant.' },
+    lipstickTaser: { name: 'Lipstick Taser', cd: 35, icon: 'ab_lipstick', desc: 'Zaps every mutant near Lucy and stuns them.' },
+    airstrike: { name: 'AVL Airstrike', cd: 60, icon: 'ab_jet', desc: 'A jet carpet-bombs the entire track.' },
+    fartGun: { name: 'Fart Gun', cd: 35, icon: 'ab_fartgun', desc: 'A colossal stink blast around Nefario.' },
+    antidote: { name: 'Antidote Serum', cd: 90, icon: 'ab_serum', desc: 'Cures every small mutant on screen. Giants lose 20% health.' },
+    stampede: { name: 'Minion Stampede', cd: 40, icon: 'ab_stampede', desc: 'A horde of minions charges down the track.' },
+    giantKevin: { name: 'GIANT KEVIN', cd: 70, icon: 'ab_giant', desc: 'Kevin grows huge for 10s and stomps everything nearby.' },
+    piranhaFrenzy: { name: 'Piranha Frenzy', cd: 40, icon: 'ab_piranha', desc: 'Piranhas devour the 6 strongest mutants.' },
+    pyramidDrop: { name: 'Pyramid Heist', cd: 70, icon: 'ab_pyramid', desc: 'Drops a stolen pyramid on the biggest giant: 5000 damage.' },
+    // super fusions
+    bananaApocalypse: { name: 'Banana Apocalypse', cd: 50, icon: 'ab_apocalypse', desc: '30 golden banana meteors rain onto the track.' },
+    nuclearToot: { name: 'Nuclear Toot', cd: 60, icon: 'ab_nuke', desc: 'Everything on screen takes 30 damage and is poisoned. 2500 to giants.' },
+    armageddon: { name: 'Armageddon', cd: 55, icon: 'ab_armageddon', desc: '10 mega missiles hit the strongest giants.' },
+    iceAge: { name: 'Ice Age', cd: 60, icon: 'ab_iceage', desc: 'Freezes EVERYTHING, even giants, for 5 seconds.' },
+    jellyTsunami: { name: 'Jelly Tsunami', cd: 55, icon: 'ab_tsunami', desc: 'A jelly wave washes all mutants back along the track.' },
+    orbitalStrike: { name: 'Orbital Strike', cd: 50, icon: 'ab_orbital', desc: 'A sky laser burns the strongest giant for 12000 damage.' },
+    wrathOfZeus: { name: 'Wrath of Zeus', cd: 45, icon: 'ab_zeus', desc: '45 giant lightning bolts strike all over the map.' },
+    carpetBomb: { name: 'Carpet Bomb', cd: 45, icon: 'ab_bomber', desc: 'Heavy bombers flatten the whole track.' },
+    encore: { name: 'Encore!', cd: 55, icon: 'ab_encore', desc: 'Every mutant dances for 6s (giants 3s) while the music hurts.' },
+    bananaRain: { name: 'Banana Rain', cd: 60, icon: 'ab_bananarain', desc: 'Golden bananas rain from the sky: instant cash.' },
+    labOverload: { name: 'Lab Overload', cd: 70, icon: 'ab_overload', desc: 'Every tower on the map attacks 2x faster for 20s.' },
+    supernova: { name: 'Supernova', cd: 100, icon: 'ab_supernova', desc: 'A star explodes: destroys every small mutant, 25000 damage to giants.' },
   };
 })();

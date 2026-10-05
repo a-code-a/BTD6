@@ -1,8 +1,9 @@
 // Round composition. Each group: [type, count, spacing(s), startDelay(s), flags]
 // flags: 'c' = camo, 'f' = fortified. Codes: p=pip g=grumble c=chomper
 // d=dasher z=zoomer r=rascal j=jailbird h=hulk b=brute t=tincan M=mega T=titan Z=zeppelin
+// P=phantom X=mecha G=goo E=El Macho (final boss)
 (function () {
-  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin' };
+  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin', P: 'phantom', X: 'mecha', G: 'goo', E: 'macho' };
 
   // compact notation: "c30@.55+4cf" => 30 chompers, 0.55s apart, start at 4s, camo+fortified
   const R = [
@@ -62,31 +63,31 @@
     'z80@.08c M3@3+5',
     'b35@.3 M6@2.5+6',
     'M10@1.8 b45@.3+4',
-    'h40@.2c M8@2+4',
+    'h40@.2c M8@2+4 P1@2+12',
     'b40@.3 M12@1.6+6',
     'b50@.25f M13@1.6+6',
     'b80@.15 M6@2+8',
-    'T1@1 M4@3+6',
+    'T1@1 M4@3+6 X1@1+14',
     'b25@.3c M16@1.1+4',
     'h120@.1 M18@1+6',
     'b120@.1 t75@.1+6',
-    'M9@1.5f b30@.3+3',
+    'M9@1.5f b30@.3+3 X1@1+10',
     'T3@4 M20@1+6',
-    'M22@1 b30@.3+6f',
+    'M22@1 b30@.3+6f G1@1+12',
     'b50@.2f M15@1+6',
-    'T4@3 M10@1.2+6',
+    'T4@3 M10@1.2+6 P2@4+12',
     't150@.06cf b40@.2+10',
-    'h200@.04 M12@1+8',
+    'h200@.04 M12@1+8 X2@5+10',
     'T6@2.5 b60@.15+4',
-    'M40@.6',
+    'M40@.6 G2@5+12',
     'b100@.1cf T4@3+8',
-    'T8@2 M20@.8+6',
+    'T8@2 M20@.8+6 P4@3+10',
     'T10@1.6 M30@.6+4',
-    'b200@.06c T6@2+10',
-    'T12@1.4 M30@.5+4',
-    'Z1@1 T6@2+8',
-    'T20@1 M40@.4+6f',
-    'Z2@8 T10@1.5+10',
+    'b200@.06c T6@2+10 X3@4+14',
+    'T12@1.4 M30@.5+4 G2@6+12',
+    'Z1@1 T6@2+8 P4@2+10',
+    'T20@1 M40@.4+6f X2@4+10 G2@6+14',
+    'Z2@8 T10@1.5+10 E1@1+22',
   ];
 
   function parse(str) {
@@ -107,6 +108,11 @@
     groups.push({ type: 'titan', count: 4 + Math.floor(k * 0.8), spacing: 1.2, delay: 6, camo: false, fort: k > 3 });
     if (k >= 2) groups.push({ type: 'zeppelin', count: 1 + Math.floor(k / 3), spacing: 4, delay: 10, camo: false, fort: k > 8 });
     if (k % 4 === 0) groups.push({ type: 'tincan', count: 60 + k * 5, spacing: 0.05, delay: 2, camo: true, fort: true });
+    // endgame monsters join the freeplay waves
+    groups.push({ type: 'mecha', count: 1 + Math.floor(k / 2), spacing: 3, delay: 8, camo: false, fort: k > 10 });
+    if (k >= 2 && k % 2 === 0) groups.push({ type: 'phantom', count: 2 + Math.floor(k / 4), spacing: 2.5, delay: 5, camo: true, fort: k > 14 });
+    if (k >= 3) groups.push({ type: 'goo', count: 1 + Math.floor(k / 3), spacing: 4, delay: 12, camo: false, fort: k > 12 });
+    if (k % 10 === 0) groups.push({ type: 'macho', count: Math.max(1, Math.floor(k / 10)), spacing: 18, delay: 16, camo: false, fort: k >= 30 });
     return groups;
   }
 
@@ -143,6 +149,10 @@
     headline(n) {
       const g = this.get(n);
       const types = g.map((x) => x.type);
+      if (types.includes('macho')) return 'FINAL BOSS: MUTANT EL MACHO!';
+      if (types.includes('mecha') && n <= 80) return 'MECHA MUTANTS! Their EMP shuts down towers.';
+      if (types.includes('goo') && n <= 80) return 'GOO BEHEMOTH! It regenerates, burst it fast!';
+      if (types.includes('phantom') && n <= 80) return 'PHANTOM MUTANTS! Camo giants that teleport.';
       if (types.includes('zeppelin')) return 'PX-41 ZEPPELIN INCOMING!';
       if (types.includes('titan')) return 'A PURPLE TITAN APPROACHES!';
       if (types.includes('mega')) return n === 40 ? 'MEGA MUTANT INCOMING!' : null;

@@ -14,6 +14,11 @@
     mega: { name: 'Mega Mutant', hp: 200, speed: 1.0, children: ['brute', 'brute', 'brute', 'brute'], radius: 34, boss: true, damageStates: 5, desc: 'A giant mutant with 200 health.' },
     titan: { name: 'Purple Titan', hp: 700, speed: 0.25, children: ['mega', 'mega', 'mega', 'mega'], radius: 44, boss: true, damageStates: 5, desc: 'Armored titan. Slow but very tough.' },
     zeppelin: { name: 'PX-41 Zeppelin', hp: 4000, speed: 0.18, children: ['titan', 'titan', 'titan', 'titan'], radius: 56, boss: true, damageStates: 5, desc: 'An airship full of mutants.' },
+    // ---- endgame monsters
+    phantom: { name: 'Phantom Mutant', hp: 1800, speed: 0.55, children: ['mega', 'mega', 'mega', 'mega'], radius: 40, boss: true, damageStates: 5, alwaysCamo: true, blink: { every: 4.5, dist: 90 }, desc: 'A ghostly giant. Always Camo, and it blinks forward through space.' },
+    mecha: { name: 'Mecha Mutant', hp: 2400, speed: 0.38, children: ['titan', 'titan'], radius: 50, boss: true, armored: true, damageStates: 5, emp: { every: 6.5, r: 165, dur: 1.8 }, desc: 'An armored battle mech. Its EMP pulse shuts down nearby towers!' },
+    goo: { name: 'Goo Behemoth', hp: 3200, speed: 0.32, children: ['mega', 'mega', 'mega', 'mega', 'mega', 'mega'], radius: 50, boss: true, damageStates: 5, regen: 0.015, noSlow: true, desc: 'A wobbling mountain of goo. Regenerates and shrugs off jelly.' },
+    macho: { name: 'Mutant El Macho', hp: 40000, speed: 0.22, children: ['zeppelin', 'mecha'], radius: 70, boss: true, damageStates: 5, final: true, phases: [0.66, 0.33], desc: 'El Macho drank his own PX-41 serum. The final boss!' },
   };
 
   // Red-bloon-equivalent: total hits needed to clear it completely
@@ -34,5 +39,5 @@
 
   MT.ENEMIES = E;
   MT.enemyRbe = rbe;
-  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'mega', 'titan', 'zeppelin'];
+  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'mega', 'titan', 'zeppelin', 'phantom', 'mecha', 'goo', 'macho'];
 })();

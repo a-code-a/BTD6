@@ -17,6 +17,7 @@ window.MT = window.MT || {};
     W, H, MAP_W, MAP_H: H, RES,
     SIDEBAR_X: MAP_W,
     START_CASH: 650,
+    CHEAT_MONEY: 1000000,
     SELL_RATE: 0.7,
     SPEED_UNIT: 42, // px per second for an enemy with speed 1
     FAST_SPEED: 3,
@@ -58,6 +59,7 @@ window.MT = window.MT || {};
     money: (v) => '$' + Math.floor(v).toLocaleString('en-US'),
     round5: (v) => Math.max(5, Math.round(v / 5) * 5),
     deepClone: (o) => JSON.parse(JSON.stringify(o)),
+    hexInt: (h) => parseInt(String(h).replace('#', ''), 16),
   };
   MT.util = U;
 

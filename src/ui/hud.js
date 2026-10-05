@@ -30,13 +30,19 @@
     buildStats() {
       const s = this.scene;
       this.root.add(MT.UI.panel(s, X0 + 10, 10, 240, 88, 'dark'));
-      this.roundLabel = MT.text(s, X0 + 130, 30, 'ROUND 0/40', 22, { title: true, color: '#ffd83a' });
+      this.roundLabel = MT.text(s, X0 + 116, 30, 'ROUND 0/40', 22, { title: true, color: '#ffd83a' });
       this.root.add(this.roundLabel);
+      // cheat: instant bananas
+      this.cheatBtn = new MT.UI.Button(s, X0 + 224, 30, 34, 28, {
+        style: 'yellow', label: '+$', size: 15,
+        onClick: () => s.cheatMoney(),
+        onHover: (on) => (on ? this.tip.show(X0 - 268, 14, 'Cheat', `Get ${U.money(MT.CFG.CHEAT_MONEY)} bananas instantly.`) : this.tip.hide()),
+      }).setDepth(DEPTH + 2);
       this.root.add(s.add.image(X0 + 34, 72, 'ic_coin').setScale(0.75 / S * 2 / 2 * 1.0).setDisplaySize(30, 30));
       this.moneyText = MT.text(s, X0 + 54, 72, '$0', 22, { title: true, ox: 0 });
       this.root.add(this.moneyText);
-      this.root.add(s.add.image(X0 + 170, 72, 'ic_heart').setDisplaySize(28, 28));
-      this.livesText = MT.text(s, X0 + 188, 72, '0', 22, { title: true, ox: 0 });
+      this.root.add(s.add.image(X0 + 188, 72, 'ic_heart').setDisplaySize(26, 26));
+      this.livesText = MT.text(s, X0 + 204, 72, '0', 22, { title: true, ox: 0 });
       this.root.add(this.livesText);
     }
 
@@ -45,24 +51,26 @@
       const s = this.scene;
       this.shop = s.add.container(0, 0).setDepth(DEPTH + 1);
       this.cards = [];
-      const ids = MT.TOWER_ORDER.concat(['gru']);
+      const ids = MT.TOWER_ORDER.concat([s.heroId]);
+      const CW = 76, CH = 97;
       ids.forEach((id, i) => {
-        const col = i % 2, row = Math.floor(i / 2);
-        const x = X0 + 10 + col * 124, y = 106 + row * 98;
-        const def = id === 'gru' ? MT.HERO : MT.TOWERS[id];
-        const c = s.add.container(x + 58, y + 46);
-        const bg = s.add.image(0, 0, MT.UI.panelKey(s, 116, 92, id === 'gru' ? 'yellow' : 'card')).setScale(1 / S);
-        const key = id === 'gru' ? MT.TowerArt.gruKey(s, 1) : MT.TowerArt.key(s, id, [0, 0, 0]);
-        const icon = s.add.image(0, -8, key).setScale(id === 'gru' ? 0.31 : id === 'farm' || id === 'lab' ? 0.33 : 0.36);
-        const price = MT.text(s, 0, 32, '$0', 16, { title: true });
-        const hk = MT.text(s, -48, -36, def.key, 12, { title: true, color: '#ffd166' });
+        const col = i % 3, row = Math.floor(i / 3);
+        const x = X0 + 10 + col * 81, y = 106 + row * 101;
+        const hero = MT.isHero(id);
+        const def = hero ? MT.HEROES[id] : MT.TOWERS[id];
+        const c = s.add.container(x + CW / 2, y + CH / 2);
+        const bg = s.add.image(0, 0, MT.UI.panelKey(s, CW, CH, hero ? 'yellow' : 'card')).setScale(1 / S);
+        const key = hero ? MT.TowerArt.heroKey(s, id, 1) : MT.TowerArt.key(s, id, [0, 0, 0]);
+        const icon = s.add.image(0, -9, key).setScale(hero ? 0.27 : id === 'farm' || id === 'lab' ? 0.29 : 0.31);
+        const price = MT.text(s, 0, 34, '$0', 14, { title: true });
+        const hk = MT.text(s, -29, -38, def.key, 11, { title: true, color: '#ffd166' });
         c.add([bg, icon, price, hk]);
-        c.setSize(116, 92);
+        c.setSize(CW, CH);
         c.setInteractive({ useHandCursor: true });
         c.on('pointerover', () => {
-          c.setScale(1.04);
+          c.setScale(1.05);
           const cost = s.placeCost(id);
-          this.tip.show(x - 270, y, `${def.name}  ·  ${U.money(cost)}`, def.desc + `\nHotkey: ${def.key}`);
+          this.tip.show(X0 - 268, y, `${def.name}  ·  ${U.money(cost)}`, def.desc + `\nHotkey: ${def.key}`);
         });
         c.on('pointerout', () => {
           c.setScale(1);
@@ -128,6 +136,9 @@
       if (rl !== this.last.round) this.roundLabel.setText((this.last.round = rl));
       if (money !== this.last.money) {
         this.moneyText.setText(U.money(money));
+        // squeeze big numbers so they never run into the lives counter
+        const maxW = 116;
+        this.moneyText.scaleX = this.moneyText.width > maxW ? maxW / this.moneyText.width : 1;
         this.last.money = money;
         this.refreshAffordability();
       }
@@ -143,12 +154,22 @@
       this.updateAbilities();
     }
 
+    // little bounce + green tint on the banana counter
+    flashMoney() {
+      const s = this.scene;
+      s.tweens.killTweensOf(this.moneyText);
+      this.moneyText.scaleY = 1;
+      this.moneyText.setColor('#7CFF6B');
+      s.tweens.add({ targets: this.moneyText, scaleY: 1.3, duration: 120, yoyo: true, ease: 'Quad.easeOut', onComplete: () => this.moneyText.setColor('#ffffff') });
+    }
+
     refreshAffordability() {
       const s = this.scene;
       this.cards.forEach((cd) => {
         const cost = s.placeCost(cd.id);
-        const ok = cost <= s.money && !(cd.id === 'gru' && s.heroPlaced);
-        cd.price.setText(cd.id === 'gru' && s.heroPlaced ? 'PLACED' : U.money(cost));
+        const hero = MT.isHero(cd.id);
+        const ok = cost <= s.money && !(hero && s.heroPlaced);
+        cd.price.setText(hero && s.heroPlaced ? 'PLACED' : U.money(cost));
         if (cd.ok !== ok) {
           cd.ok = ok;
           cd.price.setColor(ok ? '#ffffff' : '#ff7b7b');
@@ -179,8 +200,9 @@
       const add = (o) => (this.upg.add(o), o);
       add(MT.UI.panel(s, 6, 0, 248, 504, 'dark'));
       const key = t.texKey();
-      add(s.add.image(42, 40, key).setScale(t.hero ? 0.36 : 0.4));
-      const nameT = add(MT.text(s, 78, 22, t.name, 20, { title: true, ox: 0, color: t.hero ? '#ffd83a' : '#ffffff' }));
+      add(s.add.image(42, 40, key).setScale(t.hero ? 0.36 : t.fused ? 0.32 : 0.4));
+      const nameCol = t.fused ? t.def.fusion.color : t.hero ? t.def.color || '#ffd83a' : '#ffffff';
+      const nameT = add(MT.text(s, 78, 22, t.name, 20, { title: true, ox: 0, color: nameCol }));
       if (nameT.width > 128) nameT.setScale(128 / nameT.width);
       this.popsText = add(MT.text(s, 78, 46, `Pops: ${t.pops}`, 13, { ox: 0, color: '#cfe3ff' }));
       const close = new MT.UI.Button(s, 230, 22, 32, 32, { style: 'red', icon: 'ic_close', iconSize: 0.6, onClick: () => s.select(null) });
@@ -197,14 +219,72 @@
       }
       y += 40;
       if (t.hero) this.buildHeroRows(t, y, add);
+      else if (t.fused) this.buildFusedInfo(t, y, add);
       else {
         for (let pi = 0; pi < 3; pi++) this.buildPathRow(t, pi, 12, y + pi * 112, add);
       }
-      const sell = new MT.UI.Button(s, 130, 470, 228, 42, {
-        style: 'red', label: `SELL  ${U.money(t.sellValue())}`, size: 20, onClick: () => s.sell(t),
-      });
-      add(sell);
+      this.fuseBtn = null;
+      if (!t.hero && !t.fused && t.def.fusion) {
+        add(new MT.UI.Button(s, 70, 470, 112, 42, {
+          style: 'red', label: 'SELL', sub: U.money(t.sellValue()), size: 17, subSize: 11, onClick: () => s.sell(t),
+        }));
+        this.fuseBtn = add(new MT.UI.Button(s, 192, 470, 120, 42, {
+          style: 'purple', label: 'FUSE', sub: '', size: 18, subSize: 11,
+          onClick: () => MT.Fusion.fuse(s, t),
+          onDisabledClick: () => {
+            const st = MT.Fusion.status(s, t);
+            if (st.reason) this.toast(st.reason, 2200);
+          },
+          onHover: (on) => {
+            if (!on) {
+              this.tip.hide();
+              s.fuseHover = null;
+              return;
+            }
+            const f = t.def.fusion;
+            const st = MT.Fusion.status(s, t);
+            s.fuseHover = MT.Fusion.candidates(s, t);
+            this.tip.show(X0 - 268, 420, `SUPER FUSION: ${f.name}`, `${f.desc}\nAbility: ${MT.ABILITIES[f.base.ability].name}\nCost: ${U.money(st.cost || s.price(f.cost))} + 3 ${t.def.name}s with a tier 4 upgrade.` + (st.reason ? `\n${st.reason}` : '\nHotkey: F'));
+          },
+        }));
+      } else {
+        add(new MT.UI.Button(s, 130, 470, 228, 42, {
+          style: 'red', label: `SELL  ${U.money(t.sellValue())}`, size: 20, onClick: () => s.sell(t),
+        }));
+      }
       this.refreshUpgradeButtons();
+    }
+
+    buildFusedInfo(t, y, add) {
+      const s = this.scene;
+      const f = t.def.fusion;
+      add(MT.UI.panel(s, 12, y, 236, 340, 'card'));
+      add(MT.text(s, 130, y + 20, 'SUPER FUSION', 16, { title: true, color: f.color }));
+      const descT = add(MT.text(s, 24, y + 38, f.desc, 12, { ox: 0, oy: 0, wrap: 212, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
+      const statY = Math.min(y + 150, y + 48 + descT.height);
+      const st = t.stats;
+      const p = st.proj;
+      const lines = [];
+      if (st.attack !== 'none') {
+        lines.push(`Range: ${st.range > 1000 ? 'whole map' : Math.round(st.range)}`);
+        lines.push(`Attacks per second: ${(1 / st.rate).toFixed(1)}${st.count > 1 ? `  ×${st.count}` : ''}`);
+        if (p) {
+          const dmg = p.explode ? p.explode.dmg : p.dmg;
+          lines.push(`Damage: ${dmg}${p.moabDmg ? `  (+${p.moabDmg} vs giants)` : ''}`);
+          if (st.attack !== 'aura' && st.attack !== 'ring') lines.push(`Pierce: ${p.explode ? p.explode.pierce : p.pierce}`);
+        }
+        lines.push(`Camo: ${st.camo ? 'yes' : 'no'}`);
+      } else if (t.type === 'farm') {
+        lines.push(this.infoLine(t));
+      }
+      if (st.buff) lines.push(`Buffs nearby towers`);
+      add(MT.text(s, 24, statY, lines.join('\n'), 13, { ox: 0, oy: 0, color: '#b8ffb0', strokeThickness: 3, align: 'left', lineSpacing: 3 }));
+      const A = MT.ABILITIES[st.ability];
+      if (A) {
+        add(s.add.image(44, y + 296, A.icon).setScale(0.7 / S));
+        add(MT.text(s, 72, y + 284, A.name, 15, { title: true, ox: 0, color: '#ffd83a' }));
+        add(MT.text(s, 72, y + 300, A.desc, 11, { ox: 0, oy: 0, wrap: 168, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
+      }
     }
 
     infoLine(t) {
@@ -253,11 +333,12 @@
 
     buildHeroRows(t, y, add) {
       const s = this.scene;
-      const H = MT.HERO;
+      const H = t.def;
+      const XP = MT.HERO_XP;
       add(MT.UI.panel(s, 12, y, 236, 70, 'card'));
       add(MT.text(s, 24, y + 20, `Level ${t.level}`, 22, { title: true, ox: 0, color: '#ffd83a' }));
-      const next = t.level < 10 ? H.xp[t.level] : H.xp[9];
-      const prev = H.xp[t.level - 1];
+      const next = t.level < 10 ? XP[t.level] : XP[9];
+      const prev = XP[t.level - 1];
       const frac = t.level >= 10 ? 1 : U.clamp((t.xp - prev) / (next - prev), 0, 1);
       const g = s.add.graphics();
       g.fillStyle(0x1b335c, 1);
@@ -290,7 +371,11 @@
       if (!R) return;
       const s = this.scene;
       const t = R.t;
-      if (this.popsText) this.popsText.setText(`Pops: ${t.pops}`);
+      if (this.popsText) this.popsText.setText(`Pops: ${Math.floor(t.pops)}`);
+      if (this.fuseBtn) {
+        const st = MT.Fusion.status(s, t);
+        this.fuseBtn.setEnabled(st.can).setSub(st.have != null ? `${Math.min(st.have, MT.Fusion.NEEDED)}/${MT.Fusion.NEEDED} maxed` : '');
+      }
       if (t.hero && this.heroBtn) {
         const cost = s.heroLevelCost(t);
         this.heroBtn.setEnabled(t.level < 10 && cost <= s.money);
@@ -316,7 +401,7 @@
       const s = this.scene;
       this.abilityBtns.forEach((b) => b.img.destroy());
       this.abilityBtns = [];
-      const list = s.abilityList().slice(0, 12);
+      const list = s.abilityList().slice(0, 16);
       list.forEach((ab, i) => {
         const A = MT.ABILITIES[ab.id];
         const x = 36 + i * 60, y = 684;
@@ -350,6 +435,7 @@
     // ------------------------------------------------------------ toasts
     toast(msg, ms = 1600, big = false) {
       const s = this.scene;
+      this.toastText.setWordWrapWidth(big ? 760 : 820, true);
       this.toastText.setText(msg).setFontSize(big ? 28 : 22).setColor(big ? '#ffd83a' : '#ffffff');
       const w = this.toastText.width + 40, h = this.toastText.height + 16;
       this.toastBg.clear();
@@ -358,6 +444,9 @@
       this.toastBg.lineStyle(2, big ? 0xffd83a : 0xffffff, 0.6);
       this.toastBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
       s.tweens.killTweensOf(this.toastC);
+      // stay clear of the final boss health bar at the top of the map
+      const bossBar = s.enemies && s.enemies.some((e) => !e.dead && e.def.final);
+      this.toastC.y = bossBar ? 64 + 60 + h / 2 - 20 : 64;
       this.toastC.setAlpha(0).setScale(0.8);
       s.tweens.add({ targets: this.toastC, alpha: 1, scale: 1, duration: 180, ease: 'Back.easeOut' });
       s.tweens.add({ targets: this.toastC, alpha: 0, delay: ms, duration: 300 });
@@ -412,9 +501,21 @@
           MT.Audio.applySettings();
           b.setLabel(MT.Save.settings().music ? 'MUSIC: ON' : 'MUSIC: OFF');
         } },
+        { label: this.shakeLabel(), style: 'blue', onClick: (b) => {
+          const order = ['on', 'low', 'off'];
+          const cur = order.indexOf(MT.Save.settings().shake);
+          MT.Save.setSetting('shake', order[(cur + 1) % order.length]);
+          b.setLabel(this.shakeLabel());
+          if (MT.Save.settings().shake !== 'off') s.shake(0.6);
+        } },
         { label: 'RESTART', style: 'yellow', icon: 'ic_restart', onClick: () => this.restart() },
         { label: 'MAIN MENU', style: 'red', icon: 'ic_home', onClick: () => this.home() },
-      ], `${s.mapDef.name} · ${s.diff.name}`);
+      ], `${s.mapDef.name} · ${s.diff.name} · ${s.heroDef.name}`);
+    }
+
+    shakeLabel() {
+      const m = MT.Save.settings().shake;
+      return 'SHAKE: ' + (m === 'on' ? 'ON' : m === 'off' ? 'OFF' : 'LOW');
     }
 
     showVictory() {
@@ -446,7 +547,7 @@
 
     restart() {
       const s = this.scene;
-      s.scene.restart({ map: s.mapDef.id, diff: s.diff.id });
+      s.scene.restart({ map: s.mapDef.id, diff: s.diff.id, hero: s.heroId });
     }
 
     home() {

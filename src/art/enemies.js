@@ -449,20 +449,24 @@
       const seed = type.length * 97 + type.charCodeAt(0);
       D.make(scene, key, tw, th, (ctx) => {
         const o = { tw, th, foot, seed, fort, damage };
-        if (camo) {
-          const { c, ctx: c2 } = D.canvas(tw, th);
-          if (sp.blimp) drawBlimp(c2, o);
+        const paint = (c2) => {
+          if (sp.painter) sp.painter(c2, sp, o);
+          else if (sp.blimp) drawBlimp(c2, o);
           else drawPurple(c2, sp, o);
+        };
+        if (camo && !sp.ghost) {
+          const { c, ctx: c2 } = D.canvas(tw, th);
+          paint(c2);
           camoOverlay(c2, tw, th, D.rng(seed + 3));
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.drawImage(c, 0, 0);
           ctx.restore();
-        } else if (sp.blimp) drawBlimp(ctx, o);
-        else drawPurple(ctx, sp, o);
+        } else paint(ctx);
       });
       return key;
     },
+    helpers: { metalPlate, rivet, bossDamage, camoOverlay },
     origin(type) {
       const { th, foot } = texSize(SPEC[type]);
       return foot / th;

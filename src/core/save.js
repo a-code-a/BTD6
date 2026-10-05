@@ -5,7 +5,7 @@
 
   function load() {
     if (data) return data;
-    data = { settings: { sfx: true, music: true, autoStart: false }, medals: {}, stats: { pops: 0, games: 0 } };
+    data = { settings: { sfx: true, music: true, autoStart: false, shake: 'low', hero: 'gru' }, medals: {}, stats: { pops: 0, games: 0 } };
     try {
       const raw = window.localStorage.getItem(KEY);
       if (raw) {

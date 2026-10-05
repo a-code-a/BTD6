@@ -14,8 +14,9 @@
       const t = MT.text(this, W / 2, H / 2, 'Loading bananas...', 28, { title: true, color: '#ffd83a' });
       this.time.delayedCall(30, () => {
         MT.FXArt.generate(this);
+        MT.FXArt.generate2(this);
         MT.TOWER_ORDER.forEach((id) => MT.TowerArt.key(this, id, [0, 0, 0]));
-        MT.TowerArt.gruKey(this, 1);
+        MT.HERO_ORDER.forEach((id) => MT.TowerArt.heroKey(this, id, 1));
         MT.ENEMY_ORDER.forEach((id) => MT.EnemyArt.key(this, id, false, false, 0));
         t.destroy();
         const el = document.getElementById('boot');
@@ -65,17 +66,24 @@
       menuBackground(this, 0.35);
 
       // characters
+      const macho = this.add.image(1150, 420, MT.EnemyArt.key(this, 'macho', false, false, 0)).setScale(0.62).setAlpha(0.95);
+      bob(this, macho, 5, 900);
       const gru = this.add.image(250, 470, MT.TowerArt.gruKey(this, 10)).setScale(1.25);
       bob(this, gru, 4, 1400);
+      const heroes = [['lucy', 120, 420, 0.95], ['kevin', 420, 470, 0.85]];
+      heroes.forEach(([id, x, y, s], i) => {
+        const im = this.add.image(x, y, MT.TowerArt.heroKey(this, id, 10)).setScale(s);
+        bob(this, im, 5, 1100 + i * 200, i * 300);
+      });
       const yellows = [
-        ['banana', [2, 0, 0], 120, 590, 0.75], ['freeze', [0, 0, 0], 390, 600, 0.75], ['rocket', [0, 0, 0], 470, 520, 0.6],
-        ['super', [0, 0, 0], 90, 420, 0.65], ['fart', [0, 0, 0], 330, 650, 0.6],
+        ['banana', [2, 0, 0], 120, 600, 0.75], ['freeze', [0, 0, 0], 380, 620, 0.75], ['tesla', [2, 0, 0], 470, 610, 0.62],
+        ['super', [0, 0, 0], 40, 520, 0.6], ['rockstar', [0, 2, 0], 270, 665, 0.6],
       ];
       yellows.forEach(([type, tiers, x, y, s], i) => {
         const im = this.add.image(x, y, MT.TowerArt.key(this, type, tiers)).setScale(s);
         bob(this, im, 8, 380 + i * 60, i * 120);
       });
-      const purples = [['mega', 1060, 470, 0.95], ['hulk', 900, 600, 0.95], ['zoomer', 1180, 610, 1.1], ['pip', 1000, 640, 1.2], ['tincan', 820, 650, 0.9], ['rascal', 1220, 380, 0.9]];
+      const purples = [['mecha', 960, 470, 0.6], ['hulk', 880, 610, 0.95], ['zoomer', 1180, 640, 1.1], ['pip', 1020, 650, 1.2], ['tincan', 800, 655, 0.9], ['phantom', 1190, 150, 0.55]];
       purples.forEach(([type, x, y, s], i) => {
         const im = this.add.image(x, y, MT.EnemyArt.key(this, type, false, false, 0)).setScale(s);
         bob(this, im, 10, 300 + i * 40, i * 90);
@@ -129,15 +137,18 @@
         '• Popping a mutant earns bananas ($). Big mutants split into smaller ones.',
         '• Click a placed tower to upgrade it. Each tower has 3 paths with 4 tiers:',
         '   one path can reach tier 4, a second path tier 2.',
+        '• SUPER FUSION: own 3 towers of one kind with a tier 4 upgrade? Select one',
+        '   and press FUSE to merge them into one crazy powerful super tower.',
         '• Camo mutants need detection. Armored Tin Cans block bananas & ice.',
         '• Banana Farms grow cash — hover over bananas to collect them.',
-        '• Gru is your hero: he levels up every round and unlocks abilities.',
+        '• Pick a hero before each game. Heroes level up and unlock abilities.',
+        '• Late game brings monsters: Phantoms, Mechas (EMP!), Goo... and El Macho.',
         '• Press PLAY to start a round, press again for 3x speed.',
         '',
-        'Hotkeys: Q W E R T Y U I O = towers, H = Gru, Space = play/speed,',
-        ', . / = upgrade paths, Tab = targeting, Backspace = sell, Esc = cancel/pause',
+        'Hotkeys: Q W E R T Y U I O A S D = towers, H = hero, Space = play/speed,',
+        ', . / = upgrade paths, F = fuse, Tab = targeting, Backspace = sell, Esc = pause',
       ];
-      c.add(MT.text(this, 290, 170, lines.join('\n'), 18, { ox: 0, oy: 0, lineSpacing: 6, strokeThickness: 3 }));
+      c.add(MT.text(this, 280, 160, lines.join('\n'), 17, { ox: 0, oy: 0, lineSpacing: 5, strokeThickness: 3 }));
       c.add(new MT.UI.Button(this, W / 2, 600, 220, 56, { style: 'green', label: 'GOT IT!', size: 26, onClick: () => c.destroy() }));
     }
   }
@@ -194,18 +205,53 @@
     pickDifficulty(m) {
       const c = this.add.container(0, 0).setDepth(100);
       c.add(this.add.rectangle(0, 0, W, H, 0x0b1020, 0.72).setOrigin(0).setInteractive());
-      c.add(MT.UI.panel(this, 340, 110, 600, 500, 'denim'));
-      c.add(MT.text(this, W / 2, 160, m.name, 40, { title: true, color: '#ffd83a' }));
-      c.add(MT.text(this, W / 2, 200, 'Select difficulty', 18, { color: '#e8f1ff' }));
+      c.add(MT.UI.panel(this, 290, 34, 700, 652, 'denim'));
+      c.add(MT.text(this, W / 2, 76, m.name, 38, { title: true, color: '#ffd83a' }));
+      c.add(MT.text(this, W / 2, 112, 'Choose your hero', 18, { color: '#e8f1ff' }));
+      let hero = MT.Save.settings().hero;
+      if (!MT.HEROES[hero]) hero = 'gru';
+      const nameT = MT.text(this, W / 2, 268, '', 22, { title: true });
+      const info = MT.text(this, W / 2, 298, '', 15, { color: '#ffffff', wrap: 620 });
+      const cards = [];
+      const select = (id) => {
+        hero = id;
+        MT.Save.setSetting('hero', id);
+        cards.forEach((cd) => {
+          cd.bg.setTexture(MT.UI.panelKey(this, 112, 112, cd.id === id ? 'yellow' : 'card'));
+          cd.card.setScale(cd.id === id ? 1.08 : 1);
+        });
+        const Hd = MT.HEROES[id];
+        nameT.setText(`${Hd.name}  ·  ${Hd.title}`).setColor(Hd.color);
+        info.setText(Hd.desc);
+      };
+      MT.HERO_ORDER.forEach((id, i) => {
+        const x = W / 2 + (i - (MT.HERO_ORDER.length - 1) / 2) * 124, y = 186;
+        const card = this.add.container(x, y);
+        const bg = this.add.image(0, 0, MT.UI.panelKey(this, 112, 112, 'card')).setScale(1 / S);
+        const im = this.add.image(0, 2, MT.TowerArt.heroKey(this, id, 1)).setScale(0.42);
+        const pr = MT.text(this, 0, 44, '$' + MT.HEROES[id].cost, 13, { title: true });
+        card.add([bg, im, pr]);
+        card.setSize(112, 112).setInteractive({ useHandCursor: true });
+        card.on('pointerdown', () => {
+          MT.Audio.init();
+          MT.Audio.play('click');
+          select(id);
+        });
+        c.add(card);
+        cards.push({ id, card, bg });
+      });
+      c.add([nameT, info]);
+      select(hero);
+      c.add(MT.text(this, W / 2, 342, 'Select difficulty', 18, { color: '#e8f1ff' }));
       const styles = { easy: 'green', medium: 'yellow', hard: 'red' };
       ['easy', 'medium', 'hard'].forEach((d, i) => {
         const D = MT.DIFFS[d];
-        c.add(new MT.UI.Button(this, W / 2, 270 + i * 92, 440, 76, {
-          style: styles[d], label: D.name.toUpperCase(), size: 32, sub: D.blurb, subSize: 15,
-          onClick: () => this.go('Game', { map: m.id, diff: d }),
+        c.add(new MT.UI.Button(this, W / 2, 404 + i * 78, 440, 66, {
+          style: styles[d], label: D.name.toUpperCase(), size: 30, sub: D.blurb, subSize: 14,
+          onClick: () => this.go('Game', { map: m.id, diff: d, hero }),
         }));
       });
-      c.add(new MT.UI.Button(this, W / 2, 560, 180, 50, { style: 'blue', label: 'BACK', size: 22, onClick: () => c.destroy() }));
+      c.add(new MT.UI.Button(this, W / 2, 636, 180, 44, { style: 'blue', label: 'BACK', size: 22, onClick: () => c.destroy() }));
     }
   }
 

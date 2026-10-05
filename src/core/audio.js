@@ -115,8 +115,28 @@
     victory: () => { [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone('triangle', f, f, 0.2, 0.14, i * 0.12)); },
     defeat: () => { [392, 349, 311, 262].forEach((f, i) => tone('triangle', f, f * 0.98, 0.3, 0.14, i * 0.22)); },
     bello: () => { tone('triangle', 520, 700, 0.12, 0.12); tone('triangle', 700, 600, 0.18, 0.12, 0.12); },
+    zap: () => { tone('sawtooth', 2200, 600, 0.07, 0.05); noise(0.08, 0.07, 'highpass', 4000); },
+    thunder: () => { noise(0.5, 0.3, 'lowpass', 2400, 90); tone('square', 1600, 200, 0.08, 0.05); },
+    guitar: () => {
+      const f = [196, 247, 294, 330][Math.floor(Math.random() * 4)];
+      tone('sawtooth', f, f * 0.99, 0.22, 0.06);
+      tone('square', f * 2, f * 2, 0.12, 0.03, 0.01);
+    },
+    splat: () => { noise(0.14, 0.18, 'lowpass', 900, 200); tone('sine', 240, 90, 0.12, 0.15); },
+    warning: () => { [0, 0.32].forEach((d) => { tone('square', 660, 880, 0.14, 0.08, d); tone('square', 880, 660, 0.14, 0.08, d + 0.15); }); },
+    roar: () => { tone('sawtooth', 110, 55, 0.8, 0.22); noise(0.8, 0.25, 'lowpass', 700, 120); tone('square', 82, 60, 0.7, 0.1, 0.05); },
+    emp: () => { tone('sine', 1200, 60, 0.5, 0.12); noise(0.35, 0.1, 'bandpass', 3000, 300); },
+    blink: () => { tone('sine', 300, 1600, 0.16, 0.08); tone('triangle', 1600, 400, 0.16, 0.05, 0.12); },
+    stomp: () => { tone('sine', 90, 35, 0.3, 0.4); noise(0.2, 0.18, 'lowpass', 500, 80); },
+    jet: () => { noise(1.6, 0.18, 'bandpass', 300, 2500); tone('sawtooth', 120, 400, 1.4, 0.04); },
+    papoy: () => { [523, 659, 784, 659, 880, 784, 659, 523].forEach((f, i) => tone('square', f, f, 0.12, 0.08, i * 0.11)); },
+    nuke: () => { noise(1.4, 0.45, 'lowpass', 1500, 40); tone('sine', 80, 25, 1.2, 0.5); },
+    laserBig: () => { tone('sawtooth', 300, 1800, 0.5, 0.12); tone('sine', 900, 120, 1.2, 0.14, 0.2); noise(1.1, 0.12, 'bandpass', 2000, 600); },
+    fusion: () => { [262, 330, 392, 523, 659, 784].forEach((f, i) => tone('triangle', f, f * 1.01, 0.18, 0.11, i * 0.13)); tone('sine', 100, 800, 1.0, 0.1); },
+    fusionBoom: () => { noise(0.8, 0.35, 'lowpass', 3000, 100); [523, 784, 1046, 1568].forEach((f, i) => tone('triangle', f, f, 0.35, 0.12, i * 0.05)); },
+    fusionReady: () => { [784, 988, 1175, 1568].forEach((f, i) => tone('triangle', f, f, 0.14, 0.1, i * 0.08)); },
   };
-  const MIN_GAP = { pop: 0.035, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08, coin: 0.05 };
+  const MIN_GAP = { pop: 0.035, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08, coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5 };
 
   function play(name) {
     if (!ctx || !MT.Save.settings().sfx) return;
