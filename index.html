@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Minion Tower Defense</title>
+  <meta name="description" content="A Bloons TD 6 style tower defense with Gru and his minions vs. the evil purple minions.">
+  <style>
+    @font-face { font-family: 'Luckiest Guy'; font-style: normal; font-weight: 400; font-display: swap; src: url(fonts/LuckiestGuy.woff2) format('woff2'); }
+    @font-face { font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap; src: url(fonts/Fredoka.woff2) format('woff2'); }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1b2a49; }
+    body { touch-action: none; -webkit-user-select: none; user-select: none; }
+    #game { width: 100vw; height: 100vh; }
+    #boot { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #ffd83a; font: 700 28px "Luckiest Guy", "Arial Black", sans-serif; letter-spacing: 1px;
+      text-shadow: 0 3px 0 #2a1d14; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="boot">Loading bananas...</div>
+  <div id="game"></div>
+
+  <script src="lib/phaser.min.js"></script>
+  <script src="src/core/config.js"></script>
+  <script src="src/core/save.js"></script>
+  <script src="src/core/audio.js"></script>
+  <script src="src/art/draw.js"></script>
+  <script src="src/art/minion.js"></script>
+  <script src="src/art/towers.js"></script>
+  <script src="src/art/enemies.js"></script>
+  <script src="src/art/fx.js"></script>
+  <script src="src/game/path.js"></script>
+  <script src="src/data/maps.js"></script>
+  <script src="src/art/maps.js"></script>
+  <script src="src/data/enemies.js"></script>
+  <script src="src/data/towers.js"></script>
+  <script src="src/data/rounds.js"></script>
+  <script src="src/ui/widgets.js"></script>
+  <script src="src/game/entities.js"></script>
+  <script src="src/game/effects.js"></script>
+  <script src="src/ui/hud.js"></script>
+  <script src="src/scenes/game.js"></script>
+  <script src="src/scenes/menu.js"></script>
+  <script src="src/main.js"></script>
+</body>
+</html>
