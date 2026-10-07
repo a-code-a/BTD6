@@ -12,6 +12,8 @@
     purple: ['#c89bff', '#8a3fd8', '#55208f'],
     gray: ['#c9cfd6', '#8c96a1', '#59616b'],
     dark: ['#4a5566', '#2c3440', '#161b22'],
+    teal: ['#8ef0e6', '#1fb5a8', '#0d7068'],
+    orange: ['#ffc48a', '#ff8a2a', '#b85a0d'],
   };
 
   function btnKey(scene, w, h, style) {
@@ -125,6 +127,7 @@
       this.on('pointerover', () => {
         if (!this.enabled) return;
         this.setScale(1.04);
+        MT.Audio.play('hover');
         opts.onHover && opts.onHover(true);
       });
       this.on('pointerout', () => {
@@ -170,6 +173,74 @@
     }
   }
 
+  // Horizontal volume-style slider (0..1). Drag the banana coin or click the bar.
+  class Slider extends Phaser.GameObjects.Container {
+    constructor(scene, x, y, w, value, opts = {}) {
+      super(scene, x, y);
+      this.w = w;
+      this.value = Phaser.Math.Clamp(value, 0, 1);
+      this.opts = opts;
+      this.g = scene.add.graphics();
+      this.knob = scene.add.image(0, 0, 'ic_coin').setDisplaySize(34, 34);
+      this.add([this.g, this.knob]);
+      if (opts.pct !== false) {
+        this.pct = MT.text(scene, w / 2 + 30, 0, '', 18, { title: true, ox: 0 });
+        this.add(this.pct);
+      }
+      this.setSize(w + 36, 44);
+      this.setInteractive({ useHandCursor: true });
+      const fromPointer = (p) => {
+        const wp = scene.cameras.main.getWorldPoint(p.x, p.y);
+        const local = this.getWorldTransformMatrix().applyInverse(wp.x, wp.y);
+        this.set((local.x + w / 2) / w, true);
+      };
+      this.on('pointerdown', (p) => {
+        this.dragging = true;
+        fromPointer(p);
+      });
+      const move = (p) => {
+        if (this.dragging && p.isDown) fromPointer(p);
+      };
+      const up = () => {
+        if (!this.dragging) return;
+        this.dragging = false;
+        opts.onRelease && opts.onRelease(this.value);
+      };
+      scene.input.on('pointermove', move);
+      scene.input.on('pointerup', up);
+      this.once('destroy', () => {
+        scene.input.off('pointermove', move);
+        scene.input.off('pointerup', up);
+      });
+      this.draw();
+      scene.add.existing(this);
+    }
+    set(v, fire) {
+      v = Phaser.Math.Clamp(Math.round(v * 20) / 20, 0, 1);
+      const changed = v !== this.value;
+      this.value = v;
+      this.draw();
+      if (fire && changed) this.opts.onChange && this.opts.onChange(v);
+      return this;
+    }
+    draw() {
+      const w = this.w, g = this.g;
+      g.clear();
+      g.fillStyle(0x0d1428, 0.9);
+      g.fillRoundedRect(-w / 2, -8, w, 16, 8);
+      if (this.value > 0) {
+        g.fillStyle(0xffc61a, 1);
+        g.fillRoundedRect(-w / 2, -8, Math.max(16, w * this.value), 16, 8);
+        g.fillStyle(0xffffff, 0.35);
+        g.fillRoundedRect(-w / 2 + 4, -6, Math.max(8, w * this.value - 8), 5, 3);
+      }
+      g.lineStyle(2.5, 0x2a1d14, 1);
+      g.strokeRoundedRect(-w / 2, -8, w, 16, 8);
+      this.knob.x = -w / 2 + w * this.value;
+      if (this.pct) this.pct.setText(Math.round(this.value * 100) + '%');
+    }
+  }
+
   // Simple floating tooltip
   class Tooltip {
     constructor(scene) {
@@ -199,5 +270,5 @@
     }
   }
 
-  MT.UI = { btnKey, panelKey, panel, Button, Tooltip, BTN };
+  MT.UI = { btnKey, panelKey, panel, Button, Slider, Tooltip, BTN };
 })();

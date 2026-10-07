@@ -246,6 +246,7 @@
 
     speech(x, y, str) {
       if (this.bubble) this.bubble.destroy();
+      MT.Audio.say(str);
       const s = this.scene;
       const c = s.add.container(x, y).setDepth(6100);
       const t = MT.text(s, 0, 0, str, 15, { title: true, color: '#2a1d14', stroke: false });

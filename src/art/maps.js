@@ -10,7 +10,7 @@
   const SCATTER_R = { tree: 34, bush: 16, rock: 13, flowers: 14, bananatree: 28, palm: 26, fern: 14, labcrate: 18, pxbarrel: 14, crater: 30, moonrock: 13, bigrock: 26 };
 
   function waterDist(wa, x, y) {
-    if (wa.type === 'river') {
+    if (wa.type === 'river' || wa.type === 'sea') {
       if (!wa._pts) wa._pts = MT.Path.smooth(wa.pts, 6);
       let best = Infinity;
       for (const p of wa._pts) best = Math.min(best, Math.hypot(p[0] - x, p[1] - y));
@@ -362,7 +362,10 @@
   }
 
   // ---------------------------------------------------------------- water / lava
+  // extra water painters registered by other files (sea, ice lake, fountain...)
+  const WATER = {};
   function paintWater(ctx, wa, rnd) {
+    if (WATER[wa.type]) return WATER[wa.type](ctx, wa, rnd);
     if (wa.type === 'goo') {
       // bubbling pool of purple PX-41 goo
       const r2 = D.rng(wa.seed * 17);
@@ -1111,5 +1114,8 @@
       return key;
     },
     waterDist,
+    // extension points for maps2.js
+    THEMES, DEC, WATER, SCATTER_R, NON_BLOCKING,
+    helpers: { poly, strokePoly, walk, speckle },
   };
 })();

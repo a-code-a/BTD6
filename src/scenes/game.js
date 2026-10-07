@@ -83,6 +83,8 @@
       this.setupInput();
       this.cameras.main.fadeIn(350, 20, 30, 50);
       this.hud.toast('Place some minions, then press PLAY!', 3200);
+      MT.Audio.music('game');
+      this.musicCheck = 0;
       window.__mt = this;
       this.events.once('shutdown', () => {
         if (window.__mt === this) window.__mt = null;
@@ -570,7 +572,7 @@
 
     victory() {
       MT.Save.award(this.mapDef.id, this.diff.id);
-      MT.Save.addStats(this.totalPops);
+      MT.Save.addStats(this.totalPops, this.round, true);
       MT.Audio.play('victory');
       this.over = true;
       this.hud.showVictory();
@@ -587,7 +589,7 @@
       if (this.over) return;
       this.over = true;
       this.lives = 0;
-      MT.Save.addStats(this.totalPops);
+      MT.Save.addStats(this.totalPops, this.round, false);
       MT.Audio.play('defeat');
       this.hud.showDefeat();
     }
@@ -738,7 +740,7 @@
       if (tower) tower.pops++;
       if (e.boss) MT.Bosses.death(this, e);
       else this.fx.pop(e.x, e.y, false);
-      MT.Audio.play(e.boss ? 'bigpop' : 'pop');
+      MT.Audio.play(e.boss ? 'bigpop' : 'pop', e.x);
     }
 
     spawnChildren(e) {
@@ -780,19 +782,19 @@
       } else if (p.tex === 'p_ice') {
         this.fx.ring(x, y, ex.r, 0x9fe6ff, { disc: true, dur: 300 });
         this.fx.snow.explode(8, x, y);
-        MT.Audio.play('freeze');
+        MT.Audio.play('freeze', x);
       } else if (p.tex === 'p_jelly' || p.tex === 'p_jelly_acid') {
         this.fx.goo.explode(8, x, y);
         if (ex.r > 50) this.fx.ring(x, y, ex.r, 0x9be15d, { disc: true, dur: 260 });
       } else if (p.tex === 'p_goo') {
         this.fx.splat(x, y, ex.r, 0x8bdc3a);
-        MT.Audio.play('splat');
+        MT.Audio.play('splat', x);
       } else if (p.tex === 'p_squid') {
         this.fx.splat(x, y, ex.r, 0x3b2f5c);
-        MT.Audio.play('splat');
+        MT.Audio.play('splat', x);
       } else {
         this.fx.boom(x, y, ex.r);
-        MT.Audio.play('boom');
+        MT.Audio.play('boom', x);
       }
       if (p.cluster) {
         const c = p.cluster;
@@ -826,7 +828,7 @@
         this.fx.beam(target.x + 40, -20, target.x, target.y, col, width + 2);
       } else this.fx.beam(sx, sy, target.x, target.y, col, width);
       this.fx.sparks.explode(3, target.x, target.y);
-      MT.Audio.play('laser');
+      MT.Audio.play('laser', t.x);
       const hit = new Set([target.id]);
       const kids = this.applyHit(target, p, t);
       if (kids) kids.forEach((k) => hit.add(k.id));
@@ -878,7 +880,7 @@
         cur = nxt;
       }
       this.fx.sparks.explode(2, m.x, m.y - 20);
-      MT.Audio.play('zap');
+      MT.Audio.play('zap', target.x);
     }
 
     // ------------------------------------------------------------------ sonar, clouds, traps
@@ -1177,6 +1179,13 @@
         for (let i = 0; i < steps; i++) this.step(h);
       }
       this.renderFrame(time, delta / 1000);
+      // boss music while one of the big endgame giants is on the field
+      this.musicCheck -= real;
+      if (this.musicCheck <= 0) {
+        this.musicCheck = 1;
+        const bossy = this.enemies.some((e) => !e.dead && (e.def.final || e.type === 'zeppelin' || e.type === 'mecha' || e.type === 'goo' || e.type === 'phantom'));
+        MT.Audio.music(bossy ? 'boss' : 'game');
+      }
     }
 
     step(dt) {
@@ -1294,7 +1303,7 @@
           // show where the submarine is allowed to go
           const pulse = 0.7 + Math.sin(time * 0.008) * 0.25;
           for (const wa of this.layout.pools) {
-            if (wa.type === 'river') {
+            if (wa.type === 'river' || wa.type === 'sea') {
               MT.MapArt.waterDist(wa, 0, 0);
               const pts = wa._pts.map(([px, py]) => ({ x: px, y: py }));
               rg.lineStyle(wa.width - 8, 0x80deea, 0.22 * pulse);

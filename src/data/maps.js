@@ -128,5 +128,141 @@
       ],
       scatter: { bigrock: 6, rock: 8 },
     },
+    {
+      id: 'beach',
+      name: 'Banana Beach',
+      difficulty: 'Beginner',
+      theme: 'beach',
+      seed: 606,
+      pathWidth: 44,
+      paths: [
+        [
+          [-40, 140], [140, 140], [230, 190], [250, 300], [200, 420], [250, 520], [380, 545], [470, 465], [460, 330],
+          [520, 220], [640, 180], [760, 230], [790, 360], [720, 470], [760, 560], [880, 560], [940, 450], [930, 320],
+          [960, 200], [1060, 160],
+        ],
+      ],
+      water: [
+        { type: 'sea', width: 120, pts: [[-30, 700], [250, 672], [520, 692], [800, 668], [1050, 684]] },
+      ],
+      decor: [
+        { type: 'umbrella', x: 100, y: 290, r: 24 },
+        { type: 'sandcastle', x: 350, y: 420, r: 30 },
+        { type: 'lifeguard', x: 600, y: 560, r: 26 },
+        { type: 'towel', x: 620, y: 330, r: 22 },
+        { type: 'umbrella', x: 860, y: 420, r: 22 },
+        { type: 'palm', x: 870, y: 80, r: 26 },
+        { type: 'palm', x: 40, y: 50, r: 26 },
+      ],
+      scatter: { shell: 14, starfish: 8, beachrock: 5, palm: 2 },
+    },
+    {
+      id: 'desert',
+      name: 'Pyramid Desert',
+      difficulty: 'Intermediate',
+      theme: 'desert',
+      seed: 707,
+      pathWidth: 42,
+      paths: [
+        [
+          [300, -40], [300, 90], [230, 170], [120, 230], [110, 340], [190, 420], [330, 410], [420, 320], [540, 290],
+          [640, 370], [630, 490], [720, 570], [850, 540], [900, 420], [860, 290], [910, 170], [1060, 130],
+        ],
+      ],
+      water: [
+        { type: 'pond', x: 520, y: 150, r: 44 },
+      ],
+      decor: [
+        { type: 'pyramid', x: 730, y: 250, r: 62 },
+        { type: 'pyramid', x: 330, y: 600, r: 52 },
+        { type: 'pyramid', x: 70, y: 570, r: 38 },
+        { type: 'palm', x: 450, y: 110, r: 20 },
+        { type: 'palm', x: 600, y: 120, r: 20 },
+        { type: 'bones', x: 520, y: 470, r: 18 },
+      ],
+      scatter: { cactus: 9, desertrock: 7 },
+    },
+    {
+      id: 'arctic',
+      name: 'Arctic Base',
+      difficulty: 'Advanced',
+      theme: 'snow',
+      seed: 808,
+      pathWidth: 42,
+      paths: [
+        [
+          [-40, 120], [160, 120], [260, 180], [300, 300], [420, 350], [560, 330], [640, 240], [760, 200], [880, 260],
+          [920, 380], [1060, 400],
+        ],
+        [
+          [-40, 610], [160, 610], [260, 550], [330, 440], [420, 350], [560, 330], [640, 240], [760, 200], [880, 260],
+          [920, 380], [1060, 400],
+        ],
+      ],
+      water: [
+        { type: 'icelake', x: 150, y: 365, r: 52 },
+        { type: 'icelake', x: 760, y: 560, r: 50 },
+      ],
+      decor: [
+        { type: 'igloo', x: 560, y: 490, r: 36 },
+        { type: 'snowman', x: 450, y: 150, r: 18 },
+        { type: 'radar', x: 930, y: 130, r: 30 },
+        { type: 'igloo', x: 380, y: 620, r: 30 },
+      ],
+      scatter: { pine: 9, icecrystal: 7, snowrock: 4 },
+    },
+    {
+      id: 'city',
+      name: 'Villain-Con City',
+      difficulty: 'Advanced',
+      theme: 'city',
+      seed: 909,
+      pathWidth: 46,
+      paths: [
+        [
+          [-40, 110], [260, 110], [300, 150], [300, 340], [340, 380], [600, 380], [640, 340], [640, 150], [680, 110],
+          [860, 110], [900, 150], [900, 330], [860, 370], [800, 420], [800, 560], [760, 600], [420, 600], [200, 600],
+          [160, 640], [160, 760],
+        ],
+      ],
+      water: [
+        { type: 'fountain', x: 590, y: 490, r: 40 },
+      ],
+      decor: [
+        { type: 'building', x: 470, y: 250, r: 62, w: 110, h: 100, col: '#7e57c2' },
+        { type: 'building', x: 120, y: 300, r: 58, w: 120, h: 110, col: '#26a69a' },
+        { type: 'building', x: 110, y: 480, r: 52, w: 100, h: 90, col: '#ef5350' },
+        { type: 'building', x: 990, y: 520, r: 34, w: 60, h: 120, col: '#5c6bc0' },
+        { type: 'billboard', x: 775, y: 245, r: 44 },
+        { type: 'car', x: 420, y: 500, r: 18 },
+      ],
+      scatter: { lamp: 10, planter: 6 },
+    },
+    {
+      id: 'factory',
+      name: 'Minion Factory',
+      difficulty: 'Expert',
+      theme: 'factory',
+      seed: 1010,
+      pathWidth: 40,
+      paths: [
+        [
+          [1060, 360], [880, 360], [820, 300], [820, 160], [760, 100], [600, 100], [540, 160], [540, 560], [480, 620],
+          [300, 620], [240, 560], [240, 420], [180, 360], [-40, 360],
+        ],
+      ],
+      water: [
+        { type: 'goo', x: 690, y: 300, r: 42, seed: 8 },
+        { type: 'goo', x: 380, y: 470, r: 44, seed: 9 },
+      ],
+      decor: [
+        { type: 'machine', x: 930, y: 560, r: 46 },
+        { type: 'bananacrates', x: 690, y: 500, r: 30 },
+        { type: 'gear', x: 110, y: 170, r: 44 },
+        { type: 'machine', x: 380, y: 220, r: 44 },
+        { type: 'bananacrates', x: 940, y: 170, r: 28 },
+      ],
+      scatter: { barrel: 7, toolbox: 5 },
+    },
   ];
 })();

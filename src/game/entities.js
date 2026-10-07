@@ -777,7 +777,7 @@
       }
       if (this.fused || s.count >= 3) g.fx.muzzle(sx, sy, this.fused ? MT.util.hexInt(this.def.fusion.color) : 0xffffff);
       const snd = { p_rocket: 'rocket', p_jelly: 'jelly', p_jelly_acid: 'jelly', p_laser: 'laser', p_plasma: 'laser', p_sun: 'laser', p_dart: 'laser', p_ice: 'freeze', p_freezebolt: 'freeze', p_wave: 'guitar', p_lipstick: 'laser', p_goo: 'jelly', p_squid: 'jelly' }[s.proj.tex] || 'throw';
-      MT.Audio.play(snd);
+      MT.Audio.play(snd, this.x);
     }
     // ---------------------------------------------------------- planes
     planePos(i, out) {
