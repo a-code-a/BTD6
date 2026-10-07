@@ -34,20 +34,29 @@ Phaser and the fonts (Luckiest Guy and Fredoka) are vendored in `lib/` and `font
 6. **Super Fusion:** once you own three towers of the same kind that each have a tier-4 upgrade, select
    one and press **FUSE**. The other two fly into it and it becomes a far stronger super tower with its
    own ability.
-7. Beat the final round to earn a medal for that map and difficulty, then keep going in freeplay.
+7. **Giant fusions** (a trinity of trinities): select a super tower and press
+   - **ULTIMATE** with three super towers of the *same* kind: a brand-new giant with its own extra
+     attack (see the table below), 2.5x damage and a stronger ability, or
+   - **OMEGA** with three super towers of *different* kinds: a giant **Omega Mech** built from them.
+     The selected tower becomes its back, the other two its arm weapons, and every combination
+     looks different. Its core fires the **Omega Beam**, which mixes the powers of all three parts.
+8. Click **MOVE** (or press `M`) to pick up any placed tower and put it somewhere else for a small fee.
+9. Beat the final round to earn a medal for that map and difficulty, then keep going in freeplay.
 
-Towers turn to face whatever they are shooting at. Screen shake is gentle by default; switch it
-between ON, LOW and OFF in the pause menu.
+Every tower has a signature mechanic (★ in its panel, full text on hover), towers turn to face what they
+shoot at, and screen shake is gentle by default (ON, LOW or OFF in the pause menu). The game renders at
+your screen's real pixel density, so text stays sharp, and it re-adapts when you resize the window.
 
 ### Hotkeys
 
 | Key | Action |
 | --- | --- |
-| `Q W E R T Y U I O A S D` | Select a tower to place |
+| `Q W E R T Y A S D G J U I O` | Select a tower to place |
 | `H` | Place your hero |
 | `Space` | Start round / toggle 3x speed |
 | `,` `.` `/` | Buy upgrade on path 1 / 2 / 3 of the selected tower |
 | `F` | Super Fusion for the selected tower |
+| `M` | Move the selected tower |
 | `Tab` | Cycle targeting (First, Last, Close, Strong) |
 | `Backspace` / `Delete` | Sell selected tower |
 | `Esc` | Cancel placement, deselect, or pause |
@@ -55,20 +64,24 @@ between ON, LOW and OFF in the pause menu.
 
 ## Towers
 
-| Tower | Role | Signature upgrades |
+| Tower | Signature mechanic | Signature upgrades |
 | --- | --- | --- |
-| Banana Thrower | Cheap all-rounder | Banana Boulder → Juggernaut, Triple Toss, Crossbow & Sharpshooter |
-| Fart Blaster | Short-range burst in all directions | Gas Cloud ring, Fart Storm, Flame Fart → Inferno Ring |
-| Rocket Minion | Explosive splash that breaks armor | Moon Buster, Cluster Rockets, Giant Eliminator (Mega Missile) |
-| Freeze Ray Minion | Freezes groups | Arctic Wind, Brittle Ice, Cryo Cannon, Snowstorm ability |
-| Jelly Gunner | Slows mutants | Acid Jelly, Jelly Hose, Jelly Trap, Jelly Storm ability |
-| Laser Sniper | Infinite range, hits armor | Giant Cripple, Bouncing Laser, Full Auto, Supply Drop ability |
+| Banana Thrower | Boomerang bananas that hit again on the way back | Banana Boulder → Juggernaut, Triple Toss, Crossbow & Sharpshooter |
+| Fart Blaster | Puffs leave lingering gas clouds | Gas Cloud ring, Fart Storm, Flame Fart → Inferno Ring |
+| Rocket Minion | Armor shred: no armor and +1 damage taken for 3s | Moon Buster, Cluster Rockets, Giant Eliminator (Mega Missile) |
+| Freeze Ray Minion | Freezes everything around it | Arctic Wind, Brittle Ice, Cryo Cannon, Snowstorm ability |
+| Jelly Gunner | Slows, always aims at un-slowed mutants | Acid Jelly, Jelly Hose, Jelly Trap, Jelly Storm ability |
+| Laser Sniper | Focus fire: repeated hits on one mutant stack damage | Giant Cripple, Bouncing Laser, Full Auto, Supply Drop ability |
 | Tesla Minion | Chain lightning | Arc Reactor, Triple Coil, EMP Overload, Lightning Storm ability |
 | Minion Pilot | Planes circle and strafe | Rocket Pods, Gunship, Squadron of 3, Bombing Run ability |
-| Rock Star Minion | Piercing sound waves | Heavy Metal → Rock God, Minion Band buff, Disco Ball stuns, Papoy Song ability |
+| Rock Star Minion | Rhythm: every 4th note is a power chord | Heavy Metal → Rock God, Minion Band buff, Disco Ball stuns, Papoy Song ability |
+| Nail Minion | Nail traps on the track, hit Camo too | Spike Mines, Smart Spikes, Banana Peels, Spike Storm ability |
+| Submarine Minion | Water only, homing torpedoes, sonar strips Camo | Ballistic Missile, Torpedo Barrage, Nuclear Launch & Kraken abilities |
 | Banana Farm | Income | Plantations, Golden Bananas, Banana Bank, auto-collect |
 | Gru's Lab | Support buffs | Range/speed/pierce buffs, camo & armor detection, discounts, Lab Turret |
-| Super Minion | Late-game powerhouse | Laser → Plasma → Sun Minion, Robo Minion, Dark Legend |
+| Super Minion | Momentum: fires up to 2x faster the longer it shoots | Laser → Plasma → Sun Minion, Robo Minion, Dark Legend |
+
+Submarines float on water, lava and the purple goo pools (every map has at least one).
 
 ### Super Fusions
 
@@ -85,7 +98,28 @@ between ON, LOW and OFF in the pause menu.
 | Rock Star Minions | Rock Legend | Encore! |
 | Banana Farms | Banana Republic | Banana Rain |
 | Gru's Labs | Nefario's Doomsday Lab | Lab Overload (every tower 2x speed) |
+| Nail Minions | Nailinator | Iron Rain |
+| Submarine Minions | Leviathan | Leviathan Strike |
 | Super Minions | Banana Galaxy God | Supernova |
+
+### Ultimate forms
+
+| Three... | Become | Extra attack |
+| --- | --- | --- |
+| Banana Overlords | Banana Singularity | Gravity Well: a golden black hole that traps and crushes mutants |
+| Fartnados | Fart Hurricane | Roaming Tornado that blows mutants back down the track |
+| Doomsday Launchers | Doomsday Armada | Artillery Barrage of 8 shells from a missile tank |
+| Absolute Zeros | Eternal Winter | Hailstorm of giant icicles |
+| Jelly Krakens | Jelly Abyss | Acid Pools that slow and dissolve |
+| Orbital Lasers | Orbital Fortress | Railgun that pierces a line across the whole map |
+| Thunder Gods | Storm Titan | Living Storm: constant lightning from the sky |
+| Minion Air Forces | Sky Carrier | Strafing Runs by bombers |
+| Rock Legends | Minionstock Festival | Bass Drop: every beat hits, every 4th stuns and knocks back |
+| Nailinators | Spike Colossus | Spike Walls and a nail-shooting Ground Slam |
+| Leviathans | Kraken King | Tentacle Grabs that hold and crush |
+| Banana Republics | Banana Planet | Orbiting Banana Moons + 3% interest per round |
+| Doomsday Labs | Nefario's Moon Base | Clone Troopers charging down the track |
+| Banana Galaxy Gods | Banana Multiverse | Portal Strikes anywhere on the map |
 
 ### Heroes
 

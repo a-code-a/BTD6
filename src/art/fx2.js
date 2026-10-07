@@ -174,6 +174,105 @@
       D.fs(ctx, '#111');
     });
 
+    mk('p_torpedo', 30, 12, (ctx) => {
+      // bubbles trailing behind
+      for (let i = 0; i < 3; i++) {
+        D.circlePath(ctx, 2 + i * 3, 6 + (i % 2 ? 2 : -2), 1.4 + i * 0.3);
+        D.fs(ctx, 'rgba(255,255,255,0.8)');
+      }
+      D.rrPath(ctx, 8, 3, 18, 6, 3);
+      ctx.fillStyle = D.lin(ctx, 0, 3, 0, 9, [[0, '#eceff1'], [1, '#607d8b']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(25, 3);
+      ctx.quadraticCurveTo(31, 6, 25, 9);
+      ctx.closePath();
+      D.fs(ctx, '#ffd83a', OL, 0.9);
+      ctx.beginPath();
+      ctx.moveTo(9, 6);
+      ctx.lineTo(6, 2);
+      ctx.lineTo(6, 10);
+      ctx.closePath();
+      D.fs(ctx, '#455a64', OL, 0.8);
+    });
+    const nailPile = (key, w, h, col, big) => mk(key, w, h, (ctx) => {
+      D.shadow(ctx, w / 2, h - 5, w * 0.42, 3.5, 0.35);
+      const rnd = D.rng(big ? 9 : 4);
+      const n = big ? 7 : 6;
+      for (let i = 0; i < n; i++) {
+        const x = w * 0.2 + rnd() * w * 0.6, y = h * 0.45 + rnd() * h * 0.35;
+        const rot = (rnd() - 0.5) * 2.2;
+        const len = big ? 10 + rnd() * 5 : 7 + rnd() * 3;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rot);
+        if (big) {
+          ctx.beginPath();
+          ctx.moveTo(-2.6, 2);
+          ctx.lineTo(0, -len);
+          ctx.lineTo(2.6, 2);
+          ctx.closePath();
+          ctx.fillStyle = D.lin(ctx, -2.6, 0, 2.6, 0, [[0, '#eceff1'], [1, '#37474f']]);
+          ctx.fill();
+          ctx.strokeStyle = OL;
+          ctx.lineWidth = 0.9;
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = OL;
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(0, 2);
+          ctx.lineTo(0, -len);
+          ctx.stroke();
+          ctx.strokeStyle = col;
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          D.ellipsePath(ctx, 0, 2, 2.3, 1);
+          D.fs(ctx, col, OL, 0.6);
+        }
+        ctx.restore();
+      }
+    });
+    nailPile('fx_nails', 26, 22, '#cfd8dc', false);
+    nailPile('fx_nails_big', 32, 28, '#78909c', true);
+    mk('fx_peel', 26, 18, (ctx) => {
+      D.shadow(ctx, 13, 14, 11, 3, 0.3);
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(13, 10);
+        ctx.quadraticCurveTo(13 + i * 7, 4, 13 + i * 10, 12);
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 4.4;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffd83a';
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+      }
+      D.circlePath(ctx, 13, 10, 2.6);
+      D.fs(ctx, '#fff59d', OL, 0.8);
+    });
+    mk('fx_tentacle', 40, 72, (ctx) => {
+      ctx.beginPath();
+      ctx.moveTo(8, 72);
+      ctx.bezierCurveTo(2, 44, 30, 36, 24, 14);
+      ctx.bezierCurveTo(22, 6, 12, 6, 14, 14);
+      ctx.bezierCurveTo(16, 18, 20, 16, 19, 13);
+      ctx.bezierCurveTo(26, 30, 14, 46, 30, 72);
+      ctx.closePath();
+      ctx.fillStyle = D.lin(ctx, 0, 0, 40, 0, [[0, '#b39ddb'], [0.5, '#7e57c2'], [1, '#4527a0']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        D.ellipsePath(ctx, 14 + (i % 2) * 3, 62 - i * 8, 2.4, 1.8);
+        D.fs(ctx, '#ede7f6', 'rgba(42,29,20,0.5)', 0.6);
+      }
+    });
+
     // ---------------------------------------------------------------- effects
     mk('fx_chunk', 14, 12, (ctx) => {
       D.blobPath(ctx, 7, 6, 4.6, 6, 0.4, D.rng(2));
@@ -528,6 +627,38 @@
       ctx.setLineDash([4, 3]);
       ctx.stroke();
       ctx.setLineDash([]);
+    });
+    ab('ab_spikes', '#eceff1', '#455a64', (ctx) => ctx.drawImage(img('fx_nails'), 6, 8, 44, 37));
+    ab('ab_ironrain', '#cfd8dc', '#263238', (ctx) => {
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(12 + i * 9, 6);
+        ctx.lineTo(8 + i * 9, 18);
+        ctx.stroke();
+      }
+      ctx.drawImage(img('fx_nails_big'), 8, 14, 40, 35);
+    });
+    ab('ab_nukelaunch', '#dcedc8', '#33691e', (ctx) => {
+      D.circlePath(ctx, 28, 28, 15);
+      D.fs(ctx, '#ffeb3b', OL, 1.8);
+      ctx.fillStyle = OL;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(28, 28);
+        ctx.arc(28, 28, 13, (i * 2 * Math.PI) / 3 - 0.5, (i * 2 * Math.PI) / 3 + 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+      D.circlePath(ctx, 28, 28, 3.5);
+      D.fs(ctx, '#ffeb3b', OL, 1);
+    });
+    ab('ab_kraken', '#d1c4e9', '#311b92', (ctx) => ctx.drawImage(img('fx_tentacle'), 14, 4, 28, 50));
+    ab('ab_leviathan', '#b2ebf2', '#006064', (ctx) => {
+      ctx.drawImage(img('fx_tentacle'), 4, 8, 22, 40);
+      ctx.drawImage(img('p_torpedo'), 22, 26, 30, 12);
+      ctx.drawImage(img('p_torpedo'), 20, 36, 30, 12);
     });
     ab('ab_supernova', '#ffffff', '#ff8f00', (ctx) => {
       glowDot(ctx, 28, 28, 22, '#fff59d', '#ff6f00');

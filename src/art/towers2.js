@@ -584,11 +584,325 @@
     }
   };
 
+  // ---------------------------------------------------------------- Nail Minion
+  function nailIcon(ctx, x, y, len, rot, col) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -len);
+    ctx.stroke();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    D.ellipsePath(ctx, 0, -len, 2.4, 1);
+    D.fs(ctx, col, OL, 0.7);
+    ctx.restore();
+  }
+
+  P.nails = function (ctx, t) {
+    const [a, b, c] = t;
+    if (a >= 4) glowRing(ctx, B.cx, B.cy, 42, '#90a4ae', 0.55);
+    else if (b >= 4) glowRing(ctx, B.cx, B.cy, 42, '#ffab40', 0.45);
+    else if (c >= 4) glowRing(ctx, B.cx, B.cy, 42, '#81d4fa', 0.5);
+    if (c >= 4) {
+      D.ellipsePath(ctx, B.cx, FOOT - 1, 30, 7);
+      D.fs(ctx, 'rgba(178,235,242,0.75)', 'rgba(2,136,209,0.6)', 1);
+    }
+    if (b >= 4) {
+      // little nail factory chimney
+      D.rrPath(ctx, 4, 22, 14, 50, 2);
+      ctx.fillStyle = D.lin(ctx, 4, 0, 18, 0, [[0, '#a1887f'], [1, '#5d4037']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      const rnd = D.rng(3);
+      for (let i = 0; i < 3; i++) {
+        D.blobPath(ctx, 11 + i * 3, 16 - i * 6, 4 + i, 7, 0.2, rnd);
+        D.fs(ctx, 'rgba(200,200,200,0.85)', 'rgba(42,29,20,0.4)', 0.8);
+      }
+    }
+    const nailCol = a >= 4 ? '#455a64' : a >= 1 ? '#b26a3c' : '#cfd8dc';
+    const o = {
+      eyes: 2, hair: 'bald', mouth: 'grin', seed: 161, lookX: 0.6,
+      arms: [],
+      outfit: (c2, cx, cy, w, h) => {
+        // tool belt
+        c2.fillStyle = '#6d4c41';
+        c2.fillRect(cx - w, cy + h * 0.22, w * 2, h * 0.07);
+        c2.fillStyle = '#ffca28';
+        c2.fillRect(cx - w * 0.1, cy + h * 0.215, w * 0.2, h * 0.08);
+        c2.fillStyle = '#8d6e63';
+        c2.fillRect(cx + w * 0.22, cy + h * 0.27, w * 0.14, h * 0.12);
+      },
+    };
+    o.after = (c2) => {
+      // bucket of nails in the left hand
+      const bx = B.cx - 21, by = B.cy + 13;
+      for (let i = 0; i < 5; i++) nailIcon(c2, bx - 6 + i * 3, by - 2, 7 + (i % 2) * 2, (i - 2) * 0.25, nailCol);
+      c2.beginPath();
+      c2.moveTo(bx - 8, by - 3);
+      c2.lineTo(bx + 8, by - 3);
+      c2.lineTo(bx + 6, by + 10);
+      c2.lineTo(bx - 6, by + 10);
+      c2.closePath();
+      c2.fillStyle = D.lin(c2, bx - 8, 0, bx + 8, 0, [[0, '#eceff1'], [1, '#78909c']]);
+      c2.fill();
+      c2.strokeStyle = OL;
+      c2.lineWidth = 1.2;
+      c2.stroke();
+      D.limb(c2, B.cx - 13, B.cy + 2, bx + 2, by - 3, B.w * 0.14, '#ffd83a', { bend: [B.cx - 18, B.cy + 2], lw: 1.5 });
+      if (b >= 2) {
+        // nail gun
+        c2.save();
+        c2.translate(B.cx + 14, B.cy + 2);
+        D.rrPath(c2, -3, -5, 22, 8, 2.5);
+        D.fs(c2, b >= 4 ? '#ff6d00' : '#546e7a', OL, 1.2);
+        D.rrPath(c2, 1, 2, 6, 10, 2);
+        D.fs(c2, '#37474f', OL, 1);
+        D.rrPath(c2, 8, 3, 8, 5, 1.5);
+        D.fs(c2, '#b0bec5', OL, 0.8);
+        c2.restore();
+        D.limb(c2, B.cx + 13, B.cy + 2, B.cx + 17, B.cy + 7, B.w * 0.14, '#ffd83a', { lw: 1.5 });
+      } else {
+        // hammer held up high
+        c2.save();
+        c2.translate(B.cx + 21, B.cy - 13);
+        c2.rotate(0.35);
+        D.rrPath(c2, -1.8, -16, 3.6, 22, 1.5);
+        D.fs(c2, '#8d5524', OL, 1);
+        D.rrPath(c2, -7, -20, 14, 6, 1.5);
+        D.fs(c2, '#90a4ae', OL, 1.1);
+        c2.restore();
+        D.limb(c2, B.cx + 13, B.cy + 2, B.cx + 21, B.cy - 11, B.w * 0.14, '#ffd83a', { bend: [B.cx + 23, B.cy], lw: 1.5 });
+      }
+    };
+    baseMinion(ctx, o);
+    // hard hat
+    helmet(ctx, B.cx, B.cy - 31, B.w, a >= 4 ? '#78909c' : '#ffca28');
+    if (a >= 4) for (let i = -2; i <= 2; i++) nailIcon(ctx, B.cx + i * 5, B.cy - 30, 7, i * 0.25, '#455a64');
+    else {
+      D.circlePath(ctx, B.cx + 7, B.cy - 22, 2.4);
+      D.fs(ctx, '#fff59d', OL, 0.8);
+    }
+    if (a >= 3) {
+      // spike mine
+      const mx = B.cx + 25, my = FOOT - 7;
+      for (let i = 0; i < 8; i++) {
+        const an = (i / 8) * Math.PI * 2;
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.lineTo(mx + Math.cos(an) * 8, my + Math.sin(an) * 6);
+        ctx.stroke();
+      }
+      D.circlePath(ctx, mx, my, 5.5);
+      ctx.fillStyle = D.rad(ctx, mx - 2, my - 2, 0, mx, my, 6, [[0, '#757575'], [1, '#111']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.stroke();
+      D.circlePath(ctx, mx, my - 1, 1.4);
+      D.fs(ctx, '#ff1744');
+    }
+    if (c >= 3) {
+      // banana peel
+      const px = B.cx - 26, py = FOOT - 2;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.quadraticCurveTo(px + i * 6, py - 4, px + i * 9, py + 1);
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 3.4;
+        ctx.stroke();
+        ctx.strokeStyle = '#ffd83a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    if (c >= 2) {
+      // glue bottle
+      D.rrPath(ctx, B.cx + 18, B.cy + 14, 7, 11, 2);
+      D.fs(ctx, '#ffffff', OL, 1);
+      D.rrPath(ctx, B.cx + 19.5, B.cy + 10, 4, 4, 1);
+      D.fs(ctx, '#29b6f6', OL, 0.8);
+    }
+  };
+
+  // ---------------------------------------------------------------- Submarine
+  P.sub = function (ctx, t) {
+    const [a, b, c] = t;
+    const hy = 54;
+    if (a >= 4) glowRing(ctx, 42, hy - 6, 44, '#76ff03', 0.4);
+    else if (c >= 4) glowRing(ctx, 42, hy - 6, 44, '#b388ff', 0.45);
+    else if (b >= 4) glowRing(ctx, 42, hy - 6, 42, '#40c4ff', 0.4);
+    // ripples
+    D.ellipsePath(ctx, 42, hy + 10, 40, 11);
+    D.fs(ctx, 'rgba(64,170,220,0.45)', 'rgba(255,255,255,0.65)', 1.2);
+    const yel = '#ffd83a';
+    // conning tower
+    D.rrPath(ctx, 32, hy - 26, 20, 18, 4);
+    ctx.fillStyle = D.lin(ctx, 32, 0, 52, 0, [[0, '#fff07c'], [0.5, yel], [1, '#c79100']]);
+    ctx.fill();
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    // periscope
+    const top = c >= 1 ? hy - 44 : hy - 36;
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 3.6;
+    ctx.beginPath();
+    ctx.moveTo(40, hy - 26);
+    ctx.lineTo(40, top);
+    ctx.lineTo(47, top);
+    ctx.stroke();
+    ctx.strokeStyle = '#90a4ae';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    D.rrPath(ctx, 46, top - 2.6, 4, 5.2, 1);
+    D.fs(ctx, '#80deea', OL, 0.8);
+    if (b >= 4) {
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(35, hy - 26);
+      ctx.lineTo(35, hy - 40);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(35, hy - 40);
+      ctx.lineTo(28, hy - 37);
+      ctx.lineTo(35, hy - 34);
+      ctx.closePath();
+      D.fs(ctx, '#e53935', OL, 0.8);
+    }
+    if (a >= 4) {
+      // radiation sign
+      D.circlePath(ctx, 42, hy - 17, 4.5);
+      D.fs(ctx, '#ffeb3b', OL, 0.8);
+      ctx.fillStyle = OL;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(42, hy - 17);
+        ctx.arc(42, hy - 17, 4, (i * 2 * Math.PI) / 3 - 0.5, (i * 2 * Math.PI) / 3 + 0.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // hull
+    D.ellipsePath(ctx, 42, hy, 32, 13);
+    ctx.fillStyle = D.lin(ctx, 0, hy - 13, 0, hy + 13, [[0, '#fff59d'], [0.45, yel], [1, '#b37400']]);
+    ctx.fill();
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    // propeller
+    D.ellipsePath(ctx, 8, hy, 3, 10);
+    D.fs(ctx, 'rgba(200,200,200,0.85)', OL, 1);
+    D.circlePath(ctx, 10, hy, 2.2);
+    D.fs(ctx, '#78909c', OL, 0.8);
+    // portholes with a minion peeking out
+    [26, 42, 58].forEach((x, i) => {
+      D.circlePath(ctx, x, hy - 2, 4.6);
+      D.fs(ctx, '#b0bec5', OL, 1.1);
+      D.circlePath(ctx, x, hy - 2, 3.3);
+      if (i === 1) {
+        D.fs(ctx, '#ffd83a');
+        D.circlePath(ctx, x + 0.5, hy - 2.5, 1.7);
+        D.fs(ctx, '#ffffff', OL, 0.5);
+        D.circlePath(ctx, x + 1, hy - 2.5, 0.7);
+        D.fs(ctx, '#3a2414');
+      } else D.fs(ctx, '#4fc3f7');
+    });
+    // torpedo tubes
+    if (a >= 1) {
+      D.circlePath(ctx, 71, hy - 3, 2);
+      D.fs(ctx, '#263238', OL, 0.7);
+      D.circlePath(ctx, 71, hy + 4, 2);
+      D.fs(ctx, '#263238', OL, 0.7);
+    }
+    if (a >= 3) {
+      // missile hatch on deck
+      D.rrPath(ctx, 54, hy - 18, 10, 7, 2);
+      D.fs(ctx, '#546e7a', OL, 1);
+      ctx.beginPath();
+      ctx.moveTo(55.5, hy - 18);
+      ctx.lineTo(59, hy - 25);
+      ctx.lineTo(62.5, hy - 18);
+      ctx.closePath();
+      D.fs(ctx, '#e53935', OL, 0.8);
+    }
+    if (b >= 3) {
+      [20, 30].forEach((x) => {
+        D.rrPath(ctx, x - 5, hy - 14, 10, 4, 2);
+        D.fs(ctx, '#78909c', OL, 0.8);
+      });
+    }
+    if (c >= 2) {
+      // sonar dome on the nose
+      ctx.beginPath();
+      ctx.arc(64, hy - 10, 5, Math.PI, 0);
+      ctx.closePath();
+      D.fs(ctx, '#4dd0e1', OL, 1);
+      ctx.strokeStyle = 'rgba(128,222,234,0.8)';
+      ctx.lineWidth = 1.2;
+      for (let i = 1; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(64, hy - 10, 5 + i * 4, Math.PI * 1.15, Math.PI * 1.85);
+        ctx.stroke();
+      }
+    }
+    if (c >= 3) {
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(70 - i, hy - 6 + i * 4);
+        ctx.lineTo(77 - i, hy - 4 + i * 4);
+        ctx.lineTo(70 - i, hy - 2 + i * 4);
+        ctx.closePath();
+        D.fs(ctx, '#ffffff', OL, 0.6);
+      }
+    }
+    if (c >= 4) {
+      // a friendly kraken tentacle hugging the hull
+      ctx.beginPath();
+      ctx.moveTo(14, hy + 12);
+      ctx.bezierCurveTo(10, hy - 14, 34, hy - 18, 36, hy - 4);
+      ctx.bezierCurveTo(36, hy + 4, 28, hy + 2, 28, hy - 4);
+      ctx.bezierCurveTo(28, hy - 10, 18, hy - 8, 20, hy + 12);
+      ctx.closePath();
+      D.fs(ctx, '#7e57c2', OL, 1.2);
+      for (let i = 0; i < 3; i++) {
+        D.circlePath(ctx, 17 + i * 5, hy - 7 + (i === 1 ? -3 : 0), 1.3);
+        D.fs(ctx, '#d1c4e9');
+      }
+    }
+    // water in front of the lower hull
+    ctx.save();
+    D.ellipsePath(ctx, 42, hy + 10, 40, 11);
+    ctx.clip();
+    ctx.fillStyle = 'rgba(41,128,185,0.55)';
+    ctx.fillRect(0, hy + 5, 84, 20);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (let x = 8; x <= 76; x += 8) {
+      ctx.moveTo(x, hy + 6);
+      ctx.quadraticCurveTo(x + 2, hy + 3.5, x + 4, hy + 6);
+    }
+    ctx.stroke();
+  };
+
   // ---------------------------------------------------------------- Super Fusion art
   const FW = 120, FH = 132, FCX = 60, FCY = 66, FK = 1.2;
   const FUSED_LOOK = {
     banana: [4, 2, 0], fart: [4, 2, 0], rocket: [4, 2, 0], freeze: [4, 2, 0], jelly: [2, 4, 0], sniper: [4, 2, 0],
     tesla: [4, 2, 0], pilot: [2, 4, 0], rockstar: [4, 2, 0], farm: [4, 2, 0], lab: [2, 0, 4], super: [4, 2, 0],
+    nails: [4, 2, 0], sub: [2, 0, 4],
   };
 
   function crown(ctx, x, y, s, gem) {
@@ -843,6 +1157,48 @@
       }
       energyBall(ctx, FCX, 4, 6, '#e040fb');
     },
+    nails(ctx) {
+      // fan of giant iron spikes
+      for (let i = 0; i < 9; i++) {
+        const an = -Math.PI / 2 + (i - 4) * 0.32;
+        ctx.save();
+        ctx.translate(FCX + Math.cos(an) * 20, 70 + Math.sin(an) * 20);
+        ctx.rotate(an + Math.PI / 2);
+        const len = 34 + (i % 2 ? 0 : 14);
+        ctx.beginPath();
+        ctx.moveTo(-3.5, 0);
+        ctx.lineTo(0, -len);
+        ctx.lineTo(3.5, 0);
+        ctx.closePath();
+        ctx.fillStyle = D.lin(ctx, -3, 0, 3, 0, [[0, '#eceff1'], [1, '#455a64']]);
+        ctx.fill();
+        ctx.strokeStyle = OL;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        D.ellipsePath(ctx, 0, 0, 6, 2.4);
+        D.fs(ctx, '#78909c', OL, 0.8);
+        ctx.restore();
+      }
+    },
+    sub(ctx) {
+      // a towering wave behind the sub
+      ctx.beginPath();
+      ctx.moveTo(6, 100);
+      ctx.bezierCurveTo(4, 50, 40, 12, 80, 16);
+      ctx.bezierCurveTo(112, 20, 116, 48, 98, 52);
+      ctx.bezierCurveTo(86, 54, 84, 40, 94, 38);
+      ctx.bezierCurveTo(70, 34, 60, 70, 84, 100);
+      ctx.closePath();
+      ctx.fillStyle = D.lin(ctx, 0, 14, 0, 100, [[0, '#e0f7fa'], [0.4, '#4dd0e1'], [1, '#00838f']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      for (let i = 0; i < 6; i++) {
+        D.circlePath(ctx, 20 + i * 12, 70 - i * 8, 2.2);
+        D.fs(ctx, 'rgba(255,255,255,0.7)');
+      }
+    },
     super(ctx, col) {
       sunburst(ctx, FCX, 50, 60, '#fff176', 18);
       ctx.save();
@@ -880,6 +1236,8 @@
     tesla() {},
     pilot() {},
     rockstar(ctx) { crown(ctx, FCX, 33, 1.05, '#ff4081'); },
+    nails() {},
+    sub() {},
     farm(ctx) {
       // the farmer gets a crown, and a golden banana statue stands in front
       crown(ctx, 50, 33, 0.65, '#ffca28');
@@ -938,5 +1296,8 @@
   TA.props.boltIcon = bolt;
   TA.props.guitar = guitar;
   TA.props.crown = crown;
+  TA.props.ampBox = ampBox;
+  TA.props.nailIcon = nailIcon;
+  TA.props.sunburst = sunburst;
   TA.drawPlane = drawPlane;
 })();

@@ -134,9 +134,13 @@
     laserBig: () => { tone('sawtooth', 300, 1800, 0.5, 0.12); tone('sine', 900, 120, 1.2, 0.14, 0.2); noise(1.1, 0.12, 'bandpass', 2000, 600); },
     fusion: () => { [262, 330, 392, 523, 659, 784].forEach((f, i) => tone('triangle', f, f * 1.01, 0.18, 0.11, i * 0.13)); tone('sine', 100, 800, 1.0, 0.1); },
     fusionBoom: () => { noise(0.8, 0.35, 'lowpass', 3000, 100); [523, 784, 1046, 1568].forEach((f, i) => tone('triangle', f, f, 0.35, 0.12, i * 0.05)); },
+    chord: () => { [196, 247, 294].forEach((f) => tone('sawtooth', f, f * 0.98, 0.35, 0.06)); noise(0.2, 0.08, 'bandpass', 1200, 400); },
+    nail: () => { tone('square', 1500, 900, 0.03, 0.05); noise(0.04, 0.08, 'highpass', 3000); },
+    charge: () => { tone('sawtooth', 120, 1400, 0.65, 0.08); tone('sine', 240, 2000, 0.65, 0.06); },
+    sonar: () => { tone('sine', 1400, 1350, 0.5, 0.08); tone('sine', 1400, 1300, 0.4, 0.04, 0.25); },
     fusionReady: () => { [784, 988, 1175, 1568].forEach((f, i) => tone('triangle', f, f, 0.14, 0.1, i * 0.08)); },
   };
-  const MIN_GAP = { pop: 0.035, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08, coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5 };
+  const MIN_GAP = { pop: 0.035, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08, coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5, chord: 0.15, nail: 0.07, sonar: 0.6 };
 
   function play(name) {
     if (!ctx || !MT.Save.settings().sfx) return;

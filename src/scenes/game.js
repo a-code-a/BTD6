@@ -43,6 +43,10 @@
       this.timed = [];
       this.runners = [];
       this.biters = [];
+      this.zones = []; // lingering gas / fire clouds on the ground
+      this.traps = []; // nail piles and banana peels on the track
+      this.giantObjs = []; // vortices, tornadoes, shells... from the giant towers
+      this.moving = null; // tower currently being relocated
       this.seenBoss = {};
       this.fusionHinted = {};
       this.money = CFG.START_CASH;
@@ -104,11 +108,34 @@
 
     discountAt(x, y) {
       let d = 0;
-      for (const t of this.towers) {
+      for (const t of this.units()) {
         const b = t.stats.buff;
         if (t.type === 'lab' && b && b.discount && U.dist(x, y, t.x, t.y) <= t.stats.range) d = Math.max(d, b.discount);
       }
       return d;
+    }
+
+    // every acting tower, with Omega Towers expanded into their three parts
+    units() {
+      const out = [];
+      for (const t of this.towers) {
+        if (t.omega) out.push(...t.subs);
+        else out.push(t);
+      }
+      return out;
+    }
+
+    strongestBoss() {
+      let best = null;
+      for (const e of this.enemies) {
+        if (e.dead || !e.boss) continue;
+        if (!best || e.def.rbe > best.def.rbe || (e.def.rbe === best.def.rbe && e.hp > best.hp)) best = e;
+      }
+      return best;
+    }
+
+    inWater(x, y, margin) {
+      return this.layout.pools.some((wa) => MT.MapArt.waterDist(wa, x, y) <= -margin);
     }
 
     defOf(type) {
@@ -140,14 +167,24 @@
       this.trauma = Math.min(1, this.trauma + amount * k);
     }
 
-    canPlace(x, y, size) {
+    // o.water: the tower can only float on water; o.ignore: a tower being moved
+    canPlace(x, y, size, o = {}) {
       if (x < size * 0.7 || x > CFG.MAP_W - size * 0.7 || y < size * 0.7 || y > CFG.H - size * 0.7) return false;
       const pw = this.mapDef.pathWidth / 2;
       for (const p of this.paths) if (p.distTo(x, y) < pw + size * 0.8) return false;
-      for (const b of this.layout.blockers) if (U.dist(x, y, b.x, b.y) < b.r + size * 0.55) return false;
-      for (const wa of this.layout.water) if (MT.MapArt.waterDist(wa, x, y) < size * 0.5) return false;
-      for (const t of this.towers) if (U.dist(x, y, t.x, t.y) < t.size + size - 6) return false;
+      if (o.water) {
+        if (!this.inWater(x, y, size * 0.45)) return false;
+      } else {
+        for (const b of this.layout.blockers) if (U.dist(x, y, b.x, b.y) < b.r + size * 0.55) return false;
+        for (const wa of this.layout.water) if (MT.MapArt.waterDist(wa, x, y) < size * 0.5) return false;
+      }
+      for (const t of this.towers) if (t !== o.ignore && U.dist(x, y, t.x, t.y) < t.size + size - 6) return false;
       return true;
+    }
+
+    placeOpts(type) {
+      const def = this.defOf(type);
+      return { water: !!(def && def.waterOnly) };
     }
 
     towerAt(x, y) {
@@ -174,6 +211,10 @@
         this.pointer.y = p.worldY;
         if (this.over || this.paused) return;
         if (p.rightButtonDown()) {
+          if (this.moving) {
+            this.cancelMove();
+            return;
+          }
           this.cancelPlacing();
           this.select(null);
           return;
@@ -181,6 +222,10 @@
         if (over.length) return;
         const x = p.worldX, y = p.worldY;
         if (x >= CFG.MAP_W) return;
+        if (this.moving) {
+          this.tryMove(x, y);
+          return;
+        }
         if (this.placing) {
           this.tryPlace(x, y);
           return;
@@ -194,7 +239,8 @@
         if (this.over) return;
         const k = ev.key;
         if (k === 'Escape') {
-          if (this.placing) this.cancelPlacing();
+          if (this.moving) this.cancelMove();
+          else if (this.placing) this.cancelPlacing();
           else if (this.selected) this.select(null);
           else this.hud.togglePause();
           return;
@@ -213,6 +259,7 @@
           if (k === '.') this.buyUpgrade(this.selected, 1);
           if (k === '/') this.buyUpgrade(this.selected, 2);
           if (up === 'F') MT.Fusion.fuse(this, this.selected);
+          if (up === 'M') this.startMove(this.selected);
           if (k === 'Tab') {
             ev.preventDefault && ev.preventDefault();
             this.cycleTarget(this.selected, 1);
@@ -237,6 +284,7 @@
         return;
       }
       this.select(null);
+      this.cancelMove();
       this.placing = { type };
       const key = hero ? MT.TowerArt.heroKey(this, type, 1) : MT.TowerArt.key(this, type, [0, 0, 0]);
       this.ghost.setTexture(key).setOrigin(0.5, hero ? 64 / 110 : type === 'farm' || type === 'lab' ? 58 / 92 : 49 / 92).setVisible(true);
@@ -255,9 +303,9 @@
       const hero = MT.isHero(type);
       const def = this.defOf(type);
       const cost = this.placeCost(type, x, y);
-      if (!this.canPlace(x, y, def.size)) {
+      if (!this.canPlace(x, y, def.size, this.placeOpts(type))) {
         MT.Audio.play('error');
-        this.hud.toast("Can't place that there!", 1200);
+        this.hud.toast(def.waterOnly ? 'Submarines can only go on water, lava or goo!' : "Can't place that there!", 1400);
         return;
       }
       if (cost > this.money) {
@@ -280,8 +328,66 @@
       this.hud.onTowersChanged();
     }
 
+    // ------------------------------------------------------------------ moving towers
+    moveFee(t) {
+      return U.round5(Math.min(5000, Math.max(50, t.spent * 0.05)));
+    }
+
+    startMove(t) {
+      if (!t || this.over || t.fusing) return;
+      const fee = this.moveFee(t);
+      if (fee > this.money) {
+        MT.Audio.play('error');
+        this.hud.toast('Not enough bananas to move it!', 1400);
+        return;
+      }
+      this.cancelPlacing();
+      this.moving = { t, fee };
+      this.ghost.setTexture(t.texKey()).setOrigin(0.5, t.originY()).setFlipX(false).setVisible(true);
+      this.hud.toast(`Click a new spot for ${t.name}  (${U.money(fee)})  ·  Esc to cancel`, 2400);
+      MT.Audio.play('click');
+    }
+
+    cancelMove() {
+      if (!this.moving) return;
+      this.moving = null;
+      this.ghost.setVisible(false);
+    }
+
+    canMoveTo(t, x, y) {
+      return x < CFG.MAP_W && this.canPlace(x, y, t.size, { water: !!t.def.waterOnly, ignore: t });
+    }
+
+    tryMove(x, y) {
+      const m = this.moving;
+      if (!m) return;
+      const t = m.t;
+      if (!this.towers.includes(t)) return this.cancelMove();
+      if (!this.canMoveTo(t, x, y)) {
+        MT.Audio.play('error');
+        this.hud.toast(t.def.waterOnly ? 'It has to stay on water!' : "Can't move it there!", 1200);
+        return;
+      }
+      if (m.fee > this.money) {
+        MT.Audio.play('error');
+        this.hud.toast('Not enough bananas!', 1200);
+        return;
+      }
+      this.money -= m.fee;
+      this.fx.dust.explode(10, t.x, t.y + 14);
+      t.moveTo(x, y);
+      this.fx.dust.explode(12, x, y + 14);
+      this.fx.ring(x, y, 46, 0xffffff, { dur: 350 });
+      this.cancelMove();
+      this.recalcBuffs();
+      MT.Audio.play('place');
+      this.hud.showTower(t);
+      this.hud.onTowersChanged();
+    }
+
     select(t) {
       if (this.placing && t) this.cancelPlacing();
+      if (this.moving && this.moving.t !== t) this.cancelMove();
       this.selected = t;
       this.fuseHover = null;
       if (t) {
@@ -291,7 +397,7 @@
     }
 
     buyUpgrade(t, pi) {
-      if (t.hero || t.fused) return;
+      if (t.hero || t.fused || t.omega) return;
       const state = t.pathState(pi);
       if (state !== 'open') {
         MT.Audio.play('error');
@@ -374,12 +480,14 @@
 
     cycleTarget(t, dir) {
       t.targetMode = (t.targetMode + dir + TARGET_MODES.length) % TARGET_MODES.length;
+      if (t.subs) t.subs.forEach((u) => (u.targetMode = t.targetMode));
       this.hud.showTower(t);
     }
 
     recalcBuffs() {
-      const supports = this.towers.filter((t) => t.stats.buff);
-      for (const t of this.towers) {
+      const units = this.units();
+      const supports = units.filter((t) => t.stats.buff);
+      for (const t of units) {
         const isAttacker = t.baseStats.attack !== 'none';
         let b = null;
         if (isAttacker) {
@@ -423,7 +531,7 @@
       this.scaling = MT.Rounds.scaling(this.round);
       this.cashMul = MT.Rounds.cashMul(this.round);
       const dur = Math.max(8, (this.spawnList.length ? this.spawnList[this.spawnList.length - 1].t : 0) + 6);
-      for (const t of this.towers) {
+      for (const t of this.units()) {
         if (t.type !== 'farm') continue;
         const n = t.stats.bananas;
         t.bananaTimes = [];
@@ -439,12 +547,16 @@
       this.roundActive = false;
       const bonus = 100 + this.round;
       let income = bonus;
-      for (const t of this.towers) if (t.stats.flat) income += t.stats.flat;
+      for (const t of this.units()) if (t.stats.flat) income += t.stats.flat;
+      income += MT.Giants.roundEnd(this);
       this.money += income;
       this.collectAllPickups();
       const hero = this.towers.find((t) => t.hero);
       if (hero) this.gainHeroXp(hero, 20 + this.round * 8);
-      for (const t of this.towers) t.bananaTimes = null;
+      for (const t of this.units()) t.bananaTimes = null;
+      // nail piles are swept up between rounds
+      this.traps.forEach((tr) => this.removeTrap(tr, true));
+      this.traps = [];
       MT.Audio.play('roundEnd');
       this.hud.toast(`Round ${this.round} complete!  +${U.money(income)}`, 1800);
       if (!this.freeplay && !this.won && this.round >= this.diff.rounds) {
@@ -564,11 +676,13 @@
     applyHit(e, p, tower, dmgOverride) {
       if (e.dead) return null;
       const harmful = p.type === 'sharp' || p.type === 'cold';
-      if (e.def.armored && harmful && !p.armored && !(tower && tower.buffArmored)) {
+      const shredded = e.shredT > 0; // rocket shred: armor is off and every hit does +1
+      if (e.def.armored && harmful && !p.armored && !(tower && tower.buffArmored) && !shredded) {
         this.fx.clank(e.x, e.y);
         MT.Audio.play('clank');
         return null;
       }
+      if (p.shred) e.shredT = Math.max(e.shredT, p.shred);
       if (p.slow && (!e.boss || p.slow.moab)) {
         const strong = tower && ((tower.type === 'jelly' && tower.tiers[2] >= 4) || tower.fused);
         const mul = e.boss ? Math.max(p.slow.mul, strong ? 0.5 : 0.7) : p.slow.mul;
@@ -590,6 +704,7 @@
       if (e.boss) d += p.moabDmg || 0;
       if (e.type === 'brute') d += p.bruteDmg || 0;
       if (d > 0 && e.freeze > 0 && e.brittle) d += 1;
+      if (d > 0 && shredded) d += 1;
       if (d <= 0) return [];
       return this.damageEnemy(e, d, tower);
     }
@@ -693,10 +808,19 @@
       const s = t.stats;
       let p = s.proj;
       if (p.crit && t.shots % p.crit.every === p.crit.every - 1) p = Object.assign({}, p, { dmg: p.dmg * p.crit.mult });
+      // focus fire (Laser Sniper): consecutive hits on the same mutant stack up damage
+      let stacks = 0;
+      if (s.focus) {
+        if (t.focusId === target.id) t.focusStacks = Math.min(s.focus.max, t.focusStacks + 1);
+        else t.focusStacks = 0;
+        t.focusId = target.id;
+        stacks = t.focusStacks;
+        if (stacks) p = Object.assign({}, p, { dmg: p.dmg + stacks * Math.max(1, Math.round(p.dmg * 0.2)) });
+      }
       const m = t.muzzle();
       const sx = m.x, sy = m.y;
       const col = t.fused ? U.hexInt(t.def.fusion.color) : t.type === 'lab' ? 0xe040fb : 0xff1744;
-      const width = t.fused ? 4.5 : t.type === 'lab' ? 2.5 : 3;
+      const width = (t.fused ? 4.5 : t.type === 'lab' ? 2.5 : 3) + stacks * 0.5;
       if (t.fused && t.type === 'sniper') {
         // the satellite fires from the sky
         this.fx.beam(target.x + 40, -20, target.x, target.y, col, width + 2);
@@ -738,7 +862,9 @@
       const w = t.fused ? 3.4 : 2.2;
       const m = t.muzzle();
       const hit = new Set([target.id]);
-      this.fx.lightning(t.x, t.y - 34, target.x, target.y, col, w);
+      // from the head coil, or from the Omega Mech's arm
+      if (t.component) this.fx.lightning(m.x, m.y, target.x, target.y, col, w);
+      else this.fx.lightning(t.x, t.y - 34, target.x, target.y, col, w);
       const kids = this.applyHit(target, p, t);
       if (kids) kids.forEach((k) => hit.add(k.id));
       let cur = target;
@@ -753,6 +879,148 @@
       }
       this.fx.sparks.explode(2, m.x, m.y - 20);
       MT.Audio.play('zap');
+    }
+
+    // ------------------------------------------------------------------ sonar, clouds, traps
+    // submarine sonar: mutants in range permanently lose their Camo
+    sonarPing(t) {
+      const r = t.stats.range;
+      let n = 0;
+      for (const e of this.enemies) {
+        if (e.dead || !e.camo) continue;
+        if (U.dist2(t.x, t.y, e.x, e.y) > r * r) continue;
+        e.camo = false;
+        e.sprite.setTexture(e.texKey()).setAlpha(1);
+        this.fx.sparkle(e.x, e.y - e.radius, 0x80deea);
+        n++;
+      }
+      this.fx.ring(t.x, t.y, r, 0x4dd0e1, { dur: 700, alpha: n ? 0.8 : 0.35 });
+      if (n) MT.Audio.play('sonar');
+    }
+
+    // a lingering gas (or fire) cloud left on the ground by a fart puff
+    addZone(x, y, c, tower, kind) {
+      if (this.zones.length > 140) this.zones.shift();
+      this.zones.push({ x, y, r: c.r, t: c.dur, dmg: c.dmg, every: c.every, tick: 0.1, pierce: c.pierce, tower, kind, fxT: 0 });
+    }
+
+    stepZones(dt) {
+      const Z = this.zones;
+      for (let i = Z.length - 1; i >= 0; i--) {
+        const z = Z[i];
+        z.t -= dt;
+        z.tick -= dt;
+        if (z.tick <= 0) {
+          z.tick = z.every;
+          let n = z.pierce;
+          for (const e of this.queryEnemies(z.x, z.y, z.r + 40)) {
+            if (n <= 0) break;
+            if (e.dead || U.dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius * 0.5) ** 2) continue;
+            this.applyHit(e, { dmg: z.dmg, type: z.kind === 'fire' ? 'fire' : 'normal' }, z.tower);
+            n--;
+          }
+        }
+        if (z.t <= 0) Z.splice(i, 1);
+      }
+    }
+
+    // the track points a trap tower can reach (cached per position + range)
+    trackPoints(t) {
+      const r = t.stats.range;
+      if (t.trackPts && t.trackPtsR === r) return t.trackPts;
+      const pts = [];
+      this.paths.forEach((p) => {
+        for (let d = 0; d < p.length; d += 8) {
+          const q = p.at(d);
+          if (q.x < 4 || q.x > CFG.MAP_W - 4 || q.y < 4 || q.y > CFG.H - 4) continue;
+          if (U.dist2(q.x, q.y, t.x, t.y) <= r * r) pts.push({ x: q.x, y: q.y, path: p, d });
+        }
+      });
+      t.trackPts = pts;
+      t.trackPtsR = r;
+      return pts;
+    }
+
+    // Nail Minion: drop a nail pile (or banana peel) somewhere on the track in range
+    placeTrap(t) {
+      const s = t.stats;
+      const pts = this.trackPoints(t);
+      if (!pts.length || (!this.roundActive && !this.enemies.length)) return false;
+      let spot = null;
+      if (s.smart) {
+        // land right in front of the leading mutant in range
+        const e = this.findTarget(t);
+        if (e) {
+          const q = e.path.at(e.dist + 24 + e.speedNow() * 0.5);
+          if (U.dist2(q.x, q.y, t.x, t.y) <= s.range * s.range) spot = q;
+        }
+      }
+      if (!spot) spot = U.pick(pts);
+      const peel = s.peel && t.shots % s.peel.every === s.peel.every - 1;
+      const p = peel
+        ? Object.assign({}, s.proj, { tex: 'fx_peel', dmg: 0, pierce: s.peel.pierce, knock: s.peel.knock, stun: { dur: 0.3 }, mine: null, type: 'normal' })
+        : s.proj;
+      const x = spot.x + U.rand(-6, 6), y = spot.y + U.rand(-6, 6);
+      const sprite = this.add.image(t.x, t.y - 20, p.tex).setScale((0.6 * (p.scale || 1)) / S).setDepth(980 + y * 0.001).setRotation(U.rand(-0.4, 0.4));
+      const tr = { x, y, p, pierce: p.pierce + (t.bonusPierce || 0), max: p.pierce, life: p.life || 14, tower: t, hit: new Set(), sprite };
+      // the pile is thrown in an arc onto the track
+      const st = { k: 0 };
+      const sx = t.x, sy = t.y - 20;
+      this.tweens.add({
+        targets: st, k: 1, duration: 260, ease: 'Quad.easeOut',
+        onUpdate: () => sprite.setPosition(U.lerp(sx, x, st.k), U.lerp(sy, y, st.k) - Math.sin(st.k * Math.PI) * 30),
+        onComplete: () => sprite.setScale((p.scale || 1) / S),
+      });
+      this.traps.push(tr);
+      t.aimAt({ x, y, dead: false });
+      // keep the number of piles per tower under control
+      let mine = 0;
+      for (let i = this.traps.length - 1; i >= 0; i--) {
+        if (this.traps[i].tower !== t) continue;
+        mine++;
+        if (mine > (s.maxTraps || 24)) {
+          this.removeTrap(this.traps[i], true);
+          this.traps.splice(i, 1);
+        }
+      }
+      MT.Audio.play('nail');
+      return true;
+    }
+
+    removeTrap(tr, silent) {
+      if (tr.gone) return;
+      tr.gone = true;
+      if (!silent && tr.p.mine) {
+        this.explode(tr.x, tr.y, { tex: 'p_rocket', type: 'explosive', shred: 3, explode: tr.p.mine, moabDmg: Math.round((tr.p.moabDmg || 0) / 2) }, tr.tower);
+      }
+      const sp = tr.sprite;
+      this.tweens.add({ targets: sp, alpha: 0, scale: sp.scale * 0.6, duration: 200, onComplete: () => sp.destroy() });
+    }
+
+    stepTraps(dt) {
+      const T = this.traps;
+      for (let i = T.length - 1; i >= 0; i--) {
+        const tr = T[i];
+        tr.life -= dt;
+        // traps hit everything that steps on them, Camo included
+        for (const e of this.queryEnemies(tr.x, tr.y, 40)) {
+          if (e.dead || tr.hit.has(e.id)) continue;
+          if (U.dist2(tr.x, tr.y, e.x, e.y) > (10 + e.radius * 0.6) ** 2) continue;
+          tr.hit.add(e.id);
+          const kids = this.applyHit(e, tr.p, tr.tower);
+          if (!kids) continue;
+          kids.forEach((k) => tr.hit.add(k.id));
+          tr.pierce--;
+          if (tr.p.tex === 'fx_peel') this.fx.dust.explode(2, e.x, e.y);
+          if (tr.pierce <= 0) break;
+        }
+        if (tr.pierce <= 0 || tr.life <= 0) {
+          this.removeTrap(tr, tr.pierce > 0);
+          T.splice(i, 1);
+        } else if (tr.sprite.active) {
+          tr.sprite.setAlpha(tr.life < 1.5 ? 0.4 + (tr.life / 1.5) * 0.6 : 1);
+        }
+      }
     }
 
     enemiesInRange(x, y, r, camo) {
@@ -812,7 +1080,7 @@
     // ------------------------------------------------------------------ abilities
     abilityList() {
       const out = [];
-      for (const t of this.towers) {
+      for (const t of this.units()) {
         [t.stats.ability, t.stats.ability2].forEach((id) => id && out.push({ tower: t, id }));
       }
       return out;
@@ -824,7 +1092,7 @@
         MT.Audio.play('error');
         return;
       }
-      t.abilityCd[id] = A.cd;
+      t.abilityCd[id] = A.cd * t.cdMul;
       MT.Audio.play('ability');
       MT.Abilities.use(this, t, id);
       this.hud.onTowersChanged();
@@ -921,7 +1189,7 @@
           this.enemies.push(e);
           if (e.boss) MT.Bosses.onSpawn(this, e);
         }
-        for (const t of this.towers) {
+        for (const t of this.units()) {
           if (t.bananaTimes && t.bananaTimes.length && t.bananaTimes[0] <= this.roundTime) {
             t.bananaTimes.shift();
             this.spawnBanana(t);
@@ -933,6 +1201,9 @@
       this.rebuildGrid();
       for (const t of this.towers) t.update(dt);
       for (const p of this.projectiles) if (!p.dead) p.update(dt);
+      this.stepZones(dt);
+      this.stepTraps(dt);
+      MT.Giants.step(this, dt);
       MT.Abilities.step(this, dt);
       this.enemies = this.enemies.filter((e) => !e.dead);
       this.projectiles = this.projectiles.filter((p) => !p.dead);
@@ -940,7 +1211,7 @@
         this.timed[i].t -= dt;
         if (this.timed[i].t <= 0) this.timed.splice(i, 1);
       }
-      for (const t of this.towers) for (const k in t.abilityCd) if (t.abilityCd[k] > 0) t.abilityCd[k] -= dt;
+      for (const t of this.units()) for (const k in t.abilityCd) if (t.abilityCd[k] > 0) t.abilityCd[k] -= dt;
       for (const pk of this.pickups) {
         if (pk.auto != null && !pk.done) {
           pk.auto -= dt;
@@ -955,7 +1226,17 @@
       for (const e of this.enemies) if (!e.dead) e.render(time, dt);
       for (const p of this.projectiles) if (!p.dead) p.render(dt);
       for (const t of this.towers) t.render(dt, time);
+      for (const z of this.zones) {
+        z.fxT -= dt;
+        if (z.fxT <= 0) {
+          z.fxT = 0.22;
+          const ox = U.rand(-z.r, z.r) * 0.7, oy = U.rand(-z.r, z.r) * 0.45;
+          if (z.kind === 'fire') this.fx.sparkle(z.x + ox, z.y + oy, 0xff7a1a);
+          else this.fx.gas.explode(1, z.x + ox, z.y + oy);
+        }
+      }
       MT.Abilities.render(this, dt, time);
+      MT.Giants.render(this, dt, time);
       this.fx.update(dt);
       // screen shake (applied as a small camera offset)
       const cam = this.cameras.main;
@@ -981,11 +1262,55 @@
       // range / placement preview
       const rg = this.gRange;
       rg.clear();
-      if (this.placing) {
+      if (this.moving) {
+        const t = this.moving.t;
+        const x = this.pointer.x, y = this.pointer.y;
+        const ok = this.canMoveTo(t, x, y) && this.moving.fee <= this.money;
+        this.ghost.setPosition(x, y).setVisible(x < CFG.MAP_W).setTint(ok ? 0xffffff : 0xff8080);
+        if (x < CFG.MAP_W) {
+          const r = t.stats.range > 1000 ? 0 : t.stats.range + (t.stats.attack === 'plane' ? t.stats.orbit : 0);
+          if (r) {
+            rg.fillStyle(ok ? 0xffffff : 0xff3030, 0.14);
+            rg.fillCircle(x, y, r);
+            rg.lineStyle(2, ok ? 0xffffff : 0xff3030, 0.6);
+            rg.strokeCircle(x, y, r);
+          }
+          rg.fillStyle(ok ? 0x5cff5c : 0xff3030, 0.35);
+          rg.fillCircle(x, y, t.size);
+          // dotted line from the old spot
+          rg.lineStyle(2, 0xffffff, 0.5);
+          const n = Math.floor(U.dist(t.x, t.y, x, y) / 14);
+          for (let i = 0; i < n; i += 2) {
+            const a = i / n, b = Math.min(1, (i + 1) / n);
+            rg.lineBetween(U.lerp(t.x, x, a), U.lerp(t.y, y, a), U.lerp(t.x, x, b), U.lerp(t.y, y, b));
+          }
+        }
+      } else if (this.placing) {
         const type = this.placing.type;
         const def = this.defOf(type);
         const x = this.pointer.x, y = this.pointer.y;
-        const ok = x < CFG.MAP_W && this.canPlace(x, y, def.size) && this.placeCost(type, x, y) <= this.money;
+        const ok = x < CFG.MAP_W && this.canPlace(x, y, def.size, this.placeOpts(type)) && this.placeCost(type, x, y) <= this.money;
+        if (def.waterOnly) {
+          // show where the submarine is allowed to go
+          const pulse = 0.7 + Math.sin(time * 0.008) * 0.25;
+          for (const wa of this.layout.pools) {
+            if (wa.type === 'river') {
+              MT.MapArt.waterDist(wa, 0, 0);
+              const pts = wa._pts.map(([px, py]) => ({ x: px, y: py }));
+              rg.lineStyle(wa.width - 8, 0x80deea, 0.22 * pulse);
+              rg.strokePoints(pts, false);
+            } else {
+              rg.fillStyle(0x80deea, 0.22 * pulse);
+              rg.fillCircle(wa.x, wa.y, wa.r - 4);
+              rg.lineStyle(4, 0xe0f7fa, pulse);
+              rg.strokeCircle(wa.x, wa.y, wa.r - 4);
+            }
+          }
+          if (!this.layout.pools.length && !this.noWaterHint) {
+            this.noWaterHint = true;
+            this.hud.toast('This map has no water for submarines!', 1800);
+          }
+        }
         this.ghost.setPosition(x, y).setVisible(x < CFG.MAP_W);
         this.ghost.setTint(ok ? 0xffffff : 0xff8080);
         if (x < CFG.MAP_W) {

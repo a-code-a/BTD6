@@ -15,6 +15,7 @@
       this.time.delayedCall(30, () => {
         MT.FXArt.generate(this);
         MT.FXArt.generate2(this);
+        MT.GiantArt.generate(this);
         MT.TOWER_ORDER.forEach((id) => MT.TowerArt.key(this, id, [0, 0, 0]));
         MT.HERO_ORDER.forEach((id) => MT.TowerArt.heroKey(this, id, 1));
         MT.ENEMY_ORDER.forEach((id) => MT.EnemyArt.key(this, id, false, false, 0));
@@ -137,16 +138,16 @@
         '• Popping a mutant earns bananas ($). Big mutants split into smaller ones.',
         '• Click a placed tower to upgrade it. Each tower has 3 paths with 4 tiers:',
         '   one path can reach tier 4, a second path tier 2.',
-        '• SUPER FUSION: own 3 towers of one kind with a tier 4 upgrade? Select one',
-        '   and press FUSE to merge them into one crazy powerful super tower.',
+        '• FUSE 3 maxed towers of one kind into a super tower. Then: 3 same super',
+        '   towers → ULTIMATE giant, 3 different ones → OMEGA MECH. MOVE relocates towers.',
         '• Camo mutants need detection. Armored Tin Cans block bananas & ice.',
         '• Banana Farms grow cash — hover over bananas to collect them.',
         '• Pick a hero before each game. Heroes level up and unlock abilities.',
         '• Late game brings monsters: Phantoms, Mechas (EMP!), Goo... and El Macho.',
         '• Press PLAY to start a round, press again for 3x speed.',
         '',
-        'Hotkeys: Q W E R T Y U I O A S D = towers, H = hero, Space = play/speed,',
-        ', . / = upgrade paths, F = fuse, Tab = targeting, Backspace = sell, Esc = pause',
+        'Hotkeys: Q W E R T Y A S D G J U I O = towers, H = hero, Space = play/speed,',
+        ', . / = upgrades, F = fuse, M = move, Tab = targeting, Backspace = sell, Esc = pause',
       ];
       c.add(MT.text(this, 280, 160, lines.join('\n'), 17, { ox: 0, oy: 0, lineSpacing: 5, strokeThickness: 3 }));
       c.add(new MT.UI.Button(this, W / 2, 600, 220, 56, { style: 'green', label: 'GOT IT!', size: 26, onClick: () => c.destroy() }));

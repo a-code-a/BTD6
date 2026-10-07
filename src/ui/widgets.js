@@ -113,11 +113,11 @@
       }
       if (opts.label != null) {
         const lx = opts.icon ? h * 0.3 : 0;
-        this.label = MT.text(scene, lx, opts.sub ? -h * 0.13 : 0, opts.label, opts.size || Math.round(h * 0.42), { title: opts.title !== false, color: opts.color || '#ffffff' });
+        this.label = MT.text(scene, lx, opts.sub != null ? -h * 0.15 : 0, opts.label, opts.size || Math.round(h * 0.42), { title: opts.title !== false, color: opts.color || '#ffffff' });
         this.add(this.label);
       }
       if (opts.sub != null) {
-        this.sub = MT.text(scene, opts.icon ? h * 0.3 : 0, h * 0.22, opts.sub, opts.subSize || Math.round(h * 0.26), { color: opts.subColor || '#ffffff' });
+        this.sub = MT.text(scene, opts.icon ? h * 0.3 : 0, h * 0.26, opts.sub, opts.subSize || Math.round(h * 0.26), { color: opts.subColor || '#ffffff' });
         this.add(this.sub);
       }
       this.setSize(w, h);

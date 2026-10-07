@@ -6,12 +6,16 @@ window.MT = window.MT || {};
   const H = 720;
   const MAP_W = 1020; // play field width; the sidebar fills the rest
 
-  // Render resolution multiplier. The logical game is always 1280x720, but on
-  // big / high-DPI screens we render the canvas at up to 2x and zoom the camera
-  // so everything (text, vector art) stays crisp.
-  const dpr = window.devicePixelRatio || 1;
-  const fit = Math.min(window.innerWidth / W, window.innerHeight / H) * dpr;
-  const RES = Math.max(1, Math.min(2, Math.round(fit * 4) / 4));
+  // Render resolution multiplier. The logical game is always 1280x720, but the
+  // canvas is rendered at exactly the screen's device-pixel size (up to 3x) and
+  // the camera is zoomed, so text and vector art map 1:1 onto real pixels
+  // instead of being stretched (which made the writing look blurry).
+  function idealRes() {
+    const dpr = window.devicePixelRatio || 1;
+    const fit = Math.min(window.innerWidth / W, window.innerHeight / H) * dpr;
+    return Math.max(1, Math.min(3, Math.round(fit * 100) / 100));
+  }
+  const RES = idealRes();
 
   MT.CFG = {
     W, H, MAP_W, MAP_H: H, RES,
@@ -67,9 +71,33 @@ window.MT = window.MT || {};
   // stay 1280x720 regardless of the backing canvas resolution.
   MT.setupCamera = function (scene) {
     const cam = scene.cameras.main;
-    cam.setZoom(RES);
+    cam.setZoom(MT.CFG.RES);
     cam.centerOn(W / 2, H / 2);
+    if (scene.camBase) scene.camBase = { x: cam.scrollX, y: cam.scrollY };
     return cam;
+  };
+
+  // Re-render at a new resolution when the window size or pixel ratio changes
+  // (e.g. going fullscreen or dragging the window to another monitor).
+  function retextAll(list, res) {
+    list.forEach((o) => {
+      if (o.type === 'Text') {
+        o.setResolution(res);
+        // Phaser keeps a cached word-wrap measurement; force a re-layout
+        o.updateText();
+      }
+      if (o.list) retextAll(o.list, res);
+    });
+  }
+  MT.applyResolution = function (game) {
+    const res = idealRes();
+    if (Math.abs(res - MT.CFG.RES) / MT.CFG.RES < 0.04) return;
+    MT.CFG.RES = res;
+    game.scale.resize(Math.round(W * res), Math.round(H * res));
+    game.scene.getScenes(true).forEach((scene) => {
+      MT.setupCamera(scene);
+      retextAll(scene.children.list, res);
+    });
   };
 
   // Text helper with the chunky outlined cartoon look used across the UI.
@@ -80,7 +108,7 @@ window.MT = window.MT || {};
       fontStyle: opts.bold === false ? 'normal' : opts.title ? 'normal' : '700',
       color: opts.color || '#ffffff',
       align: opts.align || 'center',
-      resolution: RES,
+      resolution: MT.CFG.RES,
     };
     if (opts.stroke !== false) {
       style.stroke = opts.stroke || '#2a1d14';

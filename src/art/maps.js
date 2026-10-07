@@ -46,7 +46,9 @@
       if (d.block) d.block.forEach(([x, y, r]) => blockers.push({ x, y, r }));
       else if (d.r) blockers.push({ x: d.x, y: d.y, r: d.r });
     });
-    map._layout = { decor, blockers, water };
+    // everything a submarine can float on: water, lava, goo and decorative ponds
+    const pools = water.concat(decor.filter((d) => d.type === 'pond').map((d) => ({ type: 'pond', x: d.x, y: d.y, r: d.r })));
+    map._layout = { decor, blockers, water, pools };
     return map._layout;
   }
 
@@ -361,6 +363,30 @@
 
   // ---------------------------------------------------------------- water / lava
   function paintWater(ctx, wa, rnd) {
+    if (wa.type === 'goo') {
+      // bubbling pool of purple PX-41 goo
+      const r2 = D.rng(wa.seed * 17);
+      D.blobPath(ctx, wa.x, wa.y, wa.r + 8, 11, 0.12, r2);
+      D.fs(ctx, '#4a4f5a', OL, 2);
+      const r3 = D.rng(wa.seed * 17);
+      D.blobPath(ctx, wa.x, wa.y, wa.r, 11, 0.12, r3);
+      ctx.fillStyle = D.rad(ctx, wa.x - wa.r * 0.3, wa.y - wa.r * 0.3, 2, wa.x, wa.y, wa.r, [[0, '#e1b8ff'], [0.45, '#a34fd6'], [1, '#5e1f8a']]);
+      ctx.fill();
+      ctx.strokeStyle = '#3b1059';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.save();
+      ctx.clip();
+      for (let i = 0; i < 9; i++) {
+        const bx = wa.x + (rnd() - 0.5) * wa.r * 1.4, by = wa.y + (rnd() - 0.5) * wa.r * 1.4, br = 2 + rnd() * 5;
+        D.circlePath(ctx, bx, by, br);
+        D.fs(ctx, 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.55)', 1);
+      }
+      ctx.restore();
+      D.ellipsePath(ctx, wa.x - wa.r * 0.35, wa.y - wa.r * 0.4, wa.r * 0.28, wa.r * 0.1, -0.4);
+      D.fs(ctx, 'rgba(255,255,255,0.35)');
+      return;
+    }
     if (wa.type === 'lava') {
       const r2 = D.rng(wa.seed * 31);
       ctx.save();

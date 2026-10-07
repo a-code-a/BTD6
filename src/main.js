@@ -14,13 +14,20 @@
       type: Phaser.AUTO,
       parent: 'game',
       backgroundColor: '#1b2a49',
-      width: MT.CFG.W * R,
-      height: MT.CFG.H * R,
+      width: Math.round(MT.CFG.W * R),
+      height: Math.round(MT.CFG.H * R),
       scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-      render: { antialias: true },
+      // snap sprites and text to whole device pixels so nothing is drawn half
+      // between two pixels (a big source of blurry text)
+      render: { antialias: true, roundPixels: true },
       disableContextMenu: true,
       banner: false,
       scene: [MT.BootScene, MT.MenuScene, MT.MapSelectScene, MT.GameScene],
+    });
+    let timer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => MT.applyResolution(MT.game), 300);
     });
   });
 })();

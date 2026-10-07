@@ -7,6 +7,9 @@
   const W = MT.CFG.MAP_W, H = MT.CFG.H;
 
   const alive = (game) => game.enemies.filter((e) => !e.dead);
+  // stronger fusion tiers (Ultimate, Omega parts) have more powerful abilities
+  const powerOf = (t) => (t && t.power) || 1;
+  const more = (n, pw) => Math.round(n * (0.6 + 0.4 * pw));
   // strongest first: giants by size, then health
   const byStrength = (list) => list.slice().sort((a, b) => (b.boss - a.boss) || b.def.rbe - a.def.rbe || b.hp - a.hp);
   const strongestBoss = (game) => byStrength(alive(game).filter((e) => e.boss))[0] || null;
@@ -333,15 +336,16 @@
 
     // ------------------------------------------------------------ super fusions
     bananaApocalypse(game, t) {
+      const pw = powerOf(t);
       const pts = pathPoints(game, 40);
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < more(30, pw); i++) {
         game.time.delayedCall(i * 85, () => {
           const list = alive(game);
           const tgt = list.length && Math.random() < 0.6 ? U.pick(list) : U.pick(pts);
           if (!tgt) return;
           const x = tgt.x, y = tgt.y;
           skyDrop(game, x, y, 'p_jugg', 2.2, 650, () => {
-            blast(game, t, x, y, 70, 20, 60, 250);
+            blast(game, t, x, y, 70, 20 * pw, 60, 250 * pw);
             game.fx.ring(x, y, 70, 0xffc400, { dur: 300 });
           }, 0xffc400);
         });
@@ -350,6 +354,7 @@
       game.fx.floatText(t.x, t.y - 80, 'BANANA APOCALYPSE!', '#ffc400', 24);
     },
     nuclearToot(game, t, all) {
+      const pw = powerOf(t);
       const cloud = game.add.image(t.x, t.y, 'fx_nuke').setOrigin(0.5, 0.95).setScale(0.2 / S).setDepth(6300).setAlpha(0.95);
       game.tweens.add({ targets: cloud, scale: 1.6 / S, duration: 900, ease: 'Cubic.easeOut' });
       game.tweens.add({ targets: cloud, alpha: 0, y: t.y - 40, delay: 1100, duration: 900, onComplete: () => cloud.destroy() });
@@ -357,28 +362,30 @@
       game.fx.screenFlash(0xb8ff7a, 0.45, 700);
       game.shake(0.4);
       all.forEach((e) => {
-        if (e.boss) game.damageEnemy(e, 2500, t);
-        else game.damageEnemy(e, 30, t);
+        if (e.boss) game.damageEnemy(e, 2500 * pw, t);
+        else game.damageEnemy(e, 30 * pw, t);
       });
-      alive(game).forEach((e) => e.applyDot({ dmg: 5, every: 0.5, dur: 6 }, t));
+      alive(game).forEach((e) => e.applyDot({ dmg: 5 * pw, every: 0.5, dur: 6 }, t));
       for (let i = 0; i < 8; i++) game.fx.gas.explode(5, U.rand(40, W - 40), U.rand(40, H - 40));
       MT.Audio.play('nuke');
     },
     armageddon(game, t, all) {
+      const pw = powerOf(t);
       let list = byStrength(all.filter((e) => e.boss));
       if (!list.length) list = byStrength(all);
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < more(10, pw); i++) {
         const target = list.length ? list[i % list.length] : null;
         game.launchMissile(t, target, 'p_missile', (tg) => {
-          if (tg && !tg.dead && tg.boss) game.damageEnemy(tg, 3000, t);
+          if (tg && !tg.dead && tg.boss) game.damageEnemy(tg, 3000 * pw, t);
           else if (tg) blast(game, t, tg.x, tg.y, 110, 20, 200, 0);
         }, i * 110);
       }
       game.fx.floatText(t.x, t.y - 80, 'ARMAGEDDON!', '#ff7043', 24);
     },
     iceAge(game, t, all) {
+      const ext = (powerOf(t) - 1) * 1.5;
       all.forEach((e) => {
-        e.freeze = Math.max(e.freeze, e.boss ? 4 : 5);
+        e.freeze = Math.max(e.freeze, (e.boss ? 4 : 5) + ext);
         e.brittle = true;
       });
       game.fx.shockwave(t.x, t.y, 1300, 0xbfe9ff, 900);
@@ -390,7 +397,7 @@
     jellyTsunami(game, t) {
       game.paths.forEach((path) => {
         const sprite = game.add.image(-100, -100, 'fx_jellywave').setScale(1 / S).setDepth(3200);
-        game.runners.push({ kind: 'wave', path, dist: path.length + 20, speed: path.length / 1.5, hit: new Set(), tower: t, sprite });
+        game.runners.push({ kind: 'wave', path, dist: path.length + 20, speed: path.length / 1.5, hit: new Set(), tower: t, sprite, pw: powerOf(t) });
       });
       game.fx.screenFlash(0xff6fa0, 0.25, 400);
       MT.Audio.play('splat');
@@ -400,24 +407,27 @@
       if (!target) return;
       const beam = game.add.image(target.x, target.y, 'fx_pillar').setOrigin(0.5, 0.97).setTint(0x40c4ff).setScale(1.1 / S, 2 / S).setAlpha(0).setDepth(6400).setBlendMode(Phaser.BlendModes.ADD);
       game.tweens.add({ targets: beam, alpha: 1, duration: 120 });
-      game.biters.push({ kind: 'beam', e: target, t: 1.4, dps: 12000 / 1.4, sprite: beam, tower: t, tick: 0 });
+      game.biters.push({ kind: 'beam', e: target, t: 1.4, dps: (12000 * powerOf(t)) / 1.4, sprite: beam, tower: t, tick: 0 });
       game.fx.screenFlash(0x9be7ff, 0.35, 400);
       game.shake(0.3);
       MT.Audio.play('laserBig');
     },
     wrathOfZeus(game, t) {
-      boltStorm(game, t, 45, 12, 350, 0xd1b3ff, 4.5);
+      const pw = powerOf(t);
+      boltStorm(game, t, more(45, pw), 12 * pw, 350 * pw, 0xd1b3ff, 4.5);
       game.fx.bigText('WRATH OF ZEUS!', '#d1b3ff', 46);
     },
     carpetBomb(game, t) {
-      bomberRun(game, t, { tex: 'fx_jet_gold', scale: 1.15, dur: 2200, spacing: 45, r: 70, dmg: 15, pierce: 60, moab: 500 });
+      const pw = powerOf(t);
+      bomberRun(game, t, { tex: 'fx_jet_gold', scale: 1.15, dur: 2200, spacing: 45, r: 70, dmg: 15 * pw, pierce: 60, moab: 500 * pw });
     },
     encore(game, t) {
-      danceAll(game, 6, 3, { dmg: 5, every: 0.5, dur: 6 }, t);
+      const pw = powerOf(t);
+      danceAll(game, 6 + (pw - 1) * 2, 3 + (pw - 1), { dmg: 5 * pw, every: 0.5, dur: 6 }, t);
       game.fx.bigText('ENCORE!', '#ff4081', 50);
     },
     bananaRain(game, t) {
-      const v = U.round5(3000 + game.round * 120);
+      const v = U.round5((3000 + game.round * 120) * powerOf(t));
       for (let i = 0; i < 24; i++) {
         game.time.delayedCall(i * 40, () => {
           const x = t.x + U.rand(-120, 120), y = t.y + U.rand(-70, 70);
@@ -433,12 +443,51 @@
       MT.Audio.play('coin');
     },
     labOverload(game, t) {
-      game.timed.push({ type: 'overdrive', t: 20, x: t.x, y: t.y, r: 5000 });
+      game.timed.push({ type: 'overdrive', t: 20 * (1 + (powerOf(t) - 1) * 0.3), x: t.x, y: t.y, r: 5000 });
       game.towers.forEach((o) => {
         if (o !== t && o.stats.attack !== 'none') game.fx.lightning(t.x, t.y - 40, o.x, o.y - 20, 0xe040fb, 2, 0.4);
       });
       game.fx.shockwave(t.x, t.y, 900, 0xe040fb, 700);
       game.fx.bigText('LAB OVERLOAD!', '#e040fb', 46);
+    },
+    spikeStorm(game, t) {
+      nailCarpet(game, t, 30, 1);
+    },
+    ironRain(game, t) {
+      nailCarpet(game, t, 22, powerOf(t) * 1.6);
+      game.fx.bigText('IRON RAIN!', '#cfd8dc', 46);
+    },
+    nukeLaunch(game, t, all) {
+      const target = strongestBoss(game) || byStrength(all)[0];
+      game.launchMissile(t, target, 'p_missile', (tg) => {
+        const x = tg ? tg.x : W / 2, y = tg ? tg.y : H / 2;
+        if (tg && !tg.dead) game.damageEnemy(tg, 4000 * powerOf(t), t);
+        blast(game, t, x, y, 150, 30, 250, 800);
+        game.fx.shockwave(x, y, 300, 0xb8ff7a, 800);
+        const cloud = game.add.image(x, y + 20, 'fx_nuke').setOrigin(0.5, 0.95).setScale(0.2 / S).setDepth(6300);
+        game.tweens.add({ targets: cloud, scale: 1 / S, duration: 700, ease: 'Cubic.easeOut' });
+        game.tweens.add({ targets: cloud, alpha: 0, delay: 900, duration: 800, onComplete: () => cloud.destroy() });
+        game.fx.screenFlash(0xd8ffb0, 0.4, 600);
+        game.shake(0.35);
+        MT.Audio.play('nuke');
+      });
+    },
+    kraken(game, t, all) {
+      krakenGrab(game, t, byStrength(all).slice(0, 5), 1);
+    },
+    leviathan(game, t, all) {
+      const pw = powerOf(t);
+      krakenGrab(game, t, byStrength(all).slice(0, more(10, pw)), pw);
+      const targets = byStrength(all.filter((e) => e.boss));
+      for (let i = 0; i < more(8, pw); i++) {
+        const tg = targets.length ? targets[i % targets.length] : null;
+        game.time.delayedCall(i * 90, () => {
+          const a = tg ? Math.atan2(tg.y - t.y, tg.x - t.x) : U.rand(0, 6.28);
+          const p = Object.assign({}, t.stats.proj, { speed: 600, moabDmg: (t.stats.proj.moabDmg || 0) * 4 });
+          game.addProjectile(new MT.Projectile(game, t, t.x, t.y - 10, a + U.rand(-0.3, 0.3), p, { range: 2000, target: tg }));
+        });
+      }
+      game.fx.bigText('LEVIATHAN!', '#26c6da', 48);
     },
     supernova(game, t, all) {
       game.slowmo = 0.6;
@@ -449,13 +498,44 @@
       game.fx.glow.explode(40, t.x, t.y - 20);
       game.shake(0.45);
       all.forEach((e) => {
-        if (e.boss) game.damageEnemy(e, 25000, t);
+        if (e.boss) game.damageEnemy(e, 25000 * powerOf(t), t);
         else obliterate(game, e, t);
       });
       game.fx.bigText('SUPERNOVA!', '#fff176', 56);
       MT.Audio.play('nuke');
     },
   };
+
+  // cover every track with nail piles (Spike Storm / Iron Rain)
+  function nailCarpet(game, t, spacing, pw) {
+    const pts = pathPoints(game, spacing);
+    const base = t.stats.proj;
+    const p = Object.assign({}, base, { pierce: Math.round(base.pierce * (0.8 + 0.4 * pw)), dmg: Math.ceil(base.dmg * pw), life: 10 });
+    pts.forEach((q, i) => {
+      game.time.delayedCall((i / pts.length) * 900, () => {
+        const sprite = game.add.image(q.x, q.y - 160, p.tex).setScale((p.scale || 1) / S).setDepth(980).setAlpha(0.9);
+        const tr = { x: q.x + U.rand(-5, 5), y: q.y + U.rand(-5, 5), p, pierce: p.pierce, max: p.pierce, life: p.life, tower: t, hit: new Set(), sprite };
+        game.tweens.add({ targets: sprite, x: tr.x, y: tr.y, duration: 220, ease: 'Quad.easeIn', onComplete: () => game.fx.dust.explode(1, tr.x, tr.y) });
+        game.traps.push(tr);
+      });
+    });
+    MT.Audio.play('nail');
+  }
+
+  // tentacles rise out of the ground and hold the given mutants
+  function krakenGrab(game, t, list, pw) {
+    list.forEach((e, i) => {
+      game.time.delayedCall(i * 80, () => {
+        if (e.dead) return;
+        const sprite = game.add.image(e.x, e.y + 10, 'fx_tentacle').setOrigin(0.5, 1).setScale(0.2 / S, 0.1 / S).setDepth(1000 + e.y + 1);
+        game.tweens.add({ targets: sprite, scaleX: (e.boss ? 1.4 : 0.9) / S, scaleY: (e.boss ? 1.4 : 0.9) / S, duration: 260, ease: 'Back.easeOut' });
+        e.stun = Math.max(e.stun, e.boss ? 2 + pw * 0.5 : 3);
+        game.biters.push({ kind: 'kraken', e, t: 2.6, dps: e.boss ? 300 * pw : 20, sprite, tower: t });
+        game.fx.splat(e.x, e.y, 30, 0x7e57c2);
+      });
+    });
+    MT.Audio.play('splat');
+  }
 
   // a cured purple minion turns back yellow and hops away
   function cured(game, x, y) {
@@ -505,9 +585,10 @@
         for (const e of game.enemies) {
           if (e.dead || e.path !== r.path || r.hit.has(e.id) || e.dist < r.dist) continue;
           r.hit.add(e.id);
-          e.dist = Math.max(0, e.dist - (e.boss ? 90 : 220));
+          const pw = r.pw || 1;
+          e.dist = Math.max(0, e.dist - (e.boss ? 90 : 220) * (0.7 + 0.3 * pw));
           e.applySlow(e.boss ? 0.7 : 0.4, 8, true, true);
-          e.applyDot({ dmg: e.boss ? 20 : 2, every: 0.5, dur: 6 }, r.tower);
+          e.applyDot({ dmg: (e.boss ? 20 : 2) * pw, every: 0.5, dur: 6 }, r.tower);
         }
         if (r.dist < -40) {
           r.sprite.destroy();
@@ -522,6 +603,11 @@
       if (!b.e || b.e.dead) {
         // find a new victim
         const next = b.kind === 'piranha' ? byStrength(alive(game))[0] : null;
+        if (b.kind === 'kraken') {
+          game.tweens.add({ targets: b.sprite, scaleY: 0, duration: 200, onComplete: () => b.sprite.destroy() });
+          B.splice(i, 1);
+          continue;
+        }
         if (next && b.t > 0.3) b.e = next;
         else {
           if (b.kind === 'beam') game.tweens.add({ targets: b.sprite, alpha: 0, duration: 200, onComplete: () => b.sprite.destroy() });
@@ -531,7 +617,9 @@
         }
       }
       b.t -= dt;
-      if (b.kind === 'piranha') {
+      if (b.kind === 'kraken') {
+        game.damageEnemy(b.e, b.dps * dt, b.tower);
+      } else if (b.kind === 'piranha') {
         game.damageEnemy(b.e, (b.e.boss ? 350 : 60) * dt, b.tower);
       } else if (b.kind === 'beam') {
         game.damageEnemy(b.e, b.dps * dt, b.tower);
@@ -542,6 +630,12 @@
         }
       }
       if (b.t <= 0) {
+        if (b.kind === 'kraken') {
+          const sp = b.sprite;
+          game.tweens.add({ targets: sp, scaleY: 0, duration: 220, onComplete: () => sp.destroy() });
+          B.splice(i, 1);
+          continue;
+        }
         if (b.kind === 'beam') game.tweens.add({ targets: b.sprite, alpha: 0, duration: 250, onComplete: () => b.sprite.destroy() });
         else {
           game.fx.puffs.explode(4, b.sprite.x, b.sprite.y);
@@ -578,6 +672,9 @@
         const ch = Math.sin(time * 0.05 + b.t * 7);
         b.sprite.setPosition(b.e.x + Math.cos(time * 0.01 + b.t) * b.e.radius * 0.6, b.e.y - b.e.radius * 0.4 + ch * 3);
         b.sprite.setScale((1 + ch * 0.1) / S, (1 - ch * 0.1) / S);
+      } else if (b.kind === 'kraken') {
+        b.sprite.setPosition(b.e.x, b.e.y + 10);
+        b.sprite.rotation = Math.sin(time * 0.012 + b.t * 3) * 0.18;
       } else if (b.kind === 'beam') {
         b.sprite.setPosition(b.e.x, b.e.y + 6);
         b.sprite.scaleX = (1.1 + Math.sin(time * 0.05) * 0.15) / S;

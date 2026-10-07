@@ -70,7 +70,7 @@
         c.on('pointerover', () => {
           c.setScale(1.05);
           const cost = s.placeCost(id);
-          this.tip.show(X0 - 268, y, `${def.name}  ·  ${U.money(cost)}`, def.desc + `\nHotkey: ${def.key}`);
+          this.tip.show(X0 - 268, y, `${def.name}  ·  ${U.money(cost)}`, def.desc + (def.trait ? `\n★ ${def.trait}` : '') + `\nHotkey: ${def.key}`);
         });
         c.on('pointerout', () => {
           c.setScale(1);
@@ -200,15 +200,31 @@
       const add = (o) => (this.upg.add(o), o);
       add(MT.UI.panel(s, 6, 0, 248, 504, 'dark'));
       const key = t.texKey();
-      add(s.add.image(42, 40, key).setScale(t.hero ? 0.36 : t.fused ? 0.32 : 0.4));
-      const nameCol = t.fused ? t.def.fusion.color : t.hero ? t.def.color || '#ffd83a' : '#ffffff';
+      add(s.add.image(42, 42, key).setScale(t.hero ? 0.36 : t.omega ? 0.17 : t.ultimate ? 0.24 : t.fused ? 0.32 : 0.4));
+      const nameCol = t.omega ? '#ffffff' : t.fused ? t.def.fusion.color : t.hero ? t.def.color || '#ffd83a' : '#ffffff';
       const nameT = add(MT.text(s, 78, 22, t.name, 20, { title: true, ox: 0, color: nameCol }));
       if (nameT.width > 128) nameT.setScale(128 / nameT.width);
-      this.popsText = add(MT.text(s, 78, 46, `Pops: ${t.pops}`, 13, { ox: 0, color: '#cfe3ff' }));
+      this.popsText = add(MT.text(s, 78, 43, `Pops: ${Math.floor(t.totalPops)}`, 13, { ox: 0, color: '#cfe3ff' }));
       const close = new MT.UI.Button(s, 230, 22, 32, 32, { style: 'red', icon: 'ic_close', iconSize: 0.6, onClick: () => s.select(null) });
       add(close);
+      // MOVE: relocate the tower for a small fee
+      const fee = s.moveFee(t);
+      this.moveBtn = add(new MT.UI.Button(s, 190, 47, 52, 22, {
+        style: 'blue', label: 'MOVE', size: 12,
+        onClick: () => s.startMove(t),
+        onHover: (on) => (on ? this.tip.show(X0 - 268, 30, 'Move', `Pick this tower up and put it somewhere else for ${U.money(fee)}.\nHotkey: M`) : this.tip.hide()),
+      }));
+      // the tower's signature mechanic (full text on hover)
+      if (t.def.trait && !t.omega) {
+        const [label] = t.def.trait.split(':');
+        const tr = add(MT.text(s, 78, 64, '★ ' + label, 12, { ox: 0, color: '#ffd166', strokeThickness: 3 }));
+        if (tr.width > 170) tr.setScale(170 / tr.width);
+        tr.setInteractive({ useHandCursor: true });
+        tr.on('pointerover', () => this.tip.show(X0 - 268, 40, label, t.def.trait.slice(label.length + 1).trim()));
+        tr.on('pointerout', () => this.tip.hide());
+      }
       this.upgRefs = { t, rows: [] };
-      let y = 70;
+      let y = 84;
       if (t.stats.attack !== 'none' || t.hero) {
         add(MT.text(s, 22, y + 14, 'Target', 13, { ox: 0, color: '#cfe3ff' }));
         add(new MT.UI.Button(s, 96, y + 14, 30, 28, { style: 'blue', label: '<', size: 18, onClick: () => s.cycleTarget(t, -1) }));
@@ -218,13 +234,16 @@
         add(MT.text(s, 130, y + 14, this.infoLine(t), 13, { color: '#cfe3ff', wrap: 230 }));
       }
       y += 40;
+      this.fuseBtn = this.ultBtn = this.omegaBtn = null;
+      const giantRow = MT.Fusion.isPlainFused(t);
       if (t.hero) this.buildHeroRows(t, y, add);
-      else if (t.fused) this.buildFusedInfo(t, y, add);
+      else if (t.omega) this.buildOmegaInfo(t, y, add);
+      else if (t.fused) this.buildFusedInfo(t, y, add, giantRow ? 284 : 316);
       else {
-        for (let pi = 0; pi < 3; pi++) this.buildPathRow(t, pi, 12, y + pi * 112, add);
+        for (let pi = 0; pi < 3; pi++) this.buildPathRow(t, pi, 12, y + pi * 108, add);
       }
-      this.fuseBtn = null;
-      if (!t.hero && !t.fused && t.def.fusion) {
+      if (giantRow) this.buildGiantButtons(t, add);
+      if (!t.hero && !t.fused && !t.omega && t.def.fusion) {
         add(new MT.UI.Button(s, 70, 470, 112, 42, {
           style: 'red', label: 'SELL', sub: U.money(t.sellValue()), size: 17, subSize: 11, onClick: () => s.sell(t),
         }));
@@ -255,36 +274,115 @@
       this.refreshUpgradeButtons();
     }
 
-    buildFusedInfo(t, y, add) {
-      const s = this.scene;
-      const f = t.def.fusion;
-      add(MT.UI.panel(s, 12, y, 236, 340, 'card'));
-      add(MT.text(s, 130, y + 20, 'SUPER FUSION', 16, { title: true, color: f.color }));
-      const descT = add(MT.text(s, 24, y + 38, f.desc, 12, { ox: 0, oy: 0, wrap: 212, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
-      const statY = Math.min(y + 150, y + 48 + descT.height);
+    // short stat lines for a tower's current stats
+    statLines(t) {
       const st = t.stats;
       const p = st.proj;
       const lines = [];
-      if (st.attack !== 'none') {
+      if (st.attack === 'none') {
+        if (t.type === 'farm') lines.push(this.infoLine(t));
+      } else {
         lines.push(`Range: ${st.range > 1000 ? 'whole map' : Math.round(st.range)}`);
-        lines.push(`Attacks per second: ${(1 / st.rate).toFixed(1)}${st.count > 1 ? `  ×${st.count}` : ''}`);
+        lines.push(`Attacks per second: ${(1 / st.rate).toFixed(1)}${st.count > 1 ? `  ×${st.count}` : ''}${st.planes > 1 ? `  ×${st.planes} planes` : ''}`);
         if (p) {
           const dmg = p.explode ? p.explode.dmg : p.dmg;
           lines.push(`Damage: ${dmg}${p.moabDmg ? `  (+${p.moabDmg} vs giants)` : ''}`);
           if (st.attack !== 'aura' && st.attack !== 'ring') lines.push(`Pierce: ${p.explode ? p.explode.pierce : p.pierce}`);
         }
         lines.push(`Camo: ${st.camo ? 'yes' : 'no'}`);
-      } else if (t.type === 'farm') {
-        lines.push(this.infoLine(t));
       }
-      if (st.buff) lines.push(`Buffs nearby towers`);
-      add(MT.text(s, 24, statY, lines.join('\n'), 13, { ox: 0, oy: 0, color: '#b8ffb0', strokeThickness: 3, align: 'left', lineSpacing: 3 }));
-      const A = MT.ABILITIES[st.ability];
+      if (st.buff) lines.push('Buffs nearby towers');
+      return lines;
+    }
+
+    buildFusedInfo(t, y, add, h) {
+      const s = this.scene;
+      const f = t.def.fusion;
+      add(MT.UI.panel(s, 12, y, 236, h, 'card'));
+      add(MT.text(s, 130, y + 18, t.ultimate ? 'ULTIMATE' : 'SUPER FUSION', 16, { title: true, color: f.color }));
+      const desc = t.ultimate
+        ? `★ ${f.ultimate.mech}: ${f.ultimate.desc} Plus 2.5x damage and a stronger ability.`
+        : f.desc;
+      const descT = add(MT.text(s, 24, y + 34, desc, 12, { ox: 0, oy: 0, wrap: 212, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
+      const statY = y + 42 + descT.height;
+      add(MT.text(s, 24, statY, this.statLines(t).join('\n'), 13, { ox: 0, oy: 0, color: '#b8ffb0', strokeThickness: 3, align: 'left', lineSpacing: 2 }));
+      const A = MT.ABILITIES[t.stats.ability];
       if (A) {
-        add(s.add.image(44, y + 296, A.icon).setScale(0.7 / S));
-        add(MT.text(s, 72, y + 284, A.name, 15, { title: true, ox: 0, color: '#ffd83a' }));
-        add(MT.text(s, 72, y + 300, A.desc, 11, { ox: 0, oy: 0, wrap: 168, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
+        const ay = y + h - 52;
+        add(s.add.image(42, ay + 12, A.icon).setScale(0.62 / S));
+        add(MT.text(s, 68, ay, A.name, 15, { title: true, ox: 0, color: '#ffd83a' }));
+        add(MT.text(s, 68, ay + 12, A.desc, 11, { ox: 0, oy: 0, wrap: 172, color: '#e8f1ff', strokeThickness: 3, align: 'left' }));
       }
+    }
+
+    buildOmegaInfo(t, y, add) {
+      const s = this.scene;
+      add(MT.UI.panel(s, 12, y, 236, 316, 'card'));
+      add(MT.text(s, 130, y + 18, 'OMEGA MECH', 16, { title: true, color: '#ffffff' }));
+      const elems = t.subs.map((u) => MT.OMEGA_ELEMENTS[u.type]).join(', ');
+      const beamT = add(MT.text(s, 24, y + 32, `Omega Beam every 5s pierces the whole map: ${elems}.`, 11, { ox: 0, oy: 0, wrap: 212, color: '#ffd83a', strokeThickness: 3, align: 'left' }));
+      const top = y + 38 + beamT.height;
+      const slotName = ['BACK', 'LEFT ARM', 'RIGHT ARM'];
+      t.subs.forEach((u, i) => {
+        const ry = top + i * 74;
+        const f = u.def.fusion;
+        // the part's slot on the mech sits on its own line above its name
+        add(MT.text(s, 66, ry + 2, slotName[i], 9, { ox: 0, color: '#cfe3ff', strokeThickness: 2 }));
+        add(s.add.image(40, ry + 32, MT.TowerArt.fusedKey(s, u.type)).setScale(0.2));
+        const nm = add(MT.text(s, 66, ry + 16, f.name, 14, { title: true, ox: 0, color: f.color }));
+        if (nm.width > 172) nm.setScale(172 / nm.width);
+        const st = u.stats, p = st.proj;
+        const bits = [];
+        if (st.attack !== 'none' && p) bits.push(`${p.explode ? p.explode.dmg : p.dmg} dmg`, `${(1 / st.rate).toFixed(1)}/s`);
+        else if (u.type === 'farm') bits.push(`+${U.money(st.flat)}/round`);
+        if (st.buff) bits.push('buffs');
+        add(MT.text(s, 66, ry + 33, bits.join(' · '), 11, { ox: 0, color: '#b8ffb0', strokeThickness: 3 }));
+        const A = MT.ABILITIES[st.ability];
+        if (A) {
+          add(s.add.image(76, ry + 54, A.icon).setScale(0.36 / S));
+          add(MT.text(s, 92, ry + 54, A.name, 12, { ox: 0, color: '#ffd83a', strokeThickness: 3 }));
+        }
+      });
+    }
+
+    // fused towers can go one step further: Ultimate (same kind) or Omega (mixed)
+    buildGiantButtons(t, add) {
+      const s = this.scene;
+      const hoverTip = (title, body, cands) => (on) => {
+        if (!on) {
+          this.tip.hide();
+          s.fuseHover = null;
+          return;
+        }
+        s.fuseHover = cands();
+        this.tip.show(X0 - 268, 380, title, body());
+      };
+      this.ultBtn = add(new MT.UI.Button(s, 70, 428, 112, 36, {
+        style: 'yellow', label: 'ULTIMATE', size: 14, sub: '', subSize: 10,
+        onClick: () => MT.Fusion.fuseUltimate(s, t),
+        onDisabledClick: () => {
+          const st = MT.Fusion.ultimateStatus(s, t);
+          if (st.reason) this.toast(st.reason, 2200);
+        },
+        onHover: hoverTip(`ULTIMATE: ${t.def.fusion.ultimate.name}`, () => {
+          const st = MT.Fusion.ultimateStatus(s, t);
+          const ul = t.def.fusion.ultimate;
+          return `Merge 3 ${t.def.fusion.name}s into a brand-new giant.\n★ ${ul.mech}: ${ul.desc}\nAlso 2.5x damage and a stronger ${MT.ABILITIES[t.def.fusion.base.ability].name}.\nCost: ${U.money(st.cost || 0)}` + (st.reason ? `\n${st.reason}` : '');
+        }, () => MT.Fusion.ultimateCandidates(s, t)),
+      }));
+      this.omegaBtn = add(new MT.UI.Button(s, 192, 428, 120, 36, {
+        style: 'purple', label: 'OMEGA', size: 15, sub: '', subSize: 10,
+        onClick: () => MT.Fusion.fuseOmega(s, t),
+        onDisabledClick: () => {
+          const st = MT.Fusion.omegaStatus(s, t);
+          if (st.reason) this.toast(st.reason, 2200);
+        },
+        onHover: hoverTip('OMEGA TOWER', () => {
+          const st = MT.Fusion.omegaStatus(s, t);
+          const parts = MT.Fusion.omegaCandidates(s, t).map((o) => o.def.fusion.name).join(' + ');
+          return `Build a giant Omega Mech from 3 super towers of DIFFERENT kinds: this one becomes its back, the others its arm weapons. Its core fires the Omega Beam, mixing all three powers.\nNow: ${parts}\nCost: ${U.money(st.cost || 0)}` + (st.reason ? `\n${st.reason}` : '');
+        }, () => MT.Fusion.omegaCandidates(s, t)),
+      }));
     }
 
     infoLine(t) {
@@ -335,28 +433,38 @@
       const s = this.scene;
       const H = t.def;
       const XP = MT.HERO_XP;
-      add(MT.UI.panel(s, 12, y, 236, 70, 'card'));
-      add(MT.text(s, 24, y + 20, `Level ${t.level}`, 22, { title: true, ox: 0, color: '#ffd83a' }));
+      add(MT.UI.panel(s, 12, y, 236, 54, 'card'));
+      add(MT.text(s, 24, y + 17, `Level ${t.level}`, 19, { title: true, ox: 0, color: '#ffd83a' }));
       const next = t.level < 10 ? XP[t.level] : XP[9];
       const prev = XP[t.level - 1];
       const frac = t.level >= 10 ? 1 : U.clamp((t.xp - prev) / (next - prev), 0, 1);
       const g = s.add.graphics();
       g.fillStyle(0x1b335c, 1);
-      g.fillRoundedRect(24, y + 42, 210, 14, 7);
+      g.fillRoundedRect(24, y + 32, 210, 11, 5.5);
       g.fillStyle(0x7fdbff, 1);
-      g.fillRoundedRect(24, y + 42, Math.max(8, 210 * frac), 14, 7);
+      g.fillRoundedRect(24, y + 32, Math.max(8, 210 * frac), 11, 5.5);
       g.lineStyle(2, 0x2a1d14, 1);
-      g.strokeRoundedRect(24, y + 42, 210, 14, 7);
+      g.strokeRoundedRect(24, y + 32, 210, 11, 5.5);
       add(g);
-      add(MT.text(s, 234, y + 20, t.level >= 10 ? 'MAX' : `${Math.floor(t.xp)}/${next} XP`, 12, { ox: 1, color: '#cfe3ff' }));
-      let ly = y + 82;
+      add(MT.text(s, 234, y + 17, t.level >= 10 ? 'MAX' : `${Math.floor(t.xp)}/${next} XP`, 12, { ox: 1, color: '#cfe3ff' }));
+      // the level list must end above the LEVEL UP button
+      let ly = y + 60;
+      const lines = [];
       for (let l = 1; l <= 10; l++) {
         const L = H.levels[l];
         const have = l <= t.level;
         const line = add(MT.text(s, 18, ly, `${have ? '✔' : '·'} ${l}. ${L.desc}`, 11, {
           ox: 0, oy: 0, wrap: 226, color: have ? '#b8ffb0' : '#9fb3d1', strokeThickness: 3, align: 'left',
         }));
-        ly += line.height + 1;
+        lines.push(line);
+        ly += line.height;
+      }
+      if (ly > 400) {
+        let yy = y + 60;
+        lines.forEach((line) => {
+          line.setFontSize(10).setWordWrapWidth(232, true).setY(yy);
+          yy += line.height;
+        });
       }
       const cost = s.heroLevelCost(t);
       this.heroBtn = new MT.UI.Button(s, 130, 424, 228, 40, {
@@ -371,10 +479,19 @@
       if (!R) return;
       const s = this.scene;
       const t = R.t;
-      if (this.popsText) this.popsText.setText(`Pops: ${Math.floor(t.pops)}`);
+      if (this.popsText) this.popsText.setText(`Pops: ${Math.floor(t.totalPops)}`);
+      if (this.moveBtn) this.moveBtn.setEnabled(s.moveFee(t) <= s.money);
       if (this.fuseBtn) {
         const st = MT.Fusion.status(s, t);
         this.fuseBtn.setEnabled(st.can).setSub(st.have != null ? `${Math.min(st.have, MT.Fusion.NEEDED)}/${MT.Fusion.NEEDED} maxed` : '');
+      }
+      if (this.ultBtn) {
+        const st = MT.Fusion.ultimateStatus(s, t);
+        this.ultBtn.setEnabled(st.can).setSub(st.have != null ? `${Math.min(st.have, 3)}/3 same` : '');
+      }
+      if (this.omegaBtn) {
+        const st = MT.Fusion.omegaStatus(s, t);
+        this.omegaBtn.setEnabled(st.can).setSub(st.have != null ? `${Math.min(st.have, 3)}/3 kinds` : '');
       }
       if (t.hero && this.heroBtn) {
         const cost = s.heroLevelCost(t);
