@@ -16,25 +16,72 @@
     orange: ['#ffc48a', '#ff8a2a', '#b85a0d'],
   };
 
-  function btnKey(scene, w, h, style) {
-    const key = `btn_${style}_${w}x${h}`;
-    D.make(scene, key, w, h + 5, (ctx) => {
+  // chunky 3D cartoon button: drop shadow, deep lip, glossy bevelled face and
+  // (for icon + label buttons) a recessed socket the icon sits in
+  function btnKey(scene, w, h, style, socket) {
+    const key = `btn_${style}_${w}x${h}${socket ? '_s' : ''}`;
+    D.make(scene, key, w, h + 7, (ctx) => {
       const c = BTN[style] || BTN.green;
-      const r = Math.min(14, h / 2.4);
+      const r = Math.min(15, h / 2.3);
+      // soft drop shadow
+      D.rrPath(ctx, 3, 8, w - 6, h - 2, r);
+      D.fs(ctx, 'rgba(0,0,0,0.28)');
       // lip
-      D.rrPath(ctx, 1.5, 5, w - 3, h - 2, r);
-      D.fs(ctx, c[2], OL, 2.5);
-      // face
-      D.rrPath(ctx, 1.5, 1.5, w - 3, h - 3, r);
-      ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, c[0]], [0.55, c[1]], [1, c[1]]]);
+      D.rrPath(ctx, 1.5, 5.5, w - 3, h - 1.5, r);
+      ctx.fillStyle = D.lin(ctx, 0, h - 8, 0, h + 4, [[0, c[2]], [1, D.shade(c[2], -0.35)]]);
       ctx.fill();
       ctx.strokeStyle = OL;
       ctx.lineWidth = 2.5;
       ctx.stroke();
-      // gloss
-      D.rrPath(ctx, 6, 4.5, w - 12, h * 0.36, r * 0.7);
-      ctx.fillStyle = 'rgba(255,255,255,0.32)';
+      // face
+      D.rrPath(ctx, 1.5, 1.5, w - 3, h - 3, r);
+      ctx.fillStyle = D.lin(ctx, 0, 0, 0, h, [[0, c[0]], [0.5, c[1]], [1, D.shade(c[1], -0.12)]]);
       ctx.fill();
+      ctx.save();
+      ctx.clip();
+      // bottom inner shade
+      ctx.fillStyle = D.lin(ctx, 0, h * 0.55, 0, h, [[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0.16)']]);
+      ctx.fillRect(0, 0, w, h);
+      // recessed icon socket
+      if (socket) {
+        const sx = h * 0.55, sy = h / 2, sr = h * 0.36;
+        D.circlePath(ctx, sx, sy + 1, sr);
+        D.fs(ctx, 'rgba(255,255,255,0.35)');
+        D.circlePath(ctx, sx, sy, sr);
+        ctx.fillStyle = D.rad(ctx, sx, sy - sr * 0.3, sr * 0.1, sx, sy, sr, [[0, 'rgba(0,0,0,0.12)'], [1, 'rgba(0,0,0,0.32)']]);
+        ctx.fill();
+      }
+      ctx.restore();
+      // bevel highlight around the top edge
+      D.rrPath(ctx, 4, 4, w - 8, h - 8, Math.max(2, r - 2.5));
+      ctx.strokeStyle = D.lin(ctx, 0, 4, 0, h - 4, [[0, 'rgba(255,255,255,0.7)'], [0.45, 'rgba(255,255,255,0.15)'], [1, 'rgba(255,255,255,0)']]);
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      // outline
+      D.rrPath(ctx, 1.5, 1.5, w - 3, h - 3, r);
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // gloss
+      D.rrPath(ctx, 6, 4.5, w - 12, h * 0.38, r * 0.7);
+      ctx.fillStyle = D.lin(ctx, 0, 4.5, 0, 4.5 + h * 0.38, [[0, 'rgba(255,255,255,0.55)'], [1, 'rgba(255,255,255,0.08)']]);
+      ctx.fill();
+      // a little sparkle on bigger buttons
+      if (w >= 90 && h >= 40) {
+        D.starPath(ctx, 12 + r * 0.4, 9, 4, 4.5, 1.2);
+        D.fs(ctx, 'rgba(255,255,255,0.9)');
+      }
+    });
+    return key;
+  }
+
+  // flat white face shape used as an additive hover glow
+  function btnGlowKey(scene, w, h) {
+    const key = `btnglow_${w}x${h}`;
+    D.make(scene, key, w, h + 7, (ctx) => {
+      const r = Math.min(15, h / 2.3);
+      D.rrPath(ctx, 2, 2, w - 4, h - 4, r);
+      D.fs(ctx, '#ffffff');
     });
     return key;
   }
@@ -105,8 +152,10 @@
       this.h = h;
       this.style = opts.style || 'green';
       this.enabled = true;
-      this.bg = scene.add.image(0, 2.5, btnKey(scene, w, h, this.style)).setScale(1 / D.S);
-      this.add(this.bg);
+      this.socket = !!(opts.icon && opts.label);
+      this.bg = scene.add.image(0, 3.5, btnKey(scene, w, h, this.style, this.socket)).setScale(1 / D.S);
+      this.glow = scene.add.image(0, 3.5, btnGlowKey(scene, w, h)).setScale(1 / D.S).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+      this.add([this.bg, this.glow]);
       if (opts.icon) {
         const ix = opts.label ? -w / 2 + h * 0.55 : 0;
         this.icon = scene.add.image(ix, 0, opts.icon).setScale((opts.iconScale || h * 0.62 / 32) / D.S * 2 / 2);
@@ -124,23 +173,37 @@
       }
       this.setSize(w, h);
       this.setInteractive({ useHandCursor: true });
+      // the face (and everything on it) sinks into the lip while pressed
+      this.faceParts = [this.label, this.icon, this.sub].filter(Boolean).map((o) => [o, o.y]);
+      const press = (down) => {
+        const dy = down ? 2.5 : 0;
+        this.bg.y = 3.5 + dy;
+        this.glow.y = 3.5 + dy;
+        this.faceParts.forEach(([o, y]) => (o.y = y + dy));
+      };
       this.on('pointerover', () => {
         if (!this.enabled) return;
-        this.setScale(1.04);
+        this.scene.tweens.killTweensOf(this);
+        this.scene.tweens.add({ targets: this, scale: 1.05, duration: 90, ease: 'Quad.easeOut' });
+        this.glow.setAlpha(0.16);
         MT.Audio.play('hover');
         opts.onHover && opts.onHover(true);
       });
       this.on('pointerout', () => {
-        this.setScale(1);
-        this.bg.y = 2.5;
+        this.scene.tweens.killTweensOf(this);
+        this.scene.tweens.add({ targets: this, scale: 1, duration: 90, ease: 'Quad.easeOut' });
+        this.glow.setAlpha(0);
+        press(false);
         opts.onHover && opts.onHover(false);
       });
       this.on('pointerdown', () => {
         if (!this.enabled) return;
-        this.bg.y = 4;
+        press(true);
+        this.glow.setAlpha(0.06);
       });
       this.on('pointerup', () => {
-        this.bg.y = 2.5;
+        press(false);
+        if (this.enabled) this.glow.setAlpha(0.16);
         if (!this.enabled) {
           MT.Audio.play('error');
           opts.onDisabledClick && opts.onDisabledClick();
@@ -160,7 +223,7 @@
     setStyle(style) {
       if (style === this.style) return this;
       this.style = style;
-      this.bg.setTexture(btnKey(this.scene, this.w, this.h, style));
+      this.bg.setTexture(btnKey(this.scene, this.w, this.h, style, this.socket));
       return this;
     }
     setLabel(t) {

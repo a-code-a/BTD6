@@ -24,6 +24,25 @@
       this.toastText = MT.text(scene, 0, 0, '', 22, { title: true });
       this.toastC.add([this.toastBg, this.toastText]);
       this.overlay = null;
+      this.prev = scene.add.container(8, 8).setDepth(DEPTH - 6);
+      this.prevCollapsed = false;
+      if (scene.sandbox) this.buildSandbox();
+      // round badge frame for the ability bar
+      MT.Draw.make(scene, 'hud_abframe', 60, 60, (ctx) => {
+        const D = MT.Draw;
+        D.circlePath(ctx, 30, 31, 27);
+        D.fs(ctx, 'rgba(0,0,0,0.35)');
+        D.circlePath(ctx, 30, 30, 27);
+        ctx.fillStyle = D.rad(ctx, 24, 22, 2, 30, 30, 27, [[0, '#3b5a8f'], [1, '#13213d']]);
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = D.lin(ctx, 0, 3, 0, 57, [[0, '#fff3b0'], [0.5, '#e0a500'], [1, '#8a5a00']]);
+        ctx.stroke();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = D.OL;
+        D.circlePath(ctx, 30, 30, 29.5);
+        ctx.stroke();
+      });
     }
 
     // ------------------------------------------------------------ top stats
@@ -33,11 +52,13 @@
       this.roundLabel = MT.text(s, X0 + 116, 30, 'ROUND 0/40', 22, { title: true, color: '#ffd83a' });
       this.root.add(this.roundLabel);
       // cheat: instant bananas
-      this.cheatBtn = new MT.UI.Button(s, X0 + 224, 30, 34, 28, {
-        style: 'yellow', label: '+$', size: 15,
-        onClick: () => s.cheatMoney(),
-        onHover: (on) => (on ? this.tip.show(X0 - 268, 14, 'Cheat', `Get ${U.money(MT.CFG.CHEAT_MONEY)} bananas instantly.`) : this.tip.hide()),
-      }).setDepth(DEPTH + 2);
+      if (!s.sandbox) {
+        this.cheatBtn = new MT.UI.Button(s, X0 + 224, 30, 34, 28, {
+          style: 'yellow', label: '+$', size: 15,
+          onClick: () => s.cheatMoney(),
+          onHover: (on) => (on ? this.tip.show(X0 - 268, 14, 'Cheat', `Get ${U.money(MT.CFG.CHEAT_MONEY)} bananas instantly.`) : this.tip.hide()),
+        }).setDepth(DEPTH + 2);
+      }
       this.root.add(s.add.image(X0 + 34, 72, 'ic_coin').setScale(0.75 / S * 2 / 2 * 1.0).setDisplaySize(30, 30));
       this.moneyText = MT.text(s, X0 + 54, 72, '$0', 22, { title: true, ox: 0 });
       this.root.add(this.moneyText);
@@ -131,11 +152,11 @@
     update(dt) {
       const s = this.scene;
       const money = Math.floor(s.money);
-      const total = s.freeplay ? '' : '/' + s.diff.rounds;
-      const rl = `ROUND ${Math.max(1, s.round)}${total}`;
+      const total = s.freeplay || s.sandbox ? '' : '/' + s.diff.rounds;
+      const rl = s.mode === 'boss' ? (s.round > 0 ? `WAVE ${s.round}` : 'BOSS BATTLE') : `ROUND ${Math.max(1, s.round)}${total}`;
       if (rl !== this.last.round) this.roundLabel.setText((this.last.round = rl));
       if (money !== this.last.money) {
-        this.moneyText.setText(U.money(money));
+        this.moneyText.setText(s.sandbox ? 'UNLIMITED' : U.money(money));
         // squeeze big numbers so they never run into the lives counter
         const maxW = 116;
         this.moneyText.scaleX = this.moneyText.width > maxW ? maxW / this.moneyText.width : 1;
@@ -144,7 +165,7 @@
       }
       const lives = Math.max(0, Math.ceil(s.lives));
       if (lives !== this.last.lives) {
-        this.livesText.setText(String(lives));
+        this.livesText.setText(s.sandbox ? 'MAX' : String(lives));
         if (this.last.lives != null && lives < this.last.lives) {
           this.livesText.setColor('#ff6b6b');
           s.time.delayedCall(250, () => this.livesText.setColor('#ffffff'));
@@ -289,7 +310,7 @@
           lines.push(`Damage: ${dmg}${p.moabDmg ? `  (+${p.moabDmg} vs giants)` : ''}`);
           if (st.attack !== 'aura' && st.attack !== 'ring') lines.push(`Pierce: ${p.explode ? p.explode.pierce : p.pierce}`);
         }
-        lines.push(`Camo: ${st.camo ? 'yes' : 'no'}`);
+        lines.push(`Camo: ${st.camo ? 'yes' : 'no'}   ·   Anti-air: ${st.air ? 'yes' : 'no'}`);
       }
       if (st.buff) lines.push('Buffs nearby towers');
       return lines;
@@ -516,37 +537,233 @@
     // ------------------------------------------------------------ abilities
     rebuildAbilities() {
       const s = this.scene;
-      this.abilityBtns.forEach((b) => b.img.destroy());
+      this.abilityBtns.forEach((b) => b.c.destroy());
       this.abilityBtns = [];
       const list = s.abilityList().slice(0, 16);
       list.forEach((ab, i) => {
         const A = MT.ABILITIES[ab.id];
-        const x = 36 + i * 60, y = 684;
-        const img = s.add.image(x, y, A.icon).setScale(0.95 / S).setDepth(DEPTH - 5).setInteractive({ useHandCursor: true });
-        img.on('pointerdown', () => s.useAbility(ab.tower, ab.id));
-        img.on('pointerover', () => this.tip.show(x - 20, y - 120, A.name, A.desc + `\nCooldown: ${A.cd}s`));
-        img.on('pointerout', () => this.tip.hide());
-        this.abilityBtns.push({ img, ab, A, x, y });
+        const x = 36 + i * 62, y = 682;
+        const c = s.add.container(x, y).setDepth(DEPTH - 5);
+        const frame = s.add.image(0, 0, 'hud_abframe').setScale(1 / S);
+        const img = s.add.image(0, 0, A.icon).setDisplaySize(42, 42);
+        const cdText = MT.text(s, 0, 1, '', 18, { title: true }).setVisible(false);
+        const key = MT.text(s, 19, -20, i < 9 ? String(i + 1) : '', 12, { title: true, color: '#ffd83a', strokeThickness: 3 });
+        c.add([frame, img, cdText, key]);
+        c.setSize(56, 56).setInteractive({ useHandCursor: true });
+        c.on('pointerdown', () => s.useAbility(ab.tower, ab.id));
+        c.on('pointerover', () => {
+          c.setScale(1.1);
+          this.tip.show(x - 20, y - 130, A.name, A.desc + `\nCooldown: ${Math.round(A.cd * ab.tower.cdMul)}s` + (i < 9 ? `\nHotkey: ${i + 1}` : ''));
+        });
+        c.on('pointerout', () => {
+          c.setScale(1);
+          this.tip.hide();
+        });
+        this.abilityBtns.push({ c, img, cdText, ab, A, x, y, ready: true });
       });
+    }
+
+    // the badge pops when its ability is used
+    flashAbility(t, id) {
+      const b = this.abilityBtns.find((o) => o.ab.tower === t && o.ab.id === id);
+      if (!b) return;
+      const s = this.scene;
+      s.tweens.killTweensOf(b.img);
+      b.img.setDisplaySize(58, 58);
+      s.tweens.add({ targets: b.img, displayWidth: 42, displayHeight: 42, duration: 260, ease: 'Back.easeOut' });
+      s.fx.ring(b.x, b.y, 50, 0xffd83a, { dur: 380, force: true, depth: DEPTH });
+    }
+
+    useAbilitySlot(i) {
+      const b = this.abilityBtns[i];
+      if (b) this.scene.useAbility(b.ab.tower, b.ab.id);
     }
 
     updateAbilities() {
       const g = this.abilityG;
+      const now = this.scene.time.now;
       g.clear();
       this.abilityBtns.forEach((b) => {
         const cd = b.ab.tower.abilityCd[b.ab.id] || 0;
+        const max = b.A.cd * b.ab.tower.cdMul;
         if (cd > 0) {
-          const f = cd / b.A.cd;
-          g.fillStyle(0x000000, 0.55);
-          g.slice(b.x, b.y, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f, false);
+          const f = Math.min(1, cd / max);
+          g.fillStyle(0x05080f, 0.62);
+          g.slice(b.x, b.y, 25, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f, false);
           g.fillPath();
-          b.img.setAlpha(0.75);
+          g.lineStyle(3, 0x7fdbff, 0.9);
+          g.beginPath();
+          g.arc(b.x, b.y, 27, -Math.PI / 2 + Math.PI * 2 * f, Math.PI * 1.5, false);
+          g.strokePath();
+          b.img.setAlpha(0.6);
+          b.cdText.setVisible(true).setText(String(Math.ceil(cd)));
+          b.ready = false;
         } else {
+          if (!b.ready) {
+            // ready again: bounce + sparkle
+            b.ready = true;
+            this.scene.tweens.add({ targets: b.c, scale: { from: 1.3, to: 1 }, duration: 320, ease: 'Back.easeOut' });
+            this.scene.fx.glow.particleTint = 0xffd83a;
+            this.scene.fx.glow.explode(10, b.x, b.y);
+            MT.Audio.play('ready');
+          }
           b.img.setAlpha(1);
-          g.lineStyle(3, 0xffffff, 0.5 + 0.4 * Math.sin(this.scene.time.now / 200));
-          g.strokeCircle(b.x, b.y, 27);
+          b.cdText.setVisible(false);
+          const pulse = 0.5 + 0.5 * Math.sin(now / 180 + b.x);
+          g.lineStyle(6, 0xffd83a, 0.25 + 0.3 * pulse);
+          g.strokeCircle(b.x, b.y, 31);
+          // a shine sweeping around the rim
+          const a = (now / 500 + b.x * 0.01) % (Math.PI * 2);
+          g.lineStyle(3, 0xffffff, 0.8);
+          g.beginPath();
+          g.arc(b.x, b.y, 28, a, a + 0.7, false);
+          g.strokePath();
         }
       });
+    }
+
+    // ------------------------------------------------------------ next round preview
+    refreshPreview() {
+      const s = this.scene;
+      const c = this.prev;
+      c.removeAll(true);
+      let groups, label;
+      if (s.mode === 'boss') {
+        if (s.bossDown) return c.setVisible(false);
+        groups = MT.Rounds.bossWave(s.round + 1, s.bossTier);
+        label = s.round > 0 ? `NEXT WAVE ${s.round + 1}` : 'FIRST WAVE';
+      } else {
+        const n = s.round + 1;
+        if (!s.freeplay && !s.sandbox && n > s.diff.rounds) return c.setVisible(false);
+        groups = MT.Rounds.get(n);
+        label = `NEXT: ROUND ${n}`;
+      }
+      const agg = [];
+      groups.forEach((g) => {
+        const k = g.type + (g.camo ? 'c' : '') + (g.fort ? 'f' : '');
+        let a = agg.find((o) => o.k === k);
+        if (!a) agg.push((a = { k, type: g.type, camo: g.camo, fort: g.fort, count: 0 }));
+        a.count += g.count;
+      });
+      const items = agg.slice(0, 7);
+      const title = MT.text(s, 12, 13, label + (this.prevCollapsed ? '  ▸' : ''), 13, { title: true, ox: 0, color: '#ffd83a', strokeThickness: 3 });
+      const w = this.prevCollapsed ? title.width + 24 : Math.max(title.width + 24, 14 + items.length * 48);
+      const h = this.prevCollapsed ? 26 : 74;
+      const bg = s.add.graphics();
+      bg.fillStyle(0x101624, 0.78);
+      bg.fillRoundedRect(0, 0, w, h, 10);
+      bg.lineStyle(2, 0xffd166, 0.55);
+      bg.strokeRoundedRect(0, 0, w, h, 10);
+      c.add([bg, title]);
+      bg.setInteractive(new Phaser.Geom.Rectangle(0, 0, w, 26), Phaser.Geom.Rectangle.Contains);
+      bg.on('pointerdown', () => {
+        this.prevCollapsed = !this.prevCollapsed;
+        MT.Audio.play('click');
+        this.refreshPreview();
+      });
+      if (!this.prevCollapsed) {
+        items.forEach((a, i) => {
+          const x = 30 + i * 48, y = 46;
+          const def = MT.ENEMIES[a.type];
+          const im = s.add.image(x, y, MT.EnemyArt.key(s, a.type, a.camo, a.fort, 0));
+          const k = Math.min(32 / im.height, 34 / im.width);
+          im.setScale(k);
+          const cnt = MT.text(s, x + 18, y + 14, '×' + a.count, 12, { title: true, ox: 1, strokeThickness: 3 });
+          c.add([im, cnt]);
+          const tags = [];
+          if (a.camo) tags.push('Camo');
+          if (a.fort) tags.push('Fortified');
+          if (def.flying) tags.push('Flying: needs anti-air');
+          if (def.burrow) tags.push('Burrows underground');
+          if (def.shield) tags.push('Shields its friends');
+          if (def.armored) tags.push('Armored');
+          im.setInteractive({ useHandCursor: false });
+          im.on('pointerover', () => this.tip.show(8, 86, `${def.name} ×${a.count}`, (tags.length ? tags.join(' · ') + '\n' : '') + def.desc));
+          im.on('pointerout', () => this.tip.hide());
+          if (def.flying) c.add(MT.text(s, x - 16, y - 12, '✈', 11, { color: '#80d8ff', strokeThickness: 2, font: 'Arial' }));
+        });
+      }
+      c.setVisible(true);
+    }
+
+    // ------------------------------------------------------------ sandbox panel
+    buildSandbox() {
+      const s = this.scene;
+      const ids = MT.ENEMY_ORDER.concat(MT.BOSS_ORDER);
+      this.sb = { round: 1, idx: 0, camo: false, fort: false };
+      const W0 = MT.CFG.MAP_W;
+      this.sbBtn = new MT.UI.Button(s, W0 - 74, 28, 132, 40, {
+        style: 'purple', label: 'SANDBOX', size: 17,
+        onClick: () => this.toggleSandbox(),
+      }).setDepth(DEPTH + 3);
+      const c = (this.sbPanel = s.add.container(W0 - 352, 54).setDepth(DEPTH + 3).setVisible(false));
+      c.add(MT.UI.panel(s, 0, 0, 344, 316, 'denim'));
+      c.add(MT.text(s, 172, 24, 'SANDBOX TOOLS', 20, { title: true, color: '#ff9cf0' }));
+      const B = (x, y, w, h, label, style, fn, size = 15) => {
+        const b = new MT.UI.Button(s, x, y, w, h, { style, label, size, onClick: fn });
+        c.add(b);
+        return b;
+      };
+      // round picker
+      c.add(MT.text(s, 20, 58, 'Round', 14, { ox: 0, color: '#cfe3ff' }));
+      const rt = MT.text(s, 172, 58, '', 18, { title: true });
+      c.add(rt);
+      const setR = (v) => {
+        this.sb.round = U.clamp(v, 1, 200);
+        rt.setText('ROUND ' + this.sb.round);
+      };
+      setR(1);
+      B(80, 58, 36, 28, '-10', 'blue', () => setR(this.sb.round - 10), 12);
+      B(116, 58, 30, 28, '-', 'blue', () => setR(this.sb.round - 1));
+      B(228, 58, 30, 28, '+', 'blue', () => setR(this.sb.round + 1));
+      B(264, 58, 36, 28, '+10', 'blue', () => setR(this.sb.round + 10), 12);
+      B(172, 94, 200, 32, 'PLAY THIS ROUND', 'green', () => s.sandboxRound(this.sb.round), 15);
+      // mutant sender
+      c.add(MT.text(s, 20, 132, 'Send mutants', 14, { ox: 0, color: '#cfe3ff' }));
+      const icon = s.add.image(172, 160, MT.EnemyArt.key(s, ids[0], false, false, 0));
+      const name = MT.text(s, 172, 192, '', 14, { title: true });
+      c.add([icon, name]);
+      const setT = (i) => {
+        this.sb.idx = (i + ids.length) % ids.length;
+        const id = ids[this.sb.idx];
+        icon.setTexture(MT.EnemyArt.key(s, id, this.sb.camo, this.sb.fort, 0));
+        icon.setScale(Math.min(40 / icon.height, 60 / icon.width));
+        name.setText(MT.ENEMIES[id].name);
+      };
+      B(110, 162, 34, 34, '<', 'blue', () => setT(this.sb.idx - 1), 18);
+      B(234, 162, 34, 34, '>', 'blue', () => setT(this.sb.idx + 1), 18);
+      const camoB = B(70, 226, 96, 30, 'CAMO', 'gray', () => {
+        this.sb.camo = !this.sb.camo;
+        camoB.setStyle(this.sb.camo ? 'green' : 'gray');
+        setT(this.sb.idx);
+      }, 14);
+      const fortB = B(172, 226, 96, 30, 'FORTIFIED', 'gray', () => {
+        this.sb.fort = !this.sb.fort;
+        fortB.setStyle(this.sb.fort ? 'green' : 'gray');
+        setT(this.sb.idx);
+      }, 12);
+      const send = (n) => () => s.sandboxSend(ids[this.sb.idx], n, this.sb.camo, this.sb.fort);
+      B(258, 210, 50, 24, 'x1', 'yellow', send(1), 13);
+      B(258, 238, 50, 24, 'x10', 'yellow', send(10), 13);
+      B(310, 224, 46, 52, 'x50', 'orange', send(50), 13);
+      setT(0);
+      // utilities
+      B(62, 282, 100, 32, 'CLEAR', 'red', () => s.sandboxClear(), 14);
+      B(172, 282, 112, 32, 'COOLDOWNS', 'teal', () => {
+        s.units().forEach((t) => (t.abilityCd = {}));
+        this.toast('Ability cooldowns reset!', 1200);
+      }, 13);
+      B(282, 282, 100, 32, 'HERO MAX', 'blue', () => {
+        const h = s.towers.find((t) => t.hero);
+        if (h) s.gainHeroXp(h, MT.HERO_XP[9] - h.xp + 1);
+        else this.toast('Place your hero first!', 1200);
+      }, 13);
+    }
+
+    toggleSandbox() {
+      const on = !this.sbPanel.visible;
+      this.sbPanel.setVisible(on);
+      this.sbBtn.setLabel(on ? 'CLOSE' : 'SANDBOX');
     }
 
     // ------------------------------------------------------------ toasts
@@ -562,7 +779,7 @@
       this.toastBg.strokeRoundedRect(-w / 2, -h / 2, w, h, 14);
       s.tweens.killTweensOf(this.toastC);
       // stay clear of the final boss health bar at the top of the map
-      const bossBar = s.enemies && s.enemies.some((e) => !e.dead && e.def.final);
+      const bossBar = s.enemies && s.enemies.some((e) => !e.dead && (e.def.final || e.def.bossFight));
       this.toastC.y = bossBar ? 64 + 60 + h / 2 - 20 : 64;
       this.toastC.setAlpha(0).setScale(0.8);
       s.tweens.add({ targets: this.toastC, alpha: 1, scale: 1, duration: 180, ease: 'Back.easeOut' });
@@ -605,9 +822,15 @@
       }
       s.paused = true;
       s.cancelPlacing();
+      this.showPauseMenu();
+    }
+
+    showPauseMenu() {
+      const s = this.scene;
       const set = MT.Save.settings();
       this.makeOverlay('PAUSED', '#ffd83a', [
         { label: 'RESUME', style: 'green', onClick: () => this.togglePause() },
+        { label: 'STATS', style: 'purple', icon: 'ic_trophy', onClick: () => this.showResults('pause') },
         { label: (set.sfx ? 'SOUND: ON' : 'SOUND: OFF'), style: 'blue', icon: 'ic_sound', onClick: (b) => {
           MT.Save.setSetting('sfx', !MT.Save.settings().sfx);
           MT.Audio.applySettings();
@@ -627,7 +850,7 @@
         } },
         { label: 'RESTART', style: 'yellow', icon: 'ic_restart', onClick: () => this.restart() },
         { label: 'MAIN MENU', style: 'red', icon: 'ic_home', onClick: () => this.home() },
-      ], `${s.mapDef.name} · ${s.diff.name} · ${s.heroDef.name}`);
+      ], s.mode === 'boss' ? `${MT.ENEMIES[s.bossId].name} · ${MT.BossFight.TIERS[s.bossTier].name} · ${s.heroDef.name}` : `${s.mapDef.name} · ${s.diff.name} · ${s.heroDef.name}`);
     }
 
     shakeLabel() {
@@ -636,20 +859,109 @@
     }
 
     showVictory() {
-      const s = this.scene;
-      this.makeOverlay('VICTORY!', '#7CFF6B', [
-        { label: 'FREEPLAY', style: 'green', onClick: () => s.continueFreeplay() },
-        { label: 'MAIN MENU', style: 'blue', icon: 'ic_home', onClick: () => this.home() },
-      ], `You beat ${s.mapDef.name} on ${s.diff.name}! Medal earned.`);
+      this.showResults('victory');
       this.confetti();
     }
 
     showDefeat() {
+      this.showResults('defeat');
+    }
+
+    // end-of-game report: summary numbers + the best towers, what they cost and earned
+    showResults(kind) {
       const s = this.scene;
-      this.makeOverlay('DEFEAT', '#ff6b6b', [
-        { label: 'TRY AGAIN', style: 'green', icon: 'ic_restart', onClick: () => this.restart() },
-        { label: 'MAIN MENU', style: 'blue', icon: 'ic_home', onClick: () => this.home() },
-      ], `The mutants broke through on round ${s.round}.`);
+      this.hideOverlay();
+      this.tip.hide();
+      const c = s.add.container(0, 0).setDepth(DEPTH + 100);
+      c.add(s.add.rectangle(0, 0, MT.CFG.W, MT.CFG.H, 0x0b1020, 0.7).setOrigin(0).setInteractive());
+      const px = 150, py = 40, pw = 980, ph = 640;
+      c.add(MT.UI.panel(s, px, py, pw, ph, 'denim'));
+      const boss = s.mode === 'boss';
+      const bossName = boss ? MT.ENEMIES[s.bossId].name : '';
+      const head = {
+        victory: boss ? ['BOSS DEFEATED!', '#7CFF6B', `You beat ${bossName} (${MT.BossFight.TIERS[s.bossTier].name}) in ${MT.BossFight.fmtTime(s.stat.time)}!`]
+          : ['VICTORY!', '#7CFF6B', `You beat ${s.mapDef.name} on ${s.diff.name}! Medal earned.`],
+        defeat: boss ? ['DEFEAT', '#ff6b6b', s.defeatReason === 'escaped' ? `${bossName} escaped with your bananas!` : 'The mutants broke through!']
+          : ['DEFEAT', '#ff6b6b', `The mutants broke through on round ${s.round}.`],
+        pause: ['GAME STATS', '#ffd83a', `${boss ? bossName : s.mapDef.name} · ${boss ? MT.BossFight.TIERS[s.bossTier].name : s.diff.name}`],
+      }[kind];
+      c.add(MT.MenuArt.title(s, 640, py + 46, head[0], 46, '#ffffff', head[1]));
+      c.add(MT.text(s, 640, py + 88, head[2], 17, { color: '#e8f1ff' }));
+      // records: towers on the map + the ones that were sold
+      const rows = s.towers.map((t) => s.towerRecord(t, false)).concat(s.stat.sold);
+      // boss battles are about damage, classic games about pops
+      rows.sort(boss ? (a, b) => b.dmg - a.dmg || b.pops - a.pops : (a, b) => b.pops - a.pops || b.dmg - a.dmg);
+      const spent = rows.reduce((a, r) => a + r.spent, 0);
+      const earned = rows.reduce((a, r) => a + r.earned, 0);
+      // summary column
+      const sx = px + 30, sy = py + 130;
+      c.add(MT.UI.panel(s, sx - 10, sy - 14, 260, 450, 'dark'));
+      const lines = [
+        [boss ? 'Waves survived' : 'Rounds', String(s.round)],
+        ['Game time', MT.BossFight.fmtTime(s.stat.time)],
+        ['Mutants popped', s.totalPops.toLocaleString('en-US')],
+        ['Lives lost', s.sandbox ? '-' : s.stat.livesLost.toLocaleString('en-US')],
+        ['Towers built', String(s.stat.built)],
+        ['Abilities used', String(s.stat.abilities)],
+        ['Bananas spent', U.money(spent)],
+        ['Bananas earned', U.money(earned)],
+      ];
+      lines.forEach(([k, v], i) => {
+        c.add(MT.text(s, sx + 6, sy + 14 + i * 40, k, 14, { ox: 0, color: '#9fb3d1' }));
+        c.add(MT.text(s, sx + 234, sy + 14 + i * 40, v, 19, { title: true, ox: 1 }));
+      });
+      // MVP
+      const mvp = rows[0];
+      if (mvp) {
+        c.add(MT.text(s, sx + 120, sy + 344, 'MVP', 18, { title: true, color: '#ffd83a' }));
+        const im = s.add.image(sx + 70, sy + 394, mvp.key);
+        im.setScale(Math.min(64 / im.height, 70 / im.width));
+        c.add(im);
+        const nm = MT.text(s, sx + 110, sy + 384, mvp.name, 16, { title: true, ox: 0 });
+        if (nm.width > 130) nm.setScale(130 / nm.width);
+        c.add(nm);
+        c.add(MT.text(s, sx + 110, sy + 406, boss ? `${mvp.dmg.toLocaleString('en-US')} damage` : `${mvp.pops.toLocaleString('en-US')} pops`, 13, { ox: 0, color: '#b8ffb0' }));
+      }
+      // tower table
+      const tx = px + 300, ty = py + 130;
+      c.add(MT.UI.panel(s, tx - 10, ty - 14, 660, 450, 'dark'));
+      const cols = [['TOWER', tx + 60, 0], ['POPS', tx + 380, 1], ['DAMAGE', tx + 470, 1], ['COST', tx + 555, 1], ['EARNED', tx + 640, 1]];
+      cols.forEach(([t, x, ox]) => c.add(MT.text(s, x, ty + 8, t, 13, { title: true, ox, color: '#ffd83a' })));
+      const maxPops = Math.max(1, ...rows.map((r) => r.pops));
+      const g = s.add.graphics();
+      c.add(g);
+      rows.slice(0, 8).forEach((r, i) => {
+        const y = ty + 52 + i * 50;
+        g.fillStyle(i % 2 ? 0x1b335c : 0x24497f, 0.55);
+        g.fillRoundedRect(tx - 2, y - 22, 644, 46, 8);
+        // pops bar
+        g.fillStyle(0x7be35a, 0.35);
+        g.fillRoundedRect(tx + 52, y + 10, 270 * (r.pops / maxPops), 6, 3);
+        const im = s.add.image(tx + 24, y, r.key);
+        im.setScale(Math.min(40 / im.height, 44 / im.width));
+        c.add(im);
+        const nm = MT.text(s, tx + 52, y - 6, r.name + (r.sold ? '  (sold)' : ''), 15, { title: true, ox: 0, color: r.sold ? '#9fb3d1' : '#ffffff' });
+        if (nm.width > 270) nm.setScale(270 / nm.width);
+        c.add(nm);
+        if (i === 0) c.add(MT.text(s, tx + 6, y - 20, '★', 16, { color: '#ffd83a', font: 'Arial' }));
+        c.add(MT.text(s, tx + 380, y, r.pops.toLocaleString('en-US'), 15, { title: true, ox: 1 }));
+        c.add(MT.text(s, tx + 470, y, r.dmg.toLocaleString('en-US'), 15, { title: true, ox: 1, color: '#ffb4a8' }));
+        c.add(MT.text(s, tx + 555, y, U.money(r.spent), 14, { ox: 1, color: '#cfe3ff' }));
+        c.add(MT.text(s, tx + 640, y, r.earned ? U.money(r.earned) : '-', 14, { ox: 1, color: '#b8ffb0' }));
+      });
+      if (!rows.length) c.add(MT.text(s, tx + 320, ty + 200, 'No towers were built.', 18, { color: '#9fb3d1' }));
+      // buttons
+      const btns = {
+        victory: boss
+          ? [{ label: 'PLAY AGAIN', style: 'green', icon: 'ic_restart', onClick: () => this.restart() }, { label: 'BOSS MENU', style: 'red', icon: 'ic_skull', onClick: () => this.home('BossSelect') }, { label: 'MAIN MENU', style: 'blue', icon: 'ic_home', onClick: () => this.home() }]
+          : [{ label: 'FREEPLAY', style: 'green', onClick: () => s.continueFreeplay() }, { label: 'MAIN MENU', style: 'blue', icon: 'ic_home', onClick: () => this.home() }],
+        defeat: [{ label: 'TRY AGAIN', style: 'green', icon: 'ic_restart', onClick: () => this.restart() }, { label: boss ? 'BOSS MENU' : 'MAIN MENU', style: 'blue', icon: boss ? 'ic_skull' : 'ic_home', onClick: () => this.home(boss ? 'BossSelect' : 'Menu') }],
+        pause: [{ label: 'BACK', style: 'blue', onClick: () => this.showPauseMenu() }],
+      }[kind];
+      btns.forEach((b, i) => c.add(new MT.UI.Button(s, 640 + (i - (btns.length - 1) / 2) * 250, py + ph - 42, 230, 54, Object.assign({ size: 22 }, b))));
+      this.overlay = c;
+      c.setAlpha(0);
+      s.tweens.add({ targets: c, alpha: 1, duration: 220 });
     }
 
     confetti() {
@@ -664,13 +976,13 @@
 
     restart() {
       const s = this.scene;
-      s.scene.restart({ map: s.mapDef.id, diff: s.diff.id, hero: s.heroId });
+      s.scene.restart(Object.assign({}, s.launchData, { map: s.mapDef.id, diff: s.diff.id, hero: s.heroId }));
     }
 
-    home() {
+    home(to = 'Menu') {
       const s = this.scene;
       s.cameras.main.fadeOut(250, 20, 30, 50);
-      s.cameras.main.once('camerafadeoutcomplete', () => s.scene.start('Menu'));
+      s.cameras.main.once('camerafadeoutcomplete', () => s.scene.start(to));
     }
   }
 

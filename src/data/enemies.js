@@ -19,6 +19,15 @@
     mecha: { name: 'Mecha Mutant', hp: 2400, speed: 0.38, children: ['titan', 'titan'], radius: 50, boss: true, armored: true, damageStates: 5, emp: { every: 6.5, r: 165, dur: 1.8 }, desc: 'An armored battle mech. Its EMP pulse shuts down nearby towers!' },
     goo: { name: 'Goo Behemoth', hp: 3200, speed: 0.32, children: ['mega', 'mega', 'mega', 'mega', 'mega', 'mega'], radius: 50, boss: true, damageStates: 5, regen: 0.015, noSlow: true, desc: 'A wobbling mountain of goo. Regenerates and shrugs off jelly.' },
     macho: { name: 'Mutant El Macho', hp: 40000, speed: 0.22, children: ['zeppelin', 'mecha'], radius: 70, boss: true, damageStates: 5, final: true, phases: [0.66, 0.33], desc: 'El Macho drank his own PX-41 serum. The final boss!' },
+    // ---- mutants that need new tactics
+    glider: { name: 'Glider', hp: 2, speed: 2.0, children: [], radius: 12, flying: true, desc: 'Flaps over the scenery on bat wings and cuts every corner. Only anti-air towers can hit it.' },
+    jetpack: { name: 'Jetpack Mutant', hp: 10, speed: 1.4, children: ['glider', 'glider', 'glider'], radius: 16, flying: true, fortifiable: true, desc: 'Rockets straight across the map. Pops into three Gliders. Needs anti-air.' },
+    mole: { name: 'Mole Mutant', hp: 6, speed: 1.5, children: ['chomper', 'chomper'], radius: 14, fortifiable: true, burrow: { up: 150, down: 210, speed: 1.7 }, desc: 'Digs under the track for long stretches. Nothing can hit it underground, but sonar pings drag it back up.' },
+    shield: { name: 'Shield Carrier', hp: 14, speed: 1.1, children: ['rascal', 'rascal'], radius: 16, fortifiable: true, shield: { r: 88, hp: 30, regen: 5, cooldown: 4 }, desc: 'Projects a bubble that soaks up every hit on the mutants around it. Pop the carrier first!' },
+    // ---- boss battle villains (only appear in Boss Battles)
+    vector: { name: 'Mutant Vector', hp: 5500, speed: 0.14, children: [], radius: 40, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'vector', desc: 'Vector took a sip of PX-41. Fires squids that ink your towers, hides behind shields and dashes on rocket boots.' },
+    bratt: { name: 'Balthazar Bratt', hp: 7000, speed: 0.13, children: [], radius: 42, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'bratt', desc: 'The 80s child star turned villain. Bubblegum bombs trap your towers, and he calls in moles and jetpacks.' },
+    scarlet: { name: 'Scarlet Overkill', hp: 4500, speed: 0.15, children: [], radius: 38, boss: true, bossFight: true, flying: true, damageStates: 5, phases: [0.66, 0.33], ai: 'scarlet', desc: 'Flies in her rocket dress, so only anti-air towers can hurt her. Lava-lamp bombs melt your towers.' },
   };
 
   // Red-bloon-equivalent: total hits needed to clear it completely
@@ -39,5 +48,6 @@
 
   MT.ENEMIES = E;
   MT.enemyRbe = rbe;
-  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'mega', 'titan', 'zeppelin', 'phantom', 'mecha', 'goo', 'macho'];
+  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'glider', 'jetpack', 'mole', 'shield', 'mega', 'titan', 'zeppelin', 'phantom', 'mecha', 'goo', 'macho'];
+  MT.BOSS_ORDER = ['vector', 'bratt', 'scarlet'];
 })();

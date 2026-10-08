@@ -36,7 +36,10 @@
     const v = MT.enemyRbe(e.type, e.fort);
     game.money += game.cashMul * v;
     game.totalPops += v;
-    if (t) t.pops += v;
+    if (t) {
+      t.pops += v;
+      t.earned += game.cashMul * v;
+    }
   }
 
   // something heavy falls from the sky onto (x, y)
@@ -129,7 +132,13 @@
     // ------------------------------------------------------------ towers
     bananaFrenzy(game) {
       game.timed.push({ type: 'bananaFrenzy', t: 12 });
-      for (const tw of game.towers) if (tw.type === 'banana') game.fx.ring(tw.x, tw.y, 40, 0xffd83a);
+      for (const tw of game.towers) {
+        if (tw.type !== 'banana') continue;
+        game.fx.ring(tw.x, tw.y, 46, 0xffd83a, { force: true });
+        game.fx.glowTrail(tw.x, tw.y - 20, 0xffd83a);
+        tw.bump = 1;
+      }
+      game.fx.weather('gold', 4);
     },
     overdrive(game, t) {
       game.timed.push({ type: 'overdrive', t: 15, x: t.x, y: t.y, r: t.stats.range });
@@ -153,6 +162,7 @@
       });
       game.timed.push({ type: 'snowstorm', t: 6 });
       for (let i = 0; i < 6; i++) game.fx.snow.explode(12, U.rand(60, W - 60), U.rand(60, H - 60));
+      game.fx.weather('snow', 6);
       game.fx.screenFlash(0xc8f0ff, 0.35, 400);
     },
     jellyStorm(game, t, all) {
@@ -162,6 +172,7 @@
       });
       game.timed.push({ type: 'jellyStorm', t: 10 });
       game.fx.screenFlash(0xa0ff78, 0.3, 400);
+      game.fx.weather('jelly', 6);
     },
     supplyDrop(game, t) {
       const x = U.clamp(t.x + U.rand(-120, 120), 40, W - 40), y = U.clamp(t.y + U.rand(-80, 80), 60, H - 40);
@@ -172,6 +183,7 @@
           game.fx.smoke.explode(10, x, y + 12);
           const v = U.round5(1500 * Math.min(1, game.cashMul * 2 + 0.3));
           game.money += v;
+          t.earned += v;
           game.fx.floatText(x, y - 30, '+' + U.money(v), '#7CFF6B', 24);
           MT.Audio.play('coin');
           game.tweens.add({ targets: crate, alpha: 0, delay: 500, duration: 400, onComplete: () => crate.destroy() });
@@ -287,7 +299,6 @@
       t.applyBuffs();
       game.fx.shockwave(t.x, t.y, 200, 0xffd83a, 600);
       game.fx.sparks.explode(26, t.x, t.y - 30);
-      game.fx.bigText('GIANT KEVIN!', '#ffd83a', 48);
       game.shake(0.15);
       MT.Audio.play('roar');
     },
@@ -391,7 +402,7 @@
       game.fx.shockwave(t.x, t.y, 1300, 0xbfe9ff, 900);
       game.fx.screenFlash(0xd8f4ff, 0.5, 700);
       for (let i = 0; i < 10; i++) game.fx.snow.explode(10, U.rand(40, W - 40), U.rand(40, H - 40));
-      game.fx.bigText('ICE AGE!', '#b3ecff', 50);
+      game.fx.weather('snow', 5);
       MT.Audio.play('freeze');
     },
     jellyTsunami(game, t) {
@@ -415,7 +426,6 @@
     wrathOfZeus(game, t) {
       const pw = powerOf(t);
       boltStorm(game, t, more(45, pw), 12 * pw, 350 * pw, 0xd1b3ff, 4.5);
-      game.fx.bigText('WRATH OF ZEUS!', '#d1b3ff', 46);
     },
     carpetBomb(game, t) {
       const pw = powerOf(t);
@@ -424,7 +434,6 @@
     encore(game, t) {
       const pw = powerOf(t);
       danceAll(game, 6 + (pw - 1) * 2, 3 + (pw - 1), { dmg: 5 * pw, every: 0.5, dur: 6 }, t);
-      game.fx.bigText('ENCORE!', '#ff4081', 50);
     },
     bananaRain(game, t) {
       const v = U.round5((3000 + game.round * 120) * powerOf(t));
@@ -439,6 +448,8 @@
         });
       }
       game.money += v;
+      t.earned += v;
+      game.fx.weather('gold', 2);
       game.fx.floatText(t.x, t.y - 80, '+' + U.money(v), '#ffe14a', 30);
       MT.Audio.play('coin');
     },
@@ -448,14 +459,12 @@
         if (o !== t && o.stats.attack !== 'none') game.fx.lightning(t.x, t.y - 40, o.x, o.y - 20, 0xe040fb, 2, 0.4);
       });
       game.fx.shockwave(t.x, t.y, 900, 0xe040fb, 700);
-      game.fx.bigText('LAB OVERLOAD!', '#e040fb', 46);
     },
     spikeStorm(game, t) {
       nailCarpet(game, t, 30, 1);
     },
     ironRain(game, t) {
       nailCarpet(game, t, 22, powerOf(t) * 1.6);
-      game.fx.bigText('IRON RAIN!', '#cfd8dc', 46);
     },
     nukeLaunch(game, t, all) {
       const target = strongestBoss(game) || byStrength(all)[0];
@@ -487,7 +496,6 @@
           game.addProjectile(new MT.Projectile(game, t, t.x, t.y - 10, a + U.rand(-0.3, 0.3), p, { range: 2000, target: tg }));
         });
       }
-      game.fx.bigText('LEVIATHAN!', '#26c6da', 48);
     },
     supernova(game, t, all) {
       game.slowmo = 0.6;
@@ -501,7 +509,6 @@
         if (e.boss) game.damageEnemy(e, 25000 * powerOf(t), t);
         else obliterate(game, e, t);
       });
-      game.fx.bigText('SUPERNOVA!', '#fff176', 56);
       MT.Audio.play('nuke');
     },
   };

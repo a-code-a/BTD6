@@ -5,8 +5,9 @@
 purple minions.
 
 Every graphic in the game is drawn procedurally in code with the Canvas 2D API: the minions, Gru,
-the purple mutants, all five maps, projectiles, effects, icons and UI. The game uses no image files.
-Sound effects and the music loop are synthesized live with the Web Audio API.
+the purple mutants, the villains, all ten maps, the menus, projectiles, effects, icons and UI. The game
+uses no image files. Sound effects, the minion voices and the three music tracks (menu, battle, boss)
+are synthesized live with the Web Audio API.
 
 ## Play
 
@@ -24,7 +25,7 @@ Phaser and the fonts (Luckiest Guy and Fredoka) are vendored in `lib/` and `font
 
 ## How to play
 
-1. Pick a map, a hero and a difficulty (Easy: 40 rounds, Medium: 60, Hard: 80).
+1. Pick a map, a hero and a difficulty (Easy: 40 rounds, Medium: 60, Hard: 80), or **Sandbox**.
 2. Choose a tower in the right-hand shop and click the map to place it. The range circle turns red
    where you can't build.
 3. Press **PLAY** to send the next round. Press it again to toggle **3x speed**.
@@ -42,6 +43,25 @@ Phaser and the fonts (Luckiest Guy and Fredoka) are vendored in `lib/` and `font
      looks different. Its core fires the **Omega Beam**, which mixes the powers of all three parts.
 8. Click **MOVE** (or press `M`) to pick up any placed tower and put it somewhere else for a small fee.
 9. Beat the final round to earn a medal for that map and difficulty, then keep going in freeplay.
+10. The panel in the top-left corner previews the **next round** (click it to fold it away), so you
+    can get Camo detection or anti-air ready in time. Hover an icon for details.
+11. After a game (or any time from the pause menu, **STATS**) you get a report: rounds, time, pops,
+    lives lost, and a table of your towers with pops, damage dealt, cost and bananas earned, plus the MVP.
+
+### Game modes
+
+- **Classic**: 10 maps × 3 difficulties = 30 medals.
+- **Boss Battles** (main menu): fight one of three villains in their own arena. You start with a big
+  budget, then summon the boss with PLAY. Escort waves keep coming every few seconds (each pays out like a
+  round) until you defeat the boss, or it reaches the end of the track. Each boss has three phases and its
+  own attacks against your towers. **Normal** and **Elite** difficulty; your best time is saved.
+- **Sandbox**: unlimited bananas and lives, no medals. The sandbox panel lets you play any round, send
+  any mutant (also Camo / Fortified and the bosses), clear the map, reset ability cooldowns and max out
+  your hero. Perfect for testing fusion, Ultimate and Omega combos.
+
+The main menu also has a **Heroes** gallery (level perks and abilities), the **Almanac** (every tower,
+upgrade path, fusion, anti-air source and mutant) and **Settings** (music / sound volume, screen shake,
+auto-start, reset progress).
 
 Every tower has a signature mechanic (★ in its panel, full text on hover), towers turn to face what they
 shoot at, and screen shake is gentle by default (ON, LOW or OFF in the pause menu). The game renders at
@@ -59,6 +79,7 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 | `M` | Move the selected tower |
 | `Tab` | Cycle targeting (First, Last, Close, Strong) |
 | `Backspace` / `Delete` | Sell selected tower |
+| `1` – `9` | Use the abilities in the ability bar |
 | `Esc` | Cancel placement, deselect, or pause |
 | Hold `Shift` while placing | Place several of the same tower |
 
@@ -82,6 +103,14 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 | Super Minion | Momentum: fires up to 2x faster the longer it shoots | Laser → Plasma → Sun Minion, Robo Minion, Dark Legend |
 
 Submarines float on water, lava and the purple goo pools (every map has at least one).
+
+**Anti-air** (needed for flying mutants): heroes, every fusion tier, the Laser Sniper, Tesla Minion,
+Minion Pilot and Super Minion always hit flyers. The Banana Crossbow, Homing Rockets and Ballistic
+Missile upgrades add it, and a Lab with **Radar Scanner** gives anti-air to every tower in its ring.
+Nail traps and gas or fire clouds stay on the ground.
+
+Abilities show a cut-in banner and a charge-up beam when used; the ability bar shows countdowns and
+flashes when an ability is ready again.
 
 ### Super Fusions
 
@@ -149,13 +178,32 @@ The endgame (late Hard rounds and freeplay) adds monsters with their own powers:
 Every new giant gets a warning banner when it first appears, and giants explode in a multi-stage
 burst when they go down.
 
+Tactical mutants that need a plan:
+
+- **Glider** and **Jetpack Mutant**: they fly a shortcut over the scenery, and only anti-air towers can
+  hit them. A Jetpack pops into three Gliders.
+- **Mole Mutant**: digs under the track for long stretches, where nothing can hit it. Submarine sonar
+  pings drag it back to the surface, dazed.
+- **Shield Carrier**: projects a bubble that soaks up every hit on the mutants around it. The bubble
+  doesn't protect the carrier itself, so pop it first (Snipers, "Strong" targeting).
+
+## Boss Battles
+
+| Villain | Arena | Attacks |
+| --- | --- | --- |
+| **Mutant Vector** | Pyramid Desert | Squid launcher inks towers for a few seconds; phase 2: double squids and a shield bubble; phase 3: rocket-boot dashes |
+| **Balthazar Bratt** | Banana Beach | Bubblegum bombs trap clusters of towers; phase 2: gum shield and keytar solos that stun nearby towers; phase 3: faster, calls jetpacks and brutes |
+| **Scarlet Overkill** | Villain-Con City | Flies (anti-air only!); lava-lamp bombs melt towers; calls Gliders, Shield Carriers and Moles; phase 3: rocket-dress dashes |
+
+All three summon escorts, and stunning or freezing a boss slows its attacks down. A tower that just
+recovered from an attack is immune for a few seconds, so it can't be locked down forever.
+
 ## Maps
 
-- **Gru's Backyard** (Beginner)
-- **Banana Jungle** (Intermediate)
-- **The Moon** (Intermediate)
-- **Gru's Secret Lab** (Advanced, two lanes)
-- **Volcano Lair** (Expert)
+- **Gru's Backyard** and **Banana Beach** (Beginner)
+- **Banana Jungle**, **The Moon** and **Pyramid Desert** (Intermediate)
+- **Gru's Secret Lab** (two lanes), **Arctic Base** (two lanes) and **Villain-Con City** (Advanced)
+- **Volcano Lair** and **Minion Factory** (Expert)
 
 ## Project layout
 
@@ -164,14 +212,15 @@ index.html            entry page (loads scripts in order)
 lib/phaser.min.js     Phaser 3.90 (MIT)
 fonts/                Luckiest Guy (Apache 2.0), Fredoka (OFL)
 src/core/             config, save data, Web Audio synth
-src/art/              procedural painters: minions, towers, heroes, enemies, bosses, maps, effects/icons
+src/art/              procedural painters: minions, towers, heroes, enemies, villains, maps, menu, effects/icons
 src/data/             towers & upgrades & fusions, heroes, enemies, rounds, maps
-src/game/             path, entities (enemy/projectile/tower), effects layer, abilities, bosses, fusion
-src/ui/               widgets (buttons/panels) and the in-game HUD
-src/scenes/           boot, menu, map select, game
+src/game/             path, entities (enemy/projectile/tower), effects layer, abilities, giants, bosses,
+                      boss battles, fusion
+src/ui/               widgets (buttons/sliders/panels) and the in-game HUD
+src/scenes/           boot, main menu, map select, heroes, almanac, settings, boss select, game
 ```
 
-Progress (medals, settings) is stored in the browser's `localStorage`.
+Progress (medals, boss best times, stats, settings) is stored in the browser's `localStorage`.
 
 ---
 

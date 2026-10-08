@@ -27,7 +27,7 @@
         { name: 'Sharp Eyes', ups: [
           up('Long Arm', 90, 'Increases range.', (s) => { s.range += 25; }),
           up('Goggle Zoom', 200, 'More range and can see Camo mutants.', (s) => { s.range += 25; s.camo = true; }),
-          up('Banana Crossbow', 625, 'Fast banana bolts deal 3 damage.', (s) => { Object.assign(s.proj, { tex: 'p_bolt', dmg: 3, speed: 900, r: 6, spin: 0, boomerang: false }); s.proj.pierce += 1; s.range += 30; }),
+          up('Banana Crossbow', 625, 'Fast banana bolts deal 3 damage and can shoot down flying mutants.', (s) => { Object.assign(s.proj, { tex: 'p_bolt', dmg: 3, speed: 900, r: 6, spin: 0, boomerang: false }); s.proj.pierce += 1; s.range += 30; s.air = true; }),
           up('Sharpshooter', 2000, '6 damage bolts and a crit for 5x damage every 10 shots.', (s) => { s.proj.dmg = 6; s.proj.crit = { every: 10, mult: 5 }; s.rate *= 0.8; }),
         ] },
       ],
@@ -80,7 +80,7 @@
         ] },
         { name: 'Smart Rockets', ups: [
           up('Laser Guidance', 200, 'More range, faster rockets.', (s) => { s.range += 25; s.proj.speed *= 1.3; }),
-          up('Homing Rockets', 300, 'Rockets chase their target.', (s) => { s.proj.homing = true; }),
+          up('Homing Rockets', 300, 'Rockets chase their target and can hit flying mutants.', (s) => { s.proj.homing = true; s.air = true; }),
           up('Giant Seeker', 1200, 'Prefers giants and deals +12 damage to them.', (s) => { s.proj.moabDmg = (s.proj.moabDmg || 0) + 12; s.preferBoss = true; }),
           up('Giant Eliminator', 5000, '+50 damage to giants. Ability: Mega Missile.', (s) => { s.proj.moabDmg += 50; s.ability = 'megaMissile'; }),
         ] },
@@ -148,7 +148,7 @@
       name: 'Laser Sniper', cost: 350, key: 'Y', size: 16,
       desc: 'Hits anything anywhere on the map. Lasers burn through armor.',
       trait: 'Focus fire: each hit in a row on the same mutant deals more damage (up to 5 stacks).',
-      base: { range: 2000, rate: 1.6, attack: 'instant', focus: { max: 5 }, proj: P({ dmg: 2, pierce: 1, type: 'energy' }) },
+      base: { range: 2000, rate: 1.6, attack: 'instant', air: true, focus: { max: 5 }, proj: P({ dmg: 2, pierce: 1, type: 'energy' }) },
       paths: [
         { name: 'Power', ups: [
           up('Full Power', 350, '4 damage per shot.', (s) => { s.proj.dmg = 4; }),
@@ -175,7 +175,7 @@
       name: 'Tesla Minion', cost: 600, key: 'A', size: 16,
       desc: 'Zaps mutants with chain lightning that jumps from one to the next. Lightning burns through armor.',
       trait: 'Chain lightning: every zap jumps on to nearby mutants.',
-      base: { range: 125, rate: 1.1, attack: 'chain', count: 1, proj: P({ dmg: 1, pierce: 1, type: 'energy', chain: { jumps: 3, range: 85 } }) },
+      base: { range: 125, rate: 1.1, attack: 'chain', air: true, count: 1, proj: P({ dmg: 1, pierce: 1, type: 'energy', chain: { jumps: 3, range: 85 } }) },
       paths: [
         { name: 'High Voltage', ups: [
           up('Copper Coils', 250, 'Lightning jumps 2 more times.', (s) => { s.proj.chain.jumps += 2; }),
@@ -202,7 +202,7 @@
       name: 'Minion Pilot', cost: 800, key: 'S', size: 18,
       desc: 'Circles the area in a little propeller plane and strafes mutants from above.',
       trait: 'Air patrol: the planes circle the airfield and shoot whatever is below them.',
-      base: { range: 120, rate: 0.5, attack: 'plane', planes: 1, orbit: 62, planeSpeed: 1.5, proj: P({ tex: 'p_dart', speed: 760, dmg: 1, pierce: 2, r: 5 }) },
+      base: { range: 120, rate: 0.5, attack: 'plane', air: true, planes: 1, orbit: 62, planeSpeed: 1.5, proj: P({ tex: 'p_dart', speed: 760, dmg: 1, pierce: 2, r: 5 }) },
       paths: [
         { name: 'Firepower', ups: [
           up('Twin Guns', 300, 'Fires two darts at once.', (s) => { s.count = 2; s.spread = 5; }),
@@ -288,7 +288,7 @@
         { name: 'Torpedoes', ups: [
           up('Twin Tubes', 300, 'Fires 2 torpedoes.', (s) => { s.count = 2; s.spread = 14; }),
           up('Big Torpedoes', 600, 'Bigger blasts with 2 damage.', (s) => { Object.assign(s.proj.explode, { r: 42, dmg: 2, pierce: 14 }); }),
-          up('Ballistic Missile', 1900, 'Every 3rd volley also launches a missile at the strongest giant.', (s) => { s.alt = { every: 3, boss: true, proj: P({ tex: 'p_rocket', scale: 1.4, speed: 600, dmg: 0, pierce: 1, type: 'explosive', r: 8, homing: true, explode: { r: 50, dmg: 4, pierce: 20 }, moabDmg: 30 }) }; }),
+          up('Ballistic Missile', 1900, 'Every 3rd volley also launches a missile at the strongest giant. Can hit flying mutants.', (s) => { s.air = true; s.alt = { every: 3, boss: true, proj: P({ tex: 'p_rocket', scale: 1.4, speed: 600, dmg: 0, pierce: 1, type: 'explosive', r: 8, homing: true, explode: { r: 50, dmg: 4, pierce: 20 }, moabDmg: 30 }) }; }),
           up('Nuclear Sub', 6500, '+20 damage to giants. Ability: Nuclear Launch.', (s) => { s.proj.moabDmg = (s.proj.moabDmg || 0) + 20; s.ability = 'nukeLaunch'; }),
         ] },
         { name: 'Engines', ups: [
@@ -352,9 +352,9 @@
           up('Evil Empire', 8000, '+$1000 every round, 20% discount.', (s) => { s.flat += 700; s.buff.discount = 0.2; }),
         ] },
         { name: 'Radar', ups: [
-          up('Radar Scanner', 500, 'Towers in range can see Camo.', (s) => { s.buff.camo = true; }),
+          up('Radar Scanner', 500, 'Towers in range can see Camo and shoot down flying mutants.', (s) => { s.buff.camo = true; s.buff.air = true; }),
           up('Armor Piercers', 1300, 'Towers in range can damage armor with anything.', (s) => { s.buff.armored = true; }),
-          up('Lab Turret', 3000, 'The lab fires lasers itself.', (s) => { s.attack = 'instant'; s.rate = 0.35; s.camo = true; s.proj = P({ dmg: 3, pierce: 1, type: 'energy' }); }),
+          up('Lab Turret', 3000, 'The lab fires lasers itself.', (s) => { s.attack = 'instant'; s.rate = 0.35; s.camo = true; s.air = true; s.proj = P({ dmg: 3, pierce: 1, type: 'energy' }); }),
           up('Ultimate Lab', 12000, 'Turret fires mega-lasers rapidly.', (s) => { s.rate = 0.12; s.proj.dmg = 12; s.proj.moabDmg = 10; }),
         ] },
       ],
@@ -364,7 +364,7 @@
       name: 'Super Minion', cost: 2500, key: 'O', size: 17,
       desc: 'A caped hero minion that attacks incredibly fast, and faster the longer it fights.',
       trait: 'Momentum: fires faster and faster (up to 2x) while it keeps shooting.',
-      base: { range: 165, rate: 0.06, attack: 'proj', momentum: 1, proj: P({ tex: 'p_dart', speed: 950, r: 5 }) },
+      base: { range: 165, rate: 0.06, attack: 'proj', air: true, momentum: 1, proj: P({ tex: 'p_dart', speed: 950, r: 5 }) },
       paths: [
         { name: 'Laser Vision', ups: [
           up('Laser Eyes', 3000, 'Lasers pop 2 mutants and burn armor.', (s) => { Object.assign(s.proj, { tex: 'p_laser', type: 'energy' }); s.proj.pierce = 2; }),

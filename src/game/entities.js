@@ -9,7 +9,11 @@
     return 1 + (c + 1) * x * x * x + c * x * x;
   };
   // giants that walk on legs kick up dust when they stomp
-  const STOMPERS = { mega: 1, titan: 1, mecha: 1, macho: 1 };
+  const STOMPERS = { mega: 1, titan: 1, mecha: 1, macho: 1, vector: 1, bratt: 1 };
+  // flying mutants hover this many px above their route
+  const FLY = 24;
+  // art that faces right and should turn with the direction of travel
+  const FACERS = { zeppelin: 1, mecha: 1, vector: 1, bratt: 1, scarlet: 1, jetpack: 1, glider: 1 };
 
   // ===================================================================== Enemy
   class Enemy {
@@ -21,14 +25,17 @@
       this.id = ++game.uid;
       this.boss = !!def.boss;
       this.pathIndex = o.path || 0;
-      this.path = game.paths[this.pathIndex];
+      // flyers follow a corner-cutting air route instead of the track
+      this.flying = !!def.flying;
+      this.path = (this.flying ? game.airPaths : game.paths)[this.pathIndex];
       this.dist = o.dist || 0;
       this.camo = !!o.camo || !!def.alwaysCamo;
-      this.fort = !!o.fort && (def.boss || def.armored || type === 'brute');
+      this.fort = !!o.fort && (def.boss || def.armored || type === 'brute' || def.fortifiable);
       const sc = game.scaling;
       let hp = def.hp;
       if (this.fort) hp = type === 'tincan' ? 4 : hp * 2;
       if (this.boss) hp = Math.round(hp * sc.hp);
+      if (o.hpMul) hp = Math.round(hp * o.hpMul);
       this.maxHp = hp;
       this.hp = hp;
       this.speed = def.speed * MT.CFG.SPEED_UNIT * sc.speed;
@@ -58,15 +65,25 @@
       this.empT = def.emp ? def.emp.every * 0.5 : 0;
       this.lastStep = 0;
       this.wobble = Math.random() * 6.28;
+      // Mole Mutant: alternates between running on the surface and digging under it
+      this.burrowed = false;
+      this.burrowAcc = 0;
+      // Shield Carrier bubble (soaks up hits on nearby mutants); shieldSrc = who protects us now
+      const sh = def.shield;
+      this.bubble = sh ? { hp: sh.hp * (this.fort ? 2 : 1), max: sh.hp * (this.fort ? 2 : 1), regen: sh.regen, cd: sh.cooldown, broken: 0, r: sh.r, color: 0x6ecbff, hitT: 0 } : null;
+      this.shieldSrc = null;
+      this.ai = null; // boss battle brain, see MT.BossFight
       const p = this.path.atInto(this.dist, { x: 0, y: 0, dx: 1 });
       this.x = p.x;
-      this.y = p.y;
+      this.y = p.y - (this.flying ? FLY : 0);
       this.dir = p.dx >= 0 ? 1 : -1;
       this.sprite = game.add.image(this.x, this.y, this.texKey()).setScale(1 / S);
       this.sprite.setOrigin(0.5, game.enemyOrigin(type));
       if (this.camo && !def.alwaysCamo) this.sprite.setAlpha(0.82);
       this.sprite.setDepth(1000 + this.y);
       this.overlay = null;
+      if (this.flying) this.shadow = game.add.image(this.x, this.y + FLY, 'fx_shadow').setAlpha(0.3).setDepth(990).setScale((this.radius * 2.2) / 128, (this.radius * 1.2) / 48);
+      if (def.ai) MT.BossFight.attach(game, this);
     }
     texKey() {
       return MT.EnemyArt.key(this.game, this.type, this.camo, this.fort, this.dmgState);
@@ -94,15 +111,29 @@
         return;
       }
       if (this.stunImmune > 0) return;
-      if (this.def.final) dur *= 0.5;
+      if (this.def.final || this.def.bossFight) dur *= 0.5;
       this.stun = Math.max(this.stun, dur);
       this.stunImmune = dur + 1.4;
     }
     speedNow() {
+      if (this.burrowed) return this.speed * this.def.burrow.speed * this.enrage;
       if (this.stun > 0 || this.freeze > 0 || this.dance > 0) return 0;
       let m = this.auraMul * this.game.globalSlow(this) * this.enrage;
       if (this.slowT > 0) m *= this.slowMul;
       return this.speed * m;
+    }
+    // dig under (down = true) or pop back up out of the ground
+    dig(down) {
+      this.burrowed = down;
+      this.burrowAcc = 0;
+      const g = this.game;
+      g.fx.dust.explode(down ? 6 : 9, this.x, this.y + this.radius * 0.6);
+      if (!down) {
+        this.burst = true;
+        this.age = 0;
+        g.fx.debris.explode(3, this.x, this.y);
+      }
+      MT.Audio.play('dig', this.x);
     }
     update(dt) {
       if (this.freeze > 0) {
@@ -115,6 +146,25 @@
       if (this.dance > 0) this.dance -= dt;
       if (this.shredT > 0) this.shredT -= dt;
       const def = this.def;
+      if (this.ai) {
+        MT.BossFight.update(this.game, this, dt);
+        if (this.dead) return;
+      }
+      const bb = this.bubble;
+      if (bb) {
+        if (bb.hitT > 0) bb.hitT -= dt;
+        if (bb.broken > 0) {
+          bb.broken -= dt;
+          if (bb.broken <= 0) {
+            if (bb.once) this.bubble = null;
+            else {
+              bb.hp = bb.max;
+              bb.grow = 0;
+              MT.Audio.play('shield', this.x);
+            }
+          }
+        } else bb.hp = Math.min(bb.max, bb.hp + bb.regen * dt);
+      }
       if (def.regen && this.hp < this.maxHp) {
         this.hp = Math.min(this.maxHp, this.hp + this.maxHp * def.regen * dt);
         this.setDamageState();
@@ -133,7 +183,14 @@
           MT.Bosses.emp(this.game, this);
         }
       }
-      this.dist += this.speedNow() * dt;
+      const moved = this.speedNow() * dt;
+      this.dist += moved;
+      if (def.burrow) {
+        const b = def.burrow;
+        this.burrowAcc += moved;
+        if (!this.burrowed && this.burrowAcc >= b.up && this.dist > 60 && this.remaining > b.down + 90) this.dig(true);
+        else if (this.burrowed && (this.burrowAcc >= b.down || this.remaining < 70)) this.dig(false);
+      }
       if (this.dot) {
         this.dot.left -= dt;
         this.dot.t -= dt;
@@ -151,7 +208,7 @@
       }
       const p = this.path.atInto(this.dist, Enemy._tmp);
       this.x = p.x;
-      this.y = p.y;
+      this.y = p.y - (this.flying ? FLY : 0);
       if (Math.abs(p.dx) > 0.3) this.dir = p.dx > 0 ? 1 : -1;
       this.auraMul = 1;
     }
@@ -161,6 +218,19 @@
       this.age += dt;
       if (this.hitT > 0) this.hitT -= dt;
       if (this.hitCool > 0) this.hitCool -= dt;
+      this.renderBubble(time, dt);
+      if (this.burrowed) {
+        // only a travelling mound of dirt shows where the mole is digging
+        sp.setVisible(false);
+        if (this.overlay) this.overlay.setVisible(false);
+        if (!this.mound) this.mound = this.game.add.image(0, 0, 'fx_mound').setScale(0.9 / S);
+        const q = Math.sin(time * 0.03 + this.wobble);
+        this.mound.setVisible(true).setPosition(this.x, this.y + this.radius * 0.55 + q).setDepth(1000 + this.y).setScale((0.85 + q * 0.06) / S, (0.85 - q * 0.06) / S);
+        if (Math.random() < dt * 9) this.game.fx.dust.explode(1, this.x + U.rand(-8, 8), this.y + this.radius * 0.7);
+        return;
+      }
+      if (this.mound) this.mound.setVisible(false);
+      if (!sp.visible) sp.setVisible(true);
       const moving = this.freeze <= 0 && this.stun <= 0 && this.dance <= 0;
       const w = this.boss ? 0.05 : 0.12;
       const t = time * 0.012 * (this.speed / 60 + 0.6) * this.enrage + this.wobble;
@@ -175,7 +245,7 @@
         lift = -Math.abs(s) * (this.boss ? 3 : 2.2);
         rot = s * w;
         // heavy footsteps
-        if (STOMPERS[this.type] && (s > 0) !== (this.lastStep > 0)) {
+        if (STOMPERS[this.type] && !this.flying && (s > 0) !== (this.lastStep > 0)) {
           const side = s > 0 ? 1 : -1;
           this.game.fx.stomp(this.x + side * this.radius * 0.35, this.y + this.radius * 0.95, this.radius);
         }
@@ -186,6 +256,14 @@
         sx = 1 + q * 0.06;
         sy = 1 - q * 0.06;
         rot *= 0.4;
+      }
+      if (this.flying) {
+        // hovering: a slow bob and a wing-flap squash instead of walking
+        const f = time * 0.02 + this.wobble;
+        lift = Math.sin(f * 0.3) * 3.5;
+        sy *= 1 + Math.sin(f * 1.7) * 0.05;
+        rot = Math.sin(f * 0.45) * 0.07;
+        if (this.shadow) this.shadow.setPosition(this.x, this.y + FLY + this.radius * 0.8).setAlpha(0.2 + (lift + 3.5) * 0.02);
       }
       if (this.burst && this.age < 0.28) {
         const k = 0.35 + 0.65 * backOut(this.age / 0.28);
@@ -200,17 +278,38 @@
       sp.x = this.x;
       sp.y = this.y + lift;
       sp.rotation = rot;
-      if (this.type === 'zeppelin' || this.type === 'mecha') sp.setFlipX(this.dir < 0);
-      sp.setDepth(1000 + this.y);
+      if (FACERS[this.type]) sp.setFlipX(this.dir < 0);
+      sp.setDepth(1000 + this.y + (this.flying ? 400 : 0));
       if (this.def.alwaysCamo) sp.setAlpha(0.62 + Math.sin(time * 0.004 + this.wobble) * 0.16);
       // status tint
       if (this.freeze > 0) sp.setTint(0xa8dcff);
       else if (this.hitT > 0) sp.setTint(0xffd2d2);
+      else if (this.shieldSrc && this.shieldSrc !== this) sp.setTint(0xcdeeff);
       else if (this.slowT > 0) sp.setTint(this.slowAcid ? 0xd8ffb0 : 0xffc0d0);
       else if (this.enrage > 1) sp.setTint(0xffb0b0);
       else if (this.shredT > 0) sp.setTint(0xffcf9e);
       else sp.clearTint();
       this.updateOverlay();
+    }
+    // the shield dome of a Shield Carrier (or a boss shielding itself)
+    renderBubble(time, dt) {
+      const bb = this.bubble;
+      const on = bb && bb.hp > 0 && !(bb.broken > 0) && !this.burrowed;
+      if (!on) {
+        if (this.bubbleSprite) this.bubbleSprite.setVisible(false);
+        return;
+      }
+      if (!this.bubbleSprite) this.bubbleSprite = this.game.add.image(0, 0, 'fx_bubble').setBlendMode(Phaser.BlendModes.ADD);
+      bb.grow = Math.min(1, (bb.grow == null ? 1 : bb.grow) + dt * 2.5);
+      const r = (bb.self ? this.radius * 1.55 : bb.r) * (0.3 + 0.7 * backOut(bb.grow));
+      const pulse = 1 + Math.sin(time * 0.006 + this.wobble) * 0.025;
+      const k = bb.hp / bb.max;
+      this.bubbleSprite.setVisible(true).setTint(bb.color)
+        .setPosition(this.x, this.y - (bb.self ? this.radius * 0.2 : 0))
+        .setDisplaySize(r * 2 * pulse, r * (bb.self ? 2 : 1.7) * pulse)
+        .setAlpha(Math.min(1, 0.32 + 0.45 * k + (bb.hitT > 0 ? 0.35 : 0)))
+        .setDepth(1000 + this.y + (this.flying ? 401 : bb.self ? 2 : 40));
+      this.bubbleSprite.rotation += dt * 0.3;
     }
     updateOverlay() {
       let want = null;
@@ -224,6 +323,7 @@
         return;
       }
       if (!this.overlay) this.overlay = this.game.add.image(0, 0, want);
+      this.overlay.setVisible(true);
       if (this.overlay.texture.key !== want) this.overlay.setTexture(want);
       const r = this.radius;
       if (want === 'fx_ice') this.overlay.setDisplaySize(r * 2.4, r * 2.8).setPosition(this.x, this.y - r * 0.2);
@@ -250,8 +350,12 @@
       this.sprite.destroy();
       if (this.overlay) this.overlay.destroy();
       this.overlay = null;
+      [this.shadow, this.mound, this.bubbleSprite].forEach((o) => o && o.destroy());
+      this.shadow = this.mound = this.bubbleSprite = null;
+      if (this.ai) MT.BossFight.detach(this.game, this);
     }
   }
+  Enemy.FLY = FLY;
   Enemy._tmp = { x: 0, y: 0, dx: 1 };
 
   // ================================================================ Projectile
@@ -319,7 +423,7 @@
         this.vy = Math.sin(this.angle) * this.speed;
       }
       if (this.p.homing) {
-        if (!this.target || this.target.dead) this.target = g.nearestEnemy(this.x, this.y, 260, this.tower && this.tower.stats.camo);
+        if (!this.target || this.target.dead || this.target.burrowed) this.target = g.nearestEnemy(this.x, this.y, 260, this.tower && this.tower.stats.camo, null, !this.tower || this.tower.stats.air);
         if (this.target) {
           const want = Math.atan2(this.target.y - this.y, this.target.x - this.x);
           let diff = Phaser.Math.Angle.Wrap(want - this.angle);
@@ -341,7 +445,7 @@
       const cand = g.queryEnemies(this.x, this.y, this.r + 60);
       for (let i = 0; i < cand.length; i++) {
         const e = cand[i];
-        if (e.dead || this.hit.has(e.id)) continue;
+        if (e.dead || this.hit.has(e.id) || !g.hittable(e, this.tower, this.p)) continue;
         const rr = e.radius + this.r;
         if (U.dist2(this.x, this.y, e.x, e.y) > rr * rr) continue;
         this.onHit(e);
@@ -452,6 +556,11 @@
       this.xp = 0;
       this.pops = 0;
       this.spent = 0;
+      this.dmg = 0; // damage dealt, for the end-of-game stats
+      this.earned = 0; // bananas this tower made (pops, farms, banks)
+      this.bump = 0; // upgrade squash animation
+      this.disableKind = null; // what knocked it out: emp / ink / gum / lava
+      this.disableSprite = null;
       this.cool = 0.15;
       this.targetMode = 0;
       this.shots = 0;
@@ -555,6 +664,8 @@
         s.range *= 1.5;
         s.rate *= 0.35;
       }
+      // heroes and every fusion tier can shoot down flying mutants; a Lab radar grants it too
+      if (this.hero || this.fused || this.omega || (b && b.air)) s.air = true;
       this.stats = s;
     }
     // can this path be upgraded given crosspath rules
@@ -863,7 +974,15 @@
       const k = this.kick;
       const breathe = 1 + Math.sin(time * 0.004 + this.id) * 0.012;
       const base = ((pop * this.growth) / S) * (this.omega ? MT.TowerArt.OMEGA_SCALE : 1);
-      sp.setScale(base * (1 + 0.07 * k), base * (1 - 0.07 * k) * breathe);
+      // springy bounce right after an upgrade
+      let bx = 0, by = 0;
+      if (this.bump > 0) {
+        const w = Math.sin((1 - this.bump) * Math.PI * 4) * this.bump;
+        bx = w * 0.16;
+        by = -w * 0.14;
+        this.bump = Math.max(0, this.bump - dt * 2.4);
+      }
+      sp.setScale(base * (1 + 0.07 * k + bx), base * (1 - 0.07 * k + by) * breathe);
       sp.rotation = this.facing * this.tilt * 0.55;
       // position, with a little hop arc right after the tower was moved
       let px = this.x, py = this.y;
@@ -878,8 +997,24 @@
       sp.y = py - Math.sin(dir) * 2.5 * k;
       sp.setDepth(1000 + this.y + (this.giant > 0 ? 400 : 0));
       if (this.disabled > 0) {
-        sp.setTint(Math.floor(time / 90) % 2 ? 0x7f8cff : 0xc0c8ff);
-        if (Math.random() < dt * 6) this.game.fx.sparks.explode(1, this.x + U.rand(-12, 12), this.y - U.rand(0, 30));
+        const kind = this.disableKind;
+        if (kind === 'ink') sp.setTint(0x77779c);
+        else if (kind === 'gum') sp.setTint(0xffc6e6);
+        else if (kind === 'lava') {
+          sp.setTint(Math.floor(time / 120) % 2 ? 0xff9c6b : 0xffc9a8);
+          if (Math.random() < dt * 10) this.game.fx.sparkle(px + U.rand(-14, 14), py - U.rand(0, 30), 0xff7a1a);
+        } else {
+          sp.setTint(Math.floor(time / 90) % 2 ? 0x7f8cff : 0xc0c8ff);
+          if (Math.random() < dt * 6) this.game.fx.sparks.explode(1, this.x + U.rand(-12, 12), this.y - U.rand(0, 30));
+        }
+        if (this.disableSprite) {
+          const d = this.disableSprite;
+          const wob = Math.sin(time * 0.01 + this.id) * 0.04;
+          const k = d.baseScale * (d.grow == null ? 1 : d.grow);
+          d.setPosition(px, py - 16).setDepth(1000 + this.y + 6).setScale(k * (1 + wob), k * (1 - wob));
+        }
+      } else if (this.disableSprite) {
+        this.clearDisable();
       } else if (this.heat > 0.15) {
         // momentum glow: warmer tint the faster it fires
         const h = Math.round(255 - this.heat * 70);
@@ -946,6 +1081,16 @@
         this.orbs = cols.map((c) => g.add.image(this.x, this.y, 'fx_puff').setTint(c).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95));
       }
     }
+    // a boss attack knocked this tower out; the overlay pops when it recovers
+    clearDisable() {
+      const d = this.disableSprite;
+      this.disableSprite = null;
+      this.disableKind = null;
+      this.sprite.clearTint();
+      if (!d) return;
+      this.game.fx.puffs.explode(6, d.x, d.y);
+      this.game.tweens.add({ targets: d, alpha: 0, scale: d.scale * 1.4, duration: 200, onComplete: () => d.destroy() });
+    }
     // relocate the tower (the sprite hops over in render)
     moveTo(x, y) {
       this.moveFrom = { x: this.sprite.x, y: this.sprite.y };
@@ -977,6 +1122,8 @@
       if (this.halo) this.halo.destroy();
       if (this.orbs) this.orbs.forEach((o) => o.destroy());
       this.aura = this.halo = this.orbs = null;
+      if (this.disableSprite) this.disableSprite.destroy();
+      this.disableSprite = null;
       if (this.subs) this.subs.forEach((u) => u.destroy());
     }
   }

@@ -49,6 +49,8 @@ window.MT = window.MT || {};
     easy: { id: 'easy', name: 'Easy', lives: 200, rounds: 40, price: 0.85, color: '#5fd35a', blurb: '40 rounds · 200 lives · cheaper towers' },
     medium: { id: 'medium', name: 'Medium', lives: 150, rounds: 60, price: 1.0, color: '#ffb02e', blurb: '60 rounds · 150 lives · normal prices' },
     hard: { id: 'hard', name: 'Hard', lives: 100, rounds: 80, price: 1.08, color: '#ff5a4a', blurb: '80 rounds · 100 lives · pricier towers' },
+    // unlimited money and lives, pick any round, send any mutant (no medals)
+    sandbox: { id: 'sandbox', name: 'Sandbox', lives: 999999, rounds: 99999, price: 1.0, color: '#ff9cf0', blurb: 'Unlimited bananas & lives · send any mutant', sandbox: true },
   };
 
   const U = {

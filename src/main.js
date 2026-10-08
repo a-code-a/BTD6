@@ -22,7 +22,7 @@
       render: { antialias: true, roundPixels: true },
       disableContextMenu: true,
       banner: false,
-      scene: [MT.BootScene, MT.MenuScene, MT.MapSelectScene, MT.HeroesScene, MT.AlmanacScene, MT.SettingsScene, MT.GameScene],
+      scene: [MT.BootScene, MT.MenuScene, MT.MapSelectScene, MT.HeroesScene, MT.AlmanacScene, MT.SettingsScene, MT.BossSelectScene, MT.GameScene],
     });
     let timer = null;
     window.addEventListener('resize', () => {

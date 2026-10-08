@@ -154,6 +154,10 @@
     game.towers = game.towers.filter((o) => !donors.includes(o));
     donors.forEach((d) => {
       into.spent += d.spent;
+      // the fused tower inherits its partners' records
+      into.pops += d.pops;
+      into.dmg += d.dmg;
+      into.earned += d.earned;
       d.planes.forEach((p) => {
         p.sprite.destroy();
         p.shadow.destroy();
@@ -246,6 +250,8 @@
       const subs = parts.map((p, i) => {
         const u = new MT.Tower(game, p.type, t.x, t.y, false, { component: true });
         u.pops = p.pops;
+        u.dmg = p.dmg;
+        u.earned = p.earned;
         u.targetMode = t.targetMode;
         Object.assign(u, MT.TowerArt.OMEGA_SLOTS[i]);
         return u;

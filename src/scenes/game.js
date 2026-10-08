@@ -9,6 +9,8 @@
   // screen shake: maximum offset in logical px at full trauma, and how fast it fades
   const SHAKE_PX = 6;
   const SHAKE_DECAY = 1.6;
+  // zones and traps sit on the ground: they never reach flying mutants
+  const GROUND = { ground: true };
 
   class GameScene extends Phaser.Scene {
     constructor() {
@@ -21,6 +23,12 @@
       const hero = data.hero || MT.Save.settings().hero;
       this.heroId = MT.HEROES[hero] ? hero : 'gru';
       this.heroDef = MT.HEROES[this.heroId];
+      // 'classic' rounds, 'boss' battle (data.boss + data.tier) or the sandbox
+      this.mode = data.boss ? 'boss' : 'classic';
+      this.bossId = data.boss || null;
+      this.bossTier = data.tier || 'normal';
+      this.sandbox = !!this.diff.sandbox;
+      this.launchData = data;
     }
 
     create() {
@@ -30,6 +38,14 @@
       this.slowmo = 0;
       this.uid = 0;
       this.paths = this.mapDef.paths.map((p) => new MT.Path(p));
+      // flying mutants take a shortcut: the same start and end, but only every 4th bend
+      this.airPaths = this.mapDef.paths.map((ctrl) => {
+        const pts = [ctrl[0]];
+        for (let i = 4; i < ctrl.length - 2; i += 4) pts.push(ctrl[i]);
+        pts.push(ctrl[ctrl.length - 1]);
+        if (pts.length < 3) pts.splice(1, 0, [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2]);
+        return new MT.Path(pts);
+      });
       this.layout = MT.MapArt.layout(this.mapDef, this.paths);
       this.add.image(0, 0, MT.MapArt.texture(this, this.mapDef, this.paths)).setOrigin(0).setScale(1 / S).setDepth(-100);
       MT.MapArt.overlays(this, this.mapDef, this.paths).forEach((o) => {
@@ -47,10 +63,22 @@
       this.traps = []; // nail piles and banana peels on the track
       this.giantObjs = []; // vortices, tornadoes, shells... from the giant towers
       this.moving = null; // tower currently being relocated
+      // Phaser reuses the scene object on restart: clear everything a previous game left behind
+      this.bossBarText = null;
+      this.introBusy = false;
+      this.introQueue = [];
+      this.noWaterHint = false;
+      this.defeatReason = null;
+      this.bossDown = false;
+      this.boss = null;
       this.seenBoss = {};
       this.fusionHinted = {};
-      this.money = CFG.START_CASH;
+      this.money = this.mode === 'boss' ? MT.BossFight.startCash(this) : CFG.START_CASH;
       this.lives = this.diff.lives;
+      // numbers for the end-of-game report
+      this.stat = { time: 0, livesLost: 0, abilities: 0, built: 0, sold: [] };
+      this.sbQueue = [];
+      this.sbT = 0;
       this.round = 0;
       this.roundActive = false;
       this.speed = 1;
@@ -82,7 +110,9 @@
       this.hud = new MT.HUD(this);
       this.setupInput();
       this.cameras.main.fadeIn(350, 20, 30, 50);
-      this.hud.toast('Place some minions, then press PLAY!', 3200);
+      if (this.mode === 'boss') MT.BossFight.prepare(this);
+      else this.hud.toast(this.sandbox ? 'SANDBOX: unlimited bananas! Open the sandbox panel (top right).' : 'Place some minions, then press PLAY!', 3200);
+      this.hud.refreshPreview();
       MT.Audio.music('game');
       this.musicCheck = 0;
       window.__mt = this;
@@ -142,6 +172,36 @@
 
     defOf(type) {
       return MT.HEROES[type] || MT.TOWERS[type];
+    }
+
+    // can this tower / projectile touch this mutant at all? Burrowed moles are
+    // out of reach, flyers need anti-air, and ground traps never reach the sky
+    hittable(e, tower, p) {
+      if (e.dead || e.burrowed) return false;
+      if (e.flying && ((p && p.ground) || (tower && !tower.stats.air))) return false;
+      return true;
+    }
+
+    spawnEnemy(type, o) {
+      const e = new MT.Enemy(this, type, o);
+      this.enemies.push(e);
+      if (e.boss) MT.Bosses.onSpawn(this, e);
+      return e;
+    }
+
+    // a boss attack (or EMP) knocks a tower out for a while
+    disableTower(t, dur, kind) {
+      if (!t || t.dead) return;
+      t.disabled = Math.max(t.disabled, dur);
+      t.disableKind = kind;
+      const key = { ink: 'fx_inksplat', gum: 'fx_gumbubble', lava: 'fx_meltdown' }[kind];
+      if (!key || t.disableSprite) return;
+      const sp = this.add.image(t.x, t.y - 16, key);
+      sp.baseScale = ((t.size + 8) / 24) / S;
+      sp.grow = 0.3;
+      sp.setScale(sp.baseScale * 0.3);
+      t.disableSprite = sp;
+      this.tweens.add({ targets: sp, grow: 1, duration: 240, ease: 'Back.easeOut' });
     }
 
     placeCost(type, x, y) {
@@ -253,6 +313,8 @@
           this.playButton();
           return;
         }
+        // 1-9 fire the abilities in the ability bar
+        if (k.length === 1 && k >= '1' && k <= '9') return this.hud.useAbilitySlot(+k - 1);
         const up = k.toUpperCase();
         if (up === this.heroDef.key) return this.startPlacing(this.heroId);
         for (const id of MT.TOWER_ORDER) if (MT.TOWERS[id].key === up) return this.startPlacing(id);
@@ -318,6 +380,7 @@
       this.money -= cost;
       const t = new MT.Tower(this, type, x, y, hero);
       t.spent = cost;
+      this.stat.built++;
       this.towers.push(t);
       if (hero) this.heroPlaced = true;
       this.recalcBuffs();
@@ -417,8 +480,8 @@
       t.recompute();
       t.refreshTexture();
       this.recalcBuffs();
-      this.fx.sparks.explode(14, t.x, t.y - 10);
-      this.fx.ring(t.x, t.y, 50, 0xffd83a, { dur: 400 });
+      t.bump = 1;
+      this.fx.upgradeBurst(t, pi, t.tiers[pi]);
       MT.Audio.play('upgrade');
       if (t.type !== 'farm' && t.type !== 'lab') this.fx.speech(t.x, t.y - 54, U.pick(['Bee-do bee-do!', 'Kanpai!', 'Whaaa!', 'Gelato!', 'Bananaaa!']));
       if (t.tiers[pi] === 4) {
@@ -466,7 +529,18 @@
       if (this.selected === t) this.hud.showTower(t);
     }
 
+    // one row of the end-of-game report
+    towerRecord(t, sold) {
+      const subs = t.subs || [];
+      return {
+        name: t.name, key: t.texKey(), hero: t.hero, omega: t.omega, ultimate: t.ultimate, fused: t.fused, sold: !!sold,
+        pops: Math.floor(t.totalPops), dmg: Math.round(subs.reduce((a, u) => a + u.dmg, t.dmg)),
+        spent: t.spent, earned: Math.round(subs.reduce((a, u) => a + u.earned, t.earned)),
+      };
+    }
+
     sell(t) {
+      this.stat.sold.push(this.towerRecord(t, true));
       const v = t.sellValue();
       this.money += v;
       t.destroy();
@@ -499,12 +573,13 @@
             const r = s.stats.buffRange || s.stats.range;
             if (U.dist(s.x, s.y, t.x, t.y) > r) continue;
             const sb = s.stats.buff;
-            b = b || { range: 0, rate: 0, pierce: 0, camo: false, armored: false };
+            b = b || { range: 0, rate: 0, pierce: 0, camo: false, armored: false, air: false };
             b.range = Math.max(b.range, sb.range || 0);
             b.rate = Math.max(b.rate, sb.rate || 0);
             b.pierce = Math.max(b.pierce, sb.pierce || 0);
             b.camo = b.camo || !!sb.camo;
             b.armored = b.armored || !!sb.armored;
+            b.air = b.air || !!sb.air;
           }
         }
         t.buffs = b;
@@ -525,6 +600,10 @@
 
     startRound() {
       if (this.roundActive || this.over) return;
+      if (this.mode === 'boss') {
+        MT.BossFight.startFight(this);
+        return;
+      }
       this.round++;
       this.roundActive = true;
       this.roundTime = 0;
@@ -533,24 +612,39 @@
       this.scaling = MT.Rounds.scaling(this.round);
       this.cashMul = MT.Rounds.cashMul(this.round);
       const dur = Math.max(8, (this.spawnList.length ? this.spawnList[this.spawnList.length - 1].t : 0) + 6);
-      for (const t of this.units()) {
-        if (t.type !== 'farm') continue;
-        const n = t.stats.bananas;
-        t.bananaTimes = [];
-        for (let i = 0; i < n; i++) t.bananaTimes.push(((i + 0.5) / n) * dur);
-      }
+      this.growBananas(0, dur);
       const head = MT.Rounds.headline(this.round);
       this.hud.toast(head || 'Round ' + this.round, head ? 2600 : 1400, !!head);
       MT.Audio.play('roundStart');
       this.hud.onRoundState();
+      this.hud.refreshPreview();
+    }
+
+    // farms drop their bananas spread over the next `dur` seconds
+    growBananas(from, dur) {
+      for (const t of this.units()) {
+        if (t.type !== 'farm') continue;
+        const n = t.stats.bananas;
+        t.bananaTimes = [];
+        for (let i = 0; i < n; i++) t.bananaTimes.push(from + ((i + 0.5) / n) * dur);
+      }
+    }
+
+    // flat income from farms, banks and the giant towers, credited to whoever made it
+    flatIncome() {
+      let income = 0;
+      for (const t of this.units()) {
+        if (!t.stats.flat) continue;
+        income += t.stats.flat;
+        t.earned += t.stats.flat;
+      }
+      return income + MT.Giants.roundEnd(this);
     }
 
     endRound() {
       this.roundActive = false;
       const bonus = 100 + this.round;
-      let income = bonus;
-      for (const t of this.units()) if (t.stats.flat) income += t.stats.flat;
-      income += MT.Giants.roundEnd(this);
+      const income = bonus + this.flatIncome();
       this.money += income;
       this.collectAllPickups();
       const hero = this.towers.find((t) => t.hero);
@@ -567,12 +661,15 @@
         return;
       }
       this.hud.onRoundState();
+      this.hud.refreshPreview();
       if (MT.Save.settings().autoStart) this.time.delayedCall(400, () => !this.over && !this.paused && this.startRound());
     }
 
     victory() {
-      MT.Save.award(this.mapDef.id, this.diff.id);
-      MT.Save.addStats(this.totalPops, this.round, true);
+      if (this.over) return;
+      if (this.mode === 'boss') MT.Save.bossWin(this.bossId, this.bossTier, this.stat.time);
+      else if (!this.sandbox) MT.Save.award(this.mapDef.id, this.diff.id);
+      if (!this.sandbox) MT.Save.addStats(this.totalPops, this.round, true);
       MT.Audio.play('victory');
       this.over = true;
       this.hud.showVictory();
@@ -585,10 +682,11 @@
       this.hud.onRoundState();
     }
 
-    defeat() {
-      if (this.over) return;
+    defeat(reason) {
+      if (this.over || this.sandbox) return;
       this.over = true;
       this.lives = 0;
+      this.defeatReason = reason || null;
       MT.Save.addStats(this.totalPops, this.round, false);
       MT.Audio.play('defeat');
       this.hud.showDefeat();
@@ -596,6 +694,22 @@
 
     leak(e) {
       const cost = Math.max(1, Math.ceil(MT.enemyRbe(e.type, e.fort) - (e.maxHp - e.hp)));
+      if (e.def.bossFight && !this.sandbox) {
+        // a boss reaching the end of the track wins the battle
+        e.leaked = true;
+        e.destroy();
+        this.stat.livesLost += this.lives;
+        this.fx.vignette(0xff2020, 0.7, 900);
+        this.defeat('escaped');
+        return;
+      }
+      if (this.bossDown) {
+        // the boss is beaten: stragglers don't matter any more
+        e.leaked = true;
+        e.destroy();
+        return;
+      }
+      this.stat.livesLost += Math.min(cost, Math.max(0, this.lives));
       this.lives -= cost;
       e.leaked = true;
       e.destroy();
@@ -637,7 +751,7 @@
       const mode = TARGET_MODES[t.targetMode];
       let best = null, bestScore = -Infinity;
       for (const e of this.enemies) {
-        if (e.dead || (e.camo && !s.camo)) continue;
+        if (e.dead || (e.camo && !s.camo) || !this.hittable(e, t)) continue;
         const rr = range + e.radius * 0.6;
         const d2 = U.dist2(x, y, e.x, e.y);
         if (d2 > rr * rr) continue;
@@ -656,10 +770,10 @@
       return best;
     }
 
-    nearestEnemy(x, y, r, camo, exclude) {
+    nearestEnemy(x, y, r, camo, exclude, air = true) {
       let best = null, bd = r * r;
       for (const e of this.enemies) {
-        if (e.dead || (e.camo && !camo) || (exclude && exclude.has(e.id))) continue;
+        if (e.dead || e.burrowed || (e.flying && !air) || (e.camo && !camo) || (exclude && exclude.has(e.id))) continue;
         const d = U.dist2(x, y, e.x, e.y);
         if (d < bd) {
           bd = d;
@@ -676,7 +790,15 @@
     // apply a hit with all the projectile's status effects; returns spawned
     // children, or null if the hit was blocked by armor
     applyHit(e, p, tower, dmgOverride) {
-      if (e.dead) return null;
+      if (e.dead || !this.hittable(e, tower, p)) return null;
+      // a shield bubble soaks up the whole hit (effects included)
+      const src = e.shieldSrc;
+      if (src && !src.dead && src.bubble && src.bubble.hp > 0 && !(src.bubble.broken > 0)) {
+        let d = dmgOverride != null ? dmgOverride : p.dmg || 0;
+        if (e.boss) d += p.moabDmg || 0;
+        this.absorb(src, e, Math.max(1, d));
+        return [];
+      }
       const harmful = p.type === 'sharp' || p.type === 'cold';
       const shredded = e.shredT > 0; // rocket shred: armor is off and every hit does +1
       if (e.def.armored && harmful && !p.armored && !(tower && tower.buffArmored) && !shredded) {
@@ -711,8 +833,47 @@
       return this.damageEnemy(e, d, tower);
     }
 
+    // a shield bubble takes a hit; it shatters when its pool runs dry
+    absorb(src, e, d) {
+      const b = src.bubble;
+      b.hp -= d;
+      b.hitT = 0.12;
+      if (Math.random() < 0.3) this.fx.ring(e.x, e.y, e.radius * 1.3, b.color, { dur: 220, alpha: 0.7 });
+      if (b.hp > 0) return;
+      b.hp = 0;
+      b.broken = b.cd;
+      const r = b.self ? src.radius * 1.6 : b.r;
+      this.fx.ring(src.x, src.y, r, b.color, { dur: 420, force: true });
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2;
+        this.fx.sparkle(src.x + Math.cos(a) * r * 0.9, src.y + Math.sin(a) * r * 0.75, b.color);
+      }
+      this.fx.sparks.explode(8, src.x, src.y);
+      if (b.self || src.boss) this.fx.floatText(src.x, src.y - src.radius - 30, 'SHIELD DOWN!', '#9fe0ff', 20);
+      MT.Audio.play('shieldBreak', src.x);
+    }
+
+    // which mutants are inside a shield bubble right now
+    assignShields() {
+      for (const e of this.enemies) e.shieldSrc = null;
+      for (const c of this.enemies) {
+        const b = c.bubble;
+        if (c.dead || !b || b.hp <= 0 || b.broken > 0 || c.burrowed) continue;
+        if (b.self) {
+          c.shieldSrc = c;
+          continue;
+        }
+        const r2 = b.r * b.r;
+        for (const o of this.queryEnemies(c.x, c.y, b.r + 10)) {
+          if (o === c || o.dead || o.burrowed || U.dist2(c.x, c.y, o.x, o.y) > r2) continue;
+          if (!o.shieldSrc || o.shieldSrc.bubble.hp < b.hp) o.shieldSrc = c;
+        }
+      }
+    }
+
     damageEnemy(e, d, tower) {
       if (e.dead) return [];
+      if (tower) tower.dmg += Math.min(d, Math.max(0, e.hp));
       e.hp -= d;
       if (e.hp > 0) {
         e.setDamageState();
@@ -737,7 +898,10 @@
       e.destroy();
       this.money += this.cashMul;
       this.totalPops++;
-      if (tower) tower.pops++;
+      if (tower) {
+        tower.pops++;
+        tower.earned += this.cashMul;
+      }
       if (e.boss) MT.Bosses.death(this, e);
       else this.fx.pop(e.x, e.y, false);
       MT.Audio.play(e.boss ? 'bigpop' : 'pop', e.x);
@@ -748,7 +912,7 @@
       const n = e.def.children.length;
       e.def.children.forEach((type, i) => {
         const off = (i - (n - 1) / 2) * (e.boss ? 16 : 6);
-        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, e.dist + off), camo: e.camo, burst: e.boss });
+        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, this.childDist(e, type) + off), camo: e.camo, burst: e.boss });
         if (e.slowSoak && e.slowT > 0) {
           k.applySlow(e.slowMul, e.slowT, true, e.slowAcid);
           if (e.dot) k.dot = Object.assign({}, e.dot);
@@ -760,12 +924,19 @@
       return kids;
     }
 
+    // where along its own route a child should appear (flyers and walkers use different routes)
+    childDist(e, type) {
+      if (!!MT.ENEMIES[type].flying === e.flying) return e.dist;
+      const route = (MT.ENEMIES[type].flying ? this.airPaths : this.paths)[e.pathIndex];
+      return route.project(e.x, e.y + (e.flying ? MT.Enemy.FLY : 0));
+    }
+
     explode(x, y, p, tower, hitSet) {
       const ex = p.explode;
       const cand = this.queryEnemies(x, y, ex.r + 60);
       const list = [];
       for (const e of cand) {
-        if (e.dead) continue;
+        if (e.dead || !this.hittable(e, tower, p)) continue;
         const rr = ex.r + e.radius * 0.5;
         const d2 = U.dist2(x, y, e.x, e.y);
         if (d2 <= rr * rr) list.push([d2, e]);
@@ -844,7 +1015,7 @@
       if (p.bounce) {
         let cur = target;
         for (let b = 0; b < p.bounce; b++) {
-          const nxt = this.nearestEnemy(cur.x, cur.y, 150, s.camo, hit);
+          const nxt = this.nearestEnemy(cur.x, cur.y, 150, s.camo, hit, s.air);
           if (!nxt) break;
           this.fx.beam(cur.x, cur.y, nxt.x, nxt.y, col, 2);
           hit.add(nxt.id);
@@ -871,7 +1042,7 @@
       if (kids) kids.forEach((k) => hit.add(k.id));
       let cur = target;
       for (let j = 0; j < ch.jumps; j++) {
-        const nxt = this.nearestEnemy(cur.x, cur.y, ch.range, s.camo, hit);
+        const nxt = this.nearestEnemy(cur.x, cur.y, ch.range, s.camo, hit, s.air);
         if (!nxt) break;
         this.fx.lightning(cur.x, cur.y, nxt.x, nxt.y, col, w * 0.8);
         hit.add(nxt.id);
@@ -896,6 +1067,14 @@
         this.fx.sparkle(e.x, e.y - e.radius, 0x80deea);
         n++;
       }
+      // ...and drags digging moles back up to the surface, dazed
+      for (const e of this.enemies) {
+        if (e.dead || !e.burrowed || U.dist2(t.x, t.y, e.x, e.y) > r * r) continue;
+        e.dig(false);
+        e.stun = Math.max(e.stun, 0.8);
+        this.fx.floatText(e.x, e.y - 24, 'FOUND YOU!', '#80deea', 14);
+        n++;
+      }
       this.fx.ring(t.x, t.y, r, 0x4dd0e1, { dur: 700, alpha: n ? 0.8 : 0.35 });
       if (n) MT.Audio.play('sonar');
     }
@@ -917,8 +1096,8 @@
           let n = z.pierce;
           for (const e of this.queryEnemies(z.x, z.y, z.r + 40)) {
             if (n <= 0) break;
-            if (e.dead || U.dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius * 0.5) ** 2) continue;
-            this.applyHit(e, { dmg: z.dmg, type: z.kind === 'fire' ? 'fire' : 'normal' }, z.tower);
+            if (e.dead || !this.hittable(e, null, GROUND) || U.dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius * 0.5) ** 2) continue;
+            this.applyHit(e, { dmg: z.dmg, type: z.kind === 'fire' ? 'fire' : 'normal', ground: true }, z.tower);
             n--;
           }
         }
@@ -1006,7 +1185,7 @@
         tr.life -= dt;
         // traps hit everything that steps on them, Camo included
         for (const e of this.queryEnemies(tr.x, tr.y, 40)) {
-          if (e.dead || tr.hit.has(e.id)) continue;
+          if (e.dead || tr.hit.has(e.id) || !this.hittable(e, null, GROUND)) continue;
           if (U.dist2(tr.x, tr.y, e.x, e.y) > (10 + e.radius * 0.6) ** 2) continue;
           tr.hit.add(e.id);
           const kids = this.applyHit(e, tr.p, tr.tower);
@@ -1025,10 +1204,10 @@
       }
     }
 
-    enemiesInRange(x, y, r, camo) {
+    enemiesInRange(x, y, r, camo, air = true) {
       const out = [];
       for (const e of this.enemies) {
-        if (e.dead || (e.camo && !camo)) continue;
+        if (e.dead || e.burrowed || (e.flying && !air) || (e.camo && !camo)) continue;
         const rr = r + e.radius * 0.5;
         if (U.dist2(x, y, e.x, e.y) <= rr * rr) out.push(e);
       }
@@ -1037,7 +1216,7 @@
 
     auraBlast(t) {
       const s = t.stats;
-      const list = this.enemiesInRange(t.x, t.y, s.range, s.camo);
+      const list = this.enemiesInRange(t.x, t.y, s.range, s.camo, s.air);
       const n = Math.min(list.length, s.proj.pierce);
       for (let i = 0; i < n; i++) this.applyHit(list[i], s.proj, t);
       this.fx.ring(t.x, t.y, s.range, 0xb3ecff, { disc: true, dur: 380 });
@@ -1047,7 +1226,7 @@
 
     ringBlast(t) {
       const s = t.stats;
-      const list = this.enemiesInRange(t.x, t.y, s.range, s.camo);
+      const list = this.enemiesInRange(t.x, t.y, s.range, s.camo, s.air);
       const n = Math.min(list.length, s.proj.pierce + t.bonusPierce);
       for (let i = 0; i < n; i++) this.applyHit(list[i], s.proj, t);
       const fire = s.ring === 'fire';
@@ -1095,7 +1274,10 @@
         return;
       }
       t.abilityCd[id] = A.cd * t.cdMul;
+      this.stat.abilities++;
       MT.Audio.play('ability');
+      this.fx.abilityCast(t, A, id);
+      this.hud.flashAbility(t, id);
       MT.Abilities.use(this, t, id);
       this.hud.onTowersChanged();
     }
@@ -1141,7 +1323,7 @@
       const tx = U.clamp(farm.x + Math.cos(a) * d, 16, CFG.MAP_W - 16);
       const ty = U.clamp(farm.y + 10 + Math.sin(a) * d * 0.6, 16, CFG.H - 16);
       const img = this.add.image(farm.x, farm.y - 16, s.golden ? 'fx_banana_gold' : 'fx_banana').setScale(0.9 / S).setDepth(5600);
-      const pk = { img, value, auto: s.autoCollect ? 0.9 : null, done: false };
+      const pk = { img, value, farm, auto: s.autoCollect ? 0.9 : null, done: false };
       img.setInteractive({ useHandCursor: true });
       img.on('pointerover', () => this.collect(pk));
       img.on('pointerdown', () => this.collect(pk));
@@ -1154,6 +1336,7 @@
       if (pk.done) return;
       pk.done = true;
       this.money += pk.value;
+      if (pk.farm) pk.farm.earned += pk.value;
       MT.Audio.play('coin');
       this.fx.floatText(pk.img.x, pk.img.y - 12, '+' + U.money(pk.value), '#ffe14a', 16);
       pk.img.disableInteractive();
@@ -1183,20 +1366,33 @@
       this.musicCheck -= real;
       if (this.musicCheck <= 0) {
         this.musicCheck = 1;
-        const bossy = this.enemies.some((e) => !e.dead && (e.def.final || e.type === 'zeppelin' || e.type === 'mecha' || e.type === 'goo' || e.type === 'phantom'));
+        const bossy = this.enemies.some((e) => !e.dead && (e.def.final || e.def.bossFight || e.type === 'zeppelin' || e.type === 'mecha' || e.type === 'goo' || e.type === 'phantom'));
         MT.Audio.music(bossy ? 'boss' : 'game');
       }
     }
 
     step(dt) {
+      this.stat.time += dt;
+      if (this.sandbox) {
+        // unlimited bananas and lives
+        if (this.money < 1e9) this.money = 1e9;
+        this.lives = this.diff.lives;
+      }
+      if (this.mode === 'boss') MT.BossFight.step(this, dt);
+      if (this.sbQueue.length) {
+        this.sbT -= dt;
+        while (this.sbT <= 0 && this.sbQueue.length) {
+          const q = this.sbQueue.shift();
+          this.spawnEnemy(q.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: q.camo, fort: q.fort });
+          this.sbT += 0.14;
+        }
+      }
       if (this.roundActive) {
         this.roundTime += dt;
         const list = this.spawnList;
         while (this.spawnIdx < list.length && list[this.spawnIdx].t <= this.roundTime) {
           const s = list[this.spawnIdx++];
-          const e = new MT.Enemy(this, s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort });
-          this.enemies.push(e);
-          if (e.boss) MT.Bosses.onSpawn(this, e);
+          this.spawnEnemy(s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort });
         }
         for (const t of this.units()) {
           if (t.bananaTimes && t.bananaTimes.length && t.bananaTimes[0] <= this.roundTime) {
@@ -1208,6 +1404,7 @@
       for (const e of this.enemies) if (!e.dead) e.update(dt);
       if (this.over) return;
       this.rebuildGrid();
+      this.assignShields();
       for (const t of this.towers) t.update(dt);
       for (const p of this.projectiles) if (!p.dead) p.update(dt);
       this.stepZones(dt);
@@ -1228,7 +1425,7 @@
         }
       }
       if (this.pickups.length > 40 || (this.pickups.length && this.pickups[0].done)) this.pickups = this.pickups.filter((p) => !p.done);
-      if (this.roundActive && this.spawnIdx >= this.spawnList.length && this.enemies.length === 0) this.endRound();
+      if (this.mode === 'classic' && this.roundActive && this.spawnIdx >= this.spawnList.length && this.enemies.length === 0) this.endRound();
     }
 
     renderFrame(time, dt) {
@@ -1259,7 +1456,7 @@
       const g = this.gBars;
       g.clear();
       for (const e of this.enemies) {
-        if (!e.boss || e.dead || e.def.final) continue;
+        if (!e.boss || e.dead || e.def.final || e.def.bossFight) continue;
         const w = e.radius * 1.8, x = e.x - w / 2, y = e.y - e.radius * 1.75 - 10;
         g.fillStyle(0x1a1a1a, 0.8);
         g.fillRoundedRect(x - 2, y - 2, w + 4, 9, 4);
@@ -1360,6 +1557,35 @@
         }
       }
       this.hud.update(dt);
+    }
+
+    // ------------------------------------------------------------------ sandbox
+    sandboxSend(type, n, camo, fort) {
+      for (let i = 0; i < n; i++) this.sbQueue.push({ type, camo, fort });
+      if (this.sbT < 0) this.sbT = 0;
+    }
+
+    sandboxRound(n) {
+      if (this.roundActive) {
+        this.hud.toast('Wait until the current round is over.', 1400);
+        return;
+      }
+      this.round = Math.max(0, n - 1);
+      this.startRound();
+    }
+
+    sandboxClear() {
+      this.enemies.forEach((e) => {
+        if (e.dead) return;
+        this.fx.pop(e.x, e.y, e.boss);
+        e.destroy();
+      });
+      this.enemies = [];
+      this.sbQueue = [];
+      if (this.roundActive) {
+        this.spawnIdx = this.spawnList.length;
+        this.endRound();
+      }
     }
 
     // ------------------------------------------------------------------ debug / tests

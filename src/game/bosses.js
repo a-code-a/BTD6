@@ -14,11 +14,14 @@
     mecha: { color: '#80d8ff', tag: 'Armored. Its EMP pulse shuts down towers!' },
     goo: { color: '#9be15d', tag: 'Regenerates health and ignores jelly!' },
     macho: { color: '#ff4a3a', tag: 'He drank the PX-41 serum. THE FINAL BOSS!' },
+    vector: { color: '#ff8a3a', tag: 'Squid launcher armed. Oh yeah!' },
+    bratt: { color: '#c06bff', tag: 'Bubblegum, keytar, mullet. It is 1985 again!' },
+    scarlet: { color: '#ff4a6a', tag: 'Flying in a rocket dress: only anti-air can hurt her!' },
   };
   // death-burst colour per giant
-  const DEATH = { mega: 0xc490ea, titan: 0xff7a5a, zeppelin: 0xffd83a, phantom: 0xb3a6ff, mecha: 0x80d8ff, goo: 0x9be15d, macho: 0xff4a3a };
+  const DEATH = { mega: 0xc490ea, titan: 0xff7a5a, zeppelin: 0xffd83a, phantom: 0xb3a6ff, mecha: 0x80d8ff, goo: 0x9be15d, macho: 0xff4a3a, vector: 0xff8a3a, bratt: 0xc06bff, scarlet: 0xff4a6a };
   // gentle screen shake when a giant goes down (much smaller than before)
-  const SHAKE = { mega: 0.08, titan: 0.16, zeppelin: 0.26, phantom: 0.12, mecha: 0.2, goo: 0.16, macho: 0.75 };
+  const SHAKE = { mega: 0.08, titan: 0.16, zeppelin: 0.26, phantom: 0.12, mecha: 0.2, goo: 0.16, macho: 0.75, vector: 0.6, bratt: 0.6, scarlet: 0.6 };
 
   function onSpawn(game, e) {
     if (game.seenBoss[e.type]) return;
@@ -37,7 +40,7 @@
     s.introBusy = true;
     const def = MT.ENEMIES[type];
     const info = INTRO[type];
-    const big = !!def.final;
+    const big = !!def.final || !!def.bossFight;
     const c = s.add.container(W + 600, H * 0.36).setDepth(6950);
     const g = s.add.graphics();
     const bw = 760, bh = big ? 132 : 104;
@@ -58,7 +61,7 @@
     const ih = icon.height / S;
     icon.setScale(Math.min(1, (bh - 18) / ih) / S);
     c.add(icon);
-    c.add(MT.text(s, 40, -bh / 2 + 26, big ? '!!  FINAL BOSS  !!' : '!  WARNING  !', 18, { title: true, color: '#ffc61a' }));
+    c.add(MT.text(s, 40, -bh / 2 + 26, def.bossFight ? '!!  BOSS BATTLE  !!' : big ? '!!  FINAL BOSS  !!' : '!  WARNING  !', 18, { title: true, color: '#ffc61a' }));
     c.add(MT.text(s, 40, big ? -2 : 4, def.name.toUpperCase(), big ? 44 : 36, { title: true, color: info.color }));
     c.add(MT.text(s, 40, bh / 2 - 22, info.tag, 16, { color: '#ffffff' }));
     MT.Audio.play(big ? 'roar' : 'warning');
@@ -77,6 +80,12 @@
   }
 
   function death(game, e) {
+    if (e.def.bossFight) {
+      game.fx.bossDeath(e.x, e.y - e.radius * 0.2, e.radius * 1.4, DEATH[e.type], true);
+      game.shake(SHAKE[e.type]);
+      MT.BossFight.onDeath(game, e);
+      return;
+    }
     const big = !!e.def.final;
     const col = DEATH[e.type] || 0xc490ea;
     game.fx.bossDeath(e.x, e.y - e.radius * 0.2, e.radius, col, big);
@@ -137,6 +146,7 @@
 
   // El Macho gets angrier (and calls friends) as his health drops
   function checkPhase(game, e) {
+    if (e.ai) return MT.BossFight.phase(game, e);
     const ph = e.def.phases;
     if (e.phase >= ph.length) return;
     if (e.hp / e.maxHp > ph[e.phase]) return;
@@ -160,7 +170,7 @@
   // big health bar across the top of the map while a final boss is alive
   function drawBar(game, g, time) {
     g.clear();
-    const boss = game.enemies.find((e) => !e.dead && e.def.final);
+    const boss = game.enemies.find((e) => !e.dead && (e.def.final || e.def.bossFight));
     if (!boss) {
       if (game.bossBarText) game.bossBarText.setVisible(false);
       return;
@@ -182,8 +192,15 @@
       g.lineStyle(2, 0x0b0612, 1);
       g.lineBetween(x + w * p, y, x + w * p, y + h);
     });
+    // a self-shield shows as a glowing blue layer over the health bar
+    const bb = boss.bubble;
+    if (bb && bb.self && bb.hp > 0) {
+      g.fillStyle(bb.color, 0.75 + Math.sin(time * 0.012) * 0.2);
+      g.fillRoundedRect(x, y + h - 7, Math.max(6, w * (bb.hp / bb.max)), 7, 3);
+    }
     if (!game.bossBarText) game.bossBarText = MT.text(game, W / 2, y + h + 12, '', 14, { title: true, color: '#ffd83a' }).setDepth(7001);
-    game.bossBarText.setVisible(true).setText(`${boss.def.name.toUpperCase()}   ${Math.ceil(boss.hp).toLocaleString('en-US')} / ${boss.maxHp.toLocaleString('en-US')}`);
+    const phase = boss.def.bossFight ? `   ·   PHASE ${boss.phase + 1}/3` : '';
+    game.bossBarText.setVisible(true).setText(`${boss.def.name.toUpperCase()}   ${Math.ceil(boss.hp).toLocaleString('en-US')} / ${boss.maxHp.toLocaleString('en-US')}${phase}`);
   }
 
   MT.Bosses = { INTRO, onSpawn, intro, death, blink, emp, checkPhase, drawBar };

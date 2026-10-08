@@ -18,9 +18,10 @@
         MT.FXArt.generate2(this);
         MT.GiantArt.generate(this);
         MT.MenuArt.generate(this);
+        MT.EnemyArt2.generate(this);
         MT.TOWER_ORDER.forEach((id) => MT.TowerArt.key(this, id, [0, 0, 0]));
         MT.HERO_ORDER.forEach((id) => MT.TowerArt.heroKey(this, id, 1));
-        MT.ENEMY_ORDER.forEach((id) => MT.EnemyArt.key(this, id, false, false, 0));
+        MT.ENEMY_ORDER.concat(MT.BOSS_ORDER).forEach((id) => MT.EnemyArt.key(this, id, false, false, 0));
         t.destroy();
         const el = document.getElementById('boot');
         if (el) el.remove();
@@ -191,17 +192,18 @@
     }
 
     buttons() {
-      const glow = this.add.image(W / 2, 382, 'menu_glow').setTint(0xffe066).setScale(3.4, 1.3).setAlpha(0.45);
+      const glow = this.add.image(W / 2, 372, 'menu_glow').setTint(0xffe066).setScale(3.4, 1.3).setAlpha(0.45);
       this.tweens.add({ targets: glow, alpha: 0.15, scaleX: 3.8, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      const play = new MT.UI.Button(this, W / 2, 376, 320, 86, { style: 'yellow', label: 'PLAY', size: 50, icon: 'ic_play', iconSize: 0.55, onClick: () => MA().go(this, 'MapSelect') });
+      const play = new MT.UI.Button(this, W / 2, 366, 320, 80, { style: 'yellow', label: 'PLAY', size: 48, icon: 'ic_play', iconSize: 0.55, onClick: () => MA().go(this, 'MapSelect') });
+      const boss = new MT.UI.Button(this, W / 2, 446, 320, 52, { style: 'red', label: 'BOSS BATTLES', size: 24, icon: 'ic_skull', iconSize: 0.62, onClick: () => MA().go(this, 'BossSelect') });
       const grid = [
         ['HEROES', 'blue', 'ic_hero', () => MA().go(this, 'Heroes')],
         ['ALMANAC', 'purple', 'ic_book', () => MA().go(this, 'Almanac')],
         ['HOW TO PLAY', 'green', 'ic_help', () => this.howTo()],
         ['SETTINGS', 'teal', 'ic_gear', () => MA().go(this, 'Settings')],
       ];
-      const btns = grid.map(([label, style, icon, fn], i) => new MT.UI.Button(this, W / 2 + (i % 2 ? 110 : -110), 470 + Math.floor(i / 2) * 66, 208, 56, { style, label, icon, size: 21, iconSize: 0.6, onClick: fn }));
-      [play].concat(btns).forEach((b, i) => {
+      const btns = grid.map(([label, style, icon, fn], i) => new MT.UI.Button(this, W / 2 + (i % 2 ? 110 : -110), 512 + Math.floor(i / 2) * 60, 208, 50, { style, label, icon, size: 20, iconSize: 0.6, onClick: fn }));
+      [play, boss].concat(btns).forEach((b, i) => {
         const y = b.y;
         b.setAlpha(0).y += 24;
         this.tweens.add({ targets: b, alpha: 1, y, duration: 380, delay: 700 + i * 80, ease: 'Back.easeOut' });
@@ -235,16 +237,18 @@
         '• FUSE 3 maxed towers of one kind into a super tower. Then: 3 same super',
         '   towers → ULTIMATE giant, 3 different ones → OMEGA MECH. MOVE relocates towers.',
         '• Camo mutants need detection. Armored Tin Cans block bananas & ice.',
+        '• FLYING mutants need anti-air: heroes, Sniper, Tesla, Pilot, Super Minion...',
+        '• MOLES dig under the track (sonar pulls them up). SHIELD CARRIERS protect friends.',
         '• Submarines only float on water: rivers, ponds, the sea, goo and lava.',
-        '• Pick a hero before each game. Heroes level up and unlock abilities.',
-        '• 10 maps, 3 difficulties each: win to collect bronze, silver and gold medals.',
-        '• The ALMANAC lists every tower, upgrade, fusion and mutant.',
+        '• Pick a hero before each game. Heroes level up and unlock abilities (keys 1-9).',
+        '• 10 maps × 3 difficulties = 30 medals. BOSS BATTLES pit you against villains,',
+        '   SANDBOX gives unlimited bananas to test combos. The ALMANAC lists everything.',
         '',
         'Hotkeys: Q W E R T Y A S D G J U I O = towers, H = hero, Space = play/speed,',
         ', . / = upgrades, F = fuse, M = move, Tab = targeting, Backspace = sell, Esc = pause',
       ];
-      c.add(MT.text(this, 262, 150, lines.join('\n'), 17, { ox: 0, oy: 0, lineSpacing: 5, strokeThickness: 3 }));
-      c.add(new MT.UI.Button(this, W / 2, 612, 220, 56, { style: 'green', label: 'GOT IT!', size: 26, onClick: () => c.destroy() }));
+      c.add(MT.text(this, 252, 146, lines.join('\n'), 16, { ox: 0, oy: 0, lineSpacing: 4, strokeThickness: 3, align: 'left' }));
+      c.add(new MT.UI.Button(this, W / 2, 618, 220, 52, { style: 'green', label: 'GOT IT!', size: 24, onClick: () => c.destroy() }));
       c.setAlpha(0);
       this.tweens.add({ targets: c, alpha: 1, duration: 180 });
     }
@@ -356,17 +360,17 @@
       c.add([nameT, info]);
       select(hero);
       c.add(MT.text(this, W / 2, 342, 'Select difficulty', 18, { color: '#e8f1ff' }));
-      const styles = { easy: 'green', medium: 'yellow', hard: 'red' };
+      const styles = { easy: 'green', medium: 'yellow', hard: 'red', sandbox: 'purple' };
       const medals = MT.Save.medals(m.id);
-      ['easy', 'medium', 'hard'].forEach((d, i) => {
+      ['easy', 'medium', 'hard', 'sandbox'].forEach((d, i) => {
         const Df = MT.DIFFS[d];
-        c.add(new MT.UI.Button(this, W / 2, 404 + i * 78, 440, 66, {
-          style: styles[d], label: Df.name.toUpperCase(), size: 30, sub: Df.blurb, subSize: 14,
+        c.add(new MT.UI.Button(this, W / 2, 396 + i * 64, 440, 56, {
+          style: styles[d], label: Df.name.toUpperCase(), size: 26, sub: Df.blurb, subSize: 13,
           onClick: () => MA().go(this, 'Game', { map: m.id, diff: d, hero }),
         }));
-        c.add(this.add.image(W / 2 + 190, 404 + i * 78, medals[d] ? 'ic_medal' + i : 'ic_medal_empty').setScale(0.42));
+        if (d !== 'sandbox') c.add(this.add.image(W / 2 + 190, 396 + i * 64, medals[d] ? 'ic_medal' + i : 'ic_medal_empty').setScale(0.4));
       });
-      c.add(new MT.UI.Button(this, W / 2, 636, 180, 44, { style: 'blue', label: 'BACK', size: 22, onClick: () => c.destroy() }));
+      c.add(new MT.UI.Button(this, W / 2, 650, 180, 42, { style: 'blue', label: 'BACK', size: 21, onClick: () => c.destroy() }));
       c.setAlpha(0);
       this.tweens.add({ targets: c, alpha: 1, duration: 160 });
     }

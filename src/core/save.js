@@ -5,13 +5,14 @@
 
   function load() {
     if (data) return data;
-    data = { settings: { sfx: true, music: true, sfxVol: 0.8, musicVol: 0.6, autoStart: false, shake: 'low', hero: 'gru' }, medals: {}, stats: { pops: 0, games: 0, wins: 0, best: 0 } };
+    data = { settings: { sfx: true, music: true, sfxVol: 0.8, musicVol: 0.6, autoStart: false, shake: 'low', hero: 'gru' }, medals: {}, bosses: {}, stats: { pops: 0, games: 0, wins: 0, best: 0 } };
     try {
       const raw = window.localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
         data.settings = Object.assign(data.settings, parsed.settings || {});
         data.medals = parsed.medals || {};
+        data.bosses = parsed.bosses || {};
         data.stats = Object.assign(data.stats, parsed.stats || {});
       }
     } catch (e) {
@@ -56,11 +57,21 @@
     reset() {
       const d = load();
       d.medals = {};
+      d.bosses = {};
       d.stats = { pops: 0, games: 0, wins: 0, best: 0 };
       persist();
     },
     stats() {
       return load().stats;
+    },
+    // boss battles: best time in seconds per boss and tier ('normal' / 'elite')
+    bossBest(id) {
+      return load().bosses[id] || {};
+    },
+    bossWin(id, tier, sec) {
+      const b = (load().bosses[id] = load().bosses[id] || {});
+      if (!b[tier] || sec < b[tier]) b[tier] = Math.round(sec);
+      persist();
     },
   };
 })();

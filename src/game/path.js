@@ -110,6 +110,21 @@
       }
       return Math.sqrt(best);
     }
+
+    // distance along the track of the track point closest to (x, y)
+    project(x, y) {
+      const pts = this.pts;
+      let best = Infinity, bi = 0;
+      for (let i = 0; i < pts.length; i += 2) {
+        const dx = pts[i].x - x, dy = pts[i].y - y;
+        const dd = dx * dx + dy * dy;
+        if (dd < best) {
+          best = dd;
+          bi = i;
+        }
+      }
+      return Math.min(this.length, bi * STEP);
+    }
   }
 
   MT.Path = Path;

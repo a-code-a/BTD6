@@ -69,7 +69,10 @@
     const cx = tw / 2;
     const cy = foot - h * 0.69;
     const rnd = D.rng(o.seed);
-    D.shadow(ctx, cx, foot - 1, w * 0.62, w * 0.18, 0.32);
+    // flyers get a separate shadow sprite on the ground instead
+    if (!sp.noShadow) D.shadow(ctx, cx, foot - 1, w * 0.62, w * 0.18, 0.32);
+    // extra layers behind the body (wings, jetpacks...) for the newer mutants
+    if (sp.before) sp.before(ctx, cx, cy, w, h, o, rnd);
 
     const mo = {
       x: cx, y: cy, w, h, skin: sp.skin, eyes: sp.eyes, eyeStyle: 'crazy', hair: 'wild', hairLen: sp.hairLen,
@@ -160,7 +163,16 @@
         barrel(c2, x, y + hh * 0.22, ww * 1.12, hh * 0.62, o.damage || 0, o.fort, rnd);
       };
     }
+    if (sp.after) {
+      const prevS = mo.after;
+      mo.after = (c2, x, y, ww, hh) => {
+        prevS && prevS(c2, x, y, ww, hh);
+        sp.after(c2, x, y, ww, hh, o, rnd);
+      };
+    }
+    if (sp.arms) mo.arms = sp.arms(cx, cy, w, h);
     M.draw(ctx, mo);
+    if (sp.front) sp.front(ctx, cx, cy, w, h, o, rnd);
 
     if (sp.mask) {
       // bandit bandana knot
@@ -466,7 +478,7 @@
       });
       return key;
     },
-    helpers: { metalPlate, rivet, bossDamage, camoOverlay },
+    helpers: { metalPlate, rivet, bossDamage, camoOverlay, drawPurple },
     origin(type) {
       const { th, foot } = texSize(SPEC[type]);
       return foot / th;

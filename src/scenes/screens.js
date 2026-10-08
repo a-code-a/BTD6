@@ -175,8 +175,8 @@
         });
         this.showTower(MT.TOWER_ORDER[0]);
       } else {
-        this.grid = MT.ENEMY_ORDER.map((t, i) => {
-          const c = gridCard(this, 80 + (i % 4) * 98, 196 + Math.floor(i / 4) * 98, 90, MT.EnemyArt.key(this, t, false, false, 0), () => this.showMutant(t), 70);
+        this.grid = MT.ENEMY_ORDER.concat(MT.BOSS_ORDER).map((t, i) => {
+          const c = gridCard(this, 64 + (i % 5) * 86, 190 + Math.floor(i / 5) * 86, 80, MT.EnemyArt.key(this, t, false, false, 0), () => this.showMutant(t), 64);
           c.id = t;
           return c;
         });
@@ -197,7 +197,7 @@
       MA().fit(im, 120, 130);
       p.add(im);
       p.add(MT.text(this, 644, 196, def.name, 32, { title: true, ox: 0 }));
-      p.add(MT.text(this, 644, 228, `${money(def.cost)}   ·   hotkey ${def.key}${def.waterOnly ? '   ·   water only' : ''}`, 15, { ox: 0, color: '#9fd0ff' }));
+      p.add(MT.text(this, 644, 228, `${money(def.cost)}   ·   hotkey ${def.key}${def.waterOnly ? '   ·   water only' : ''}   ·   ${airInfo(def)}`, 15, { ox: 0, color: '#9fd0ff' }));
       p.add(MT.text(this, 644, 246, def.desc, 15, { ox: 0, oy: 0, align: 'left', wrap: 580 }));
       let y = 318;
       if (def.trait) {
@@ -287,13 +287,24 @@
       if (E.noSlow) tags.push(['SLOW IMMUNE', 0xff8a3a]);
       if (E.phases) tags.push(['RAGE PHASES', 0xff5252]);
       if (E.speed >= 3) tags.push(['VERY FAST', 0xffc61a]);
+      if (E.flying) tags.push(['FLYING', 0x29b6f6]);
+      if (E.burrow) tags.push(['TUNNELS', 0x8d6e63]);
+      if (E.shield) tags.push(['SHIELDS', 0x26c6da]);
+      if (E.bossFight) tags.push(['BOSS BATTLE', 0xff5a4a]);
       let cx = 740;
       tags.forEach(([s, col]) => {
         const c = chip(this, cx, 340, s, col);
         p.add(c.parts);
         cx += c.w + 8;
       });
-      p.add(MT.text(this, 516, 430, E.desc, 18, { ox: 0, oy: 0, align: 'left', wrap: 700 }));
+      p.add(MT.text(this, 516, 400, E.desc, 18, { ox: 0, oy: 0, align: 'left', wrap: 700 }));
+      const tip = {
+        glider: 'Tip: heroes, Laser Snipers, Tesla, Pilots and the Super Minion hit flyers. A Lab with Radar Scanner gives anti-air to every tower in its ring.',
+        jetpack: 'Tip: flyers cut corners, so put anti-air near the end of their shortcut.',
+        mole: 'Tip: Submarine sonar pings drag moles back up, dazed. Place fast towers where they surface.',
+        shield: 'Tip: the bubble only protects others. Snipers or "Strong" targeting take out the carrier first.',
+      }[id];
+      if (tip) p.add(MT.text(this, 516, 452, tip, 14, { ox: 0, oy: 0, align: 'left', wrap: 700, color: '#ffe28a' }));
       // variants
       if (!E.boss) {
         p.add(MT.text(this, 516, 500, 'VARIANTS', 20, { title: true, ox: 0, color: '#ffd83a' }));
@@ -315,9 +326,76 @@
           mecha: 'Its EMP shuts down towers nearby. Spread your towers out.',
           goo: 'Burst it down quickly before it heals. Jelly slow has no effect.',
           macho: 'Gets angrier at 66% and 33% health. Save your abilities for him!',
+          vector: 'Boss battle: his squids ink a tower for a few seconds. Stun or freeze him to slow his attacks down.',
+          bratt: 'Boss battle: gum bombs trap whole clusters of towers, so spread out. His keytar stuns towers close to him.',
+          scarlet: 'Boss battle: she flies, so only anti-air hurts her. Lava lamps melt towers for a few seconds.',
         };
         p.add(MT.text(this, 516, 552, tips[id] || 'Big, tough and full of smaller mutants.', 16, { ox: 0, oy: 0, align: 'left', wrap: 700, color: '#ffe28a' }));
       }
+    }
+  }
+
+  // can this tower hit flying mutants, and from which upgrade?
+  function airInfo(def) {
+    if (def.base.air) return 'anti-air';
+    for (const path of def.paths || []) {
+      const s = JSON.parse(JSON.stringify(def.base));
+      for (const u of path.ups) {
+        try {
+          u.fx(s);
+        } catch (e) {
+          /* scratch copy */
+        }
+        if (s.air) return `anti-air: ${u.name}`;
+        if (s.buff && s.buff.air) return `${u.name} gives anti-air`;
+      }
+    }
+    return 'no anti-air';
+  }
+
+  // ------------------------------------------------------------------ Boss Battles
+  class BossSelectScene extends Phaser.Scene {
+    constructor() {
+      super('BossSelect');
+    }
+    create() {
+      setup(this, 'BOSS BATTLES');
+      MT.text(this, W / 2, 96, 'Pick a villain, build your defense, then survive the escort waves until the boss goes down!', 16, { color: '#e8f1ff' });
+      MT.BOSS_ORDER.forEach((id, i) => this.card(id, W / 2 + (i - 1) * 404, 412, i));
+      const hero = MT.HEROES[MT.Save.settings().hero] || MT.HEROES.gru;
+      MT.text(this, W / 2, 700, `Your hero: ${hero.name}  (change it in HEROES)`, 14, { color: '#cfe0ff' });
+    }
+    card(id, x, y, i) {
+      const E = MT.ENEMIES[id];
+      const B = MT.BossFight.BOSSES[id];
+      const c = this.add.container(x, y);
+      c.add(MT.UI.panel(this, -188, -280, 376, 560, 'denim'));
+      const glow = this.add.image(0, -120, 'menu_glow').setTint(B.tint).setScale(2.4).setAlpha(0.5);
+      this.tweens.add({ targets: glow, alpha: 0.25, duration: 1200, yoyo: true, repeat: -1 });
+      const im = this.add.image(0, -112, MT.EnemyArt.key(this, id, false, false, 0));
+      MA().fit(im, 230, 240);
+      this.tweens.add({ targets: im, y: im.y - 8, duration: 1400 + i * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      c.add([glow, im]);
+      c.add(MA().title(this, 0, 36, E.name.toUpperCase(), 28, '#ffffff', B.color));
+      c.add(MT.text(this, 0, 76, B.tag, 14, { wrap: 330, color: '#e8f1ff' }));
+      const map = MT.MAPS.find((m) => m.id === B.map);
+      c.add(MT.text(this, 0, 112, `Arena: ${map.name}${E.flying ? '   ·   FLYING' : ''}`, 13, { title: true, color: '#9fd0ff' }));
+      const best = MT.Save.bossBest(id);
+      ['normal', 'elite'].forEach((tier, k) => {
+        const T = MT.BossFight.TIERS[tier];
+        const bx = k ? 86 : -86;
+        c.add(new MT.UI.Button(this, bx, 172, 160, 58, {
+          style: k ? 'red' : 'green', label: T.name.toUpperCase(), size: 22,
+          sub: `HP ${Math.round(E.hp * T.hp).toLocaleString('en-US')}`, subSize: 12,
+          onClick: () => MA().go(this, 'Game', { map: B.map, diff: 'medium', hero: MT.Save.settings().hero, boss: id, tier }),
+        }));
+        const won = best[tier];
+        c.add(MT.text(this, bx, 222, won ? `★ best ${MT.BossFight.fmtTime(won)}` : 'not beaten yet', 13, { title: !!won, color: won ? '#ffd83a' : '#9fb3d1' }));
+      });
+      c.add(MT.text(this, 0, 252, `Start with ${money(MT.BossFight.TIERS.normal.cash)} (Elite ${money(MT.BossFight.TIERS.elite.cash)})`, 12, { color: '#cfe0ff' }));
+      c.setAlpha(0);
+      c.y += 30;
+      this.tweens.add({ targets: c, alpha: 1, y, duration: 380, delay: 100 + i * 90, ease: 'Back.easeOut' });
     }
   }
 
@@ -423,4 +501,5 @@
   MT.HeroesScene = HeroesScene;
   MT.AlmanacScene = AlmanacScene;
   MT.SettingsScene = SettingsScene;
+  MT.BossSelectScene = BossSelectScene;
 })();

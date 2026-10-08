@@ -244,6 +244,113 @@
       return c;
     }
 
+    // tower upgrade: stars in the path colour spiral up, plus a tier label
+    upgradeBurst(t, pi, tier) {
+      const s = this.scene;
+      const col = [0xff6b6b, 0x4fc3f7, 0x9be15d][pi] || 0xffd83a;
+      const css = ['#ff8a80', '#81d4fa', '#b9f6ca'][pi] || '#ffd83a';
+      this.ring(t.x, t.y, 56, col, { dur: 420, force: true });
+      this.glow.particleTint = col;
+      this.glow.explode(12, t.x, t.y - 14);
+      this.sparks.explode(8, t.x, t.y - 10);
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        const st = s.add.image(t.x + Math.cos(a) * 14, t.y - 6, 'fx_spark').setTint(col).setDepth(6050).setScale(0.9).setBlendMode(Phaser.BlendModes.ADD);
+        s.tweens.add({
+          targets: st, x: t.x + Math.cos(a + 1.2) * 30, y: t.y - 46 - i * 5, angle: 220, alpha: 0, scale: 0.3,
+          duration: 650, delay: i * 35, ease: 'Quad.easeOut', onComplete: () => st.destroy(),
+        });
+      }
+      this.floatText(t.x, t.y - 60, tier >= 4 ? 'MAX TIER!' : `TIER ${tier}`, css, tier >= 4 ? 22 : 17);
+      if (tier >= 4) {
+        const pil = s.add.image(t.x, t.y + 8, 'fx_pillar').setOrigin(0.5, 0.97).setTint(col).setBlendMode(Phaser.BlendModes.ADD).setDepth(1000 + t.y + 40).setAlpha(0).setScale(0.7 / S, 0.3 / S);
+        s.tweens.add({ targets: pil, alpha: 0.9, scaleY: 1 / S, duration: 200, yoyo: true, hold: 200, ease: 'Quad.easeOut', onComplete: () => pil.destroy() });
+        this.shockwave(t.x, t.y, 130, col, 520);
+      }
+    }
+
+    // an ability goes off: the tower charges up in a pillar of light, then a
+    // cut-in banner with the ability's name sweeps across the map
+    abilityCast(t, A) {
+      const s = this.scene;
+      const U = MT.util;
+      const col = t.omega ? 0xffffff : t.fused ? U.hexInt(t.def.fusion.color) : t.hero ? U.hexInt(t.def.color || '#7fdbff') : 0xffd83a;
+      const pil = s.add.image(t.x, t.y + 8, 'fx_pillar').setOrigin(0.5, 0.97).setTint(col).setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(1000 + t.y + 50).setAlpha(0).setScale(0.8 / S, 0.25 / S);
+      s.tweens.add({ targets: pil, alpha: 0.9, scaleY: 1.15 / S, duration: 180, yoyo: true, hold: 300, ease: 'Quad.easeOut', onComplete: () => pil.destroy() });
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const p = s.add.image(t.x + Math.cos(a) * 80, t.y - 16 + Math.sin(a) * 50, 'fx_puff').setTint(col).setBlendMode(Phaser.BlendModes.ADD).setScale(0.45).setDepth(6060);
+        s.tweens.add({ targets: p, x: t.x, y: t.y - 16, scale: 0.08, alpha: 0.2, duration: 300, ease: 'Quad.easeIn', onComplete: () => p.destroy() });
+      }
+      s.time.delayedCall(300, () => {
+        this.ring(t.x, t.y, 110, col, { dur: 520, force: true });
+        this.shockwave(t.x, t.y, 170, col, 560);
+        this.glow.particleTint = col;
+        this.glow.explode(20, t.x, t.y - 20);
+      });
+      this.cutIn(A, t, col);
+    }
+
+    cutIn(A, t, col) {
+      const s = this.scene;
+      if (this.cut) this.cut.destroy();
+      const c = s.add.container(0, H * 0.3).setDepth(6960);
+      this.cut = c;
+      const g = s.add.graphics();
+      g.fillStyle(0x0b0612, 0.84);
+      g.fillPoints([{ x: -60, y: -46 }, { x: W + 60, y: -70 }, { x: W + 60, y: 44 }, { x: -60, y: 66 }], true);
+      g.fillStyle(col, 1);
+      g.fillPoints([{ x: -60, y: -52 }, { x: W + 60, y: -76 }, { x: W + 60, y: -68 }, { x: -60, y: -44 }], true);
+      g.fillPoints([{ x: -60, y: 64 }, { x: W + 60, y: 42 }, { x: W + 60, y: 50 }, { x: -60, y: 72 }], true);
+      c.add(g);
+      // speed lines streaming past
+      for (let i = 0; i < 12; i++) {
+        const ln = s.add.rectangle(Math.random() * W, -36 + Math.random() * 84, 50 + Math.random() * 140, 2, 0xffffff, 0.35 + Math.random() * 0.3);
+        c.add(ln);
+        s.tweens.add({ targets: ln, x: ln.x - 260, duration: 1100, ease: 'Linear' });
+      }
+      const icon = s.add.image(140, -2, A.icon).setDisplaySize(86, 86);
+      const portrait = s.add.image(W - 110, 4, t.texKey());
+      const pk = Math.min(110 / portrait.height, 130 / portrait.width);
+      portrait.setScale(pk).setFlipX(true);
+      const hex = '#' + col.toString(16).padStart(6, '0');
+      const name = MT.text(s, 210, -10, A.name.toUpperCase(), 44, { title: true, ox: 0, color: hex, strokeThickness: 7 });
+      const sub = MT.text(s, 214, 28, t.name, 17, { ox: 0, color: '#ffffff' });
+      c.add([portrait, icon, name, sub]);
+      s.tweens.add({ targets: icon, angle: { from: -12, to: 12 }, duration: 160, yoyo: true, repeat: 3 });
+      s.tweens.add({ targets: portrait, x: W - 150, duration: 1100, ease: 'Linear' });
+      c.x = -W;
+      s.tweens.add({ targets: c, x: 0, duration: 200, ease: 'Cubic.easeOut' });
+      s.tweens.add({
+        targets: c, x: W * 1.1, delay: 1000, duration: 220, ease: 'Cubic.easeIn',
+        onComplete: () => {
+          c.destroy();
+          if (this.cut === c) this.cut = null;
+        },
+      });
+      MT.Audio.play('cutin');
+    }
+
+    // falling snow / jelly / gold over the whole map while a big ability lasts
+    weather(kind, dur) {
+      const s = this.scene;
+      const cfg = {
+        snow: { key: 'fx_snow', tint: [0xffffff, 0xd8f4ff, 0xb3e5fc], speedY: { min: 70, max: 150 }, scale: { min: 0.5, max: 1.1 }, quantity: 3 },
+        jelly: { key: 'fx_puff', tint: [0x9be15d, 0xc5f08a, 0x6abf2a], speedY: { min: 220, max: 320 }, scale: { min: 0.14, max: 0.26 }, quantity: 3 },
+        gold: { key: 'fx_spark', tint: [0xffd83a, 0xffb300, 0xffffff], speedY: { min: 160, max: 260 }, scale: { min: 0.5, max: 1 }, quantity: 2 },
+      }[kind];
+      if (!cfg) return;
+      const em = s.add.particles(0, 0, cfg.key, {
+        x: { min: 0, max: W }, y: -12, speedY: cfg.speedY, speedX: { min: -30, max: 30 }, lifespan: 5000,
+        scale: cfg.scale, alpha: { start: 0.95, end: 0.6 }, rotate: { min: 0, max: 360 }, quantity: cfg.quantity, frequency: 70, tint: cfg.tint,
+        deathZone: { type: 'onLeave', source: new Phaser.Geom.Rectangle(-20, -40, W + 40, H + 60) },
+      }).setDepth(6700);
+      const real = (dur * 1000) / Math.max(1, s.speed || 1);
+      s.time.delayedCall(real, () => em.stop());
+      s.time.delayedCall(real + 5200, () => em.destroy());
+    }
+
     speech(x, y, str) {
       if (this.bubble) this.bubble.destroy();
       MT.Audio.say(str);

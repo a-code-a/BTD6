@@ -544,6 +544,36 @@
       tone('sine', 220, 2000, 0.7, 0.05);
     },
     swoosh: () => noise(0.28, 0.3, 'bandpass', 400, 3000, { q: 1, attack: 0.06 }),
+    // ---- tactical mutants and boss battles
+    dig: (o) => {
+      noise(0.3, 0.22, 'lowpass', 900, 150, o);
+      tone('triangle', 90, 50, 0.25, 0.1, o);
+    },
+    shield: (o) => {
+      tone('sine', 300, 1200, 0.35, 0.07, Object.assign({ wet: 0.5 }, o));
+      fm(1200, 1.5, 2, 0.4, 0.04, Object.assign({ when: 0.1, wet: 0.5 }, o));
+    },
+    shieldBreak: (o) => {
+      [2400, 3100, 1900, 2700].forEach((f, i) => fm(f, 2.76, 4, 0.18, 0.05, Object.assign({ when: i * 0.03 }, o)));
+      noise(0.35, 0.18, 'highpass', 4000, 1500, o);
+    },
+    squid: (o) => {
+      tone('square', 600, 140, 0.18, 0.06, Object.assign({ filter: ['lowpass', 1800] }, o));
+      noise(0.12, 0.12, 'bandpass', 600, 300, o);
+    },
+    gum: (o) => {
+      tone('sine', 180, 700, 0.12, 0.12, o);
+      noise(0.06, 0.2, 'bandpass', 2000, 0, Object.assign({ when: 0.11, q: 2 }, o));
+    },
+    cutin: () => {
+      noise(0.3, 0.22, 'bandpass', 500, 4000, { q: 0.8, attack: 0.04 });
+      [523, 659, 784, 1046].forEach((f, i) => brass(f, 0.12 + i * 0.05, 0.35, 0.045));
+      playBuf(BUF.kick, ctx.currentTime + 0.12, 0.8);
+    },
+    ready: () => {
+      fm(1568, 3.5, 2, 0.35, 0.04, { wet: 0.5 });
+      fm(2093, 3.5, 2, 0.35, 0.03, { when: 0.08, wet: 0.5 });
+    },
   };
 
   function brass(f, when, dur, vol, slideTo, vib) {
@@ -566,6 +596,7 @@
     pop: 0.03, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08,
     coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5,
     chord: 0.15, nail: 0.07, sonar: 0.6, hover: 0.04, laserBig: 0.3, nuke: 0.5,
+    dig: 0.12, shield: 0.3, shieldBreak: 0.15, squid: 0.1, gum: 0.1, cutin: 0.4, ready: 0.25,
   };
 
   // play(name, x?) — x is a map position, used to pan the sound left/right
