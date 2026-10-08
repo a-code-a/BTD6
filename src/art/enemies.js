@@ -81,7 +81,6 @@
       denim: sp.titan ? { base: '#3b3f4a', light: '#6b7280', dark: '#22252c', stitch: '#ff5252' } : undefined,
       logoColor: '#5b1d7a',
     };
-    const arm = w * 0.15;
     if (sp.armsUp || sp.boss) {
       mo.armsBack = [];
       mo.arms = [

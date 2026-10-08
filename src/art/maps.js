@@ -1085,7 +1085,11 @@
     paint,
     texture(scene, map, paths) {
       const key = 'map_' + map.id;
-      if (!scene.textures.exists(key)) D.make(scene, key, W, H, (ctx) => paint(ctx, map, paths));
+      if (!scene.textures.exists(key)) {
+        // a painted map is ~12 MB, so only the one being played stays cached
+        scene.textures.getTextureKeys().forEach((k) => k.startsWith('map_') && scene.textures.remove(k));
+        D.make(scene, key, W, H, (ctx) => paint(ctx, map, paths));
+      }
       return key;
     },
     // decor that must render above enemies (e.g. the moon rocket)

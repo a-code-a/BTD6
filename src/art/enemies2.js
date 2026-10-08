@@ -4,7 +4,7 @@
   const D = MT.Draw;
   const OL = D.OL;
   const EA = MT.EnemyArt;
-  const { metalPlate, bossDamage, drawPurple } = EA.helpers;
+  const { metalPlate, bossDamage } = EA.helpers;
 
   const fortPlate = (c2, x, y, ww, hh, o) => {
     if (o.fort) metalPlate(c2, x - ww * 0.3, y + hh * 0.07, ww * 0.6, hh * 0.2, false);

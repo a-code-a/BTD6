@@ -817,10 +817,19 @@
       if (s.over) return;
       if (s.paused) {
         s.paused = false;
+        (s.frozenTweens || []).forEach((tw) => tw.parent && tw.paused && tw.resume());
+        s.frozenTweens = null;
+        s.time.paused = false;
         this.hideOverlay();
         return;
       }
       s.paused = true;
+      // also freeze in-flight animations and timed effects (missiles, ability
+      // strikes, boss attacks) so nothing lands while the game is paused.
+      // Only the tweens running now are paused: the pause menu animates too.
+      s.frozenTweens = s.tweens.getTweens().filter((tw) => !tw.paused);
+      s.frozenTweens.forEach((tw) => tw.pause());
+      s.time.paused = true;
       s.cancelPlacing();
       this.showPauseMenu();
     }

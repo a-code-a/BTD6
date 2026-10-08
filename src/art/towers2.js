@@ -6,7 +6,7 @@
   const OL = D.OL;
   const TA = MT.TowerArt;
   const P = TA.painters;
-  const { glowRing, helmet, banana, bananaBall } = TA.props;
+  const { glowRing, banana } = TA.props;
   const B = { cx: 42, cy: 49, w: 30, h: 42 };
   const FOOT = 76;
 

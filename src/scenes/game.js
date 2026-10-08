@@ -83,6 +83,8 @@
       this.roundActive = false;
       this.speed = 1;
       this.paused = false;
+      // the clock plugin outlives restarts, so undo a pause from the last game
+      this.time.paused = false;
       this.over = false;
       this.freeplay = false;
       this.won = false;
