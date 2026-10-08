@@ -545,6 +545,12 @@
       this.money += v;
       t.destroy();
       this.towers = this.towers.filter((x) => x !== t);
+      // its nail piles go with it
+      this.traps = this.traps.filter((tr) => {
+        if (tr.tower !== t) return true;
+        this.removeTrap(tr, true);
+        return false;
+      });
       if (t.hero) this.heroPlaced = false;
       this.fx.dust.explode(12, t.x, t.y);
       this.fx.floatText(t.x, t.y - 20, '+' + U.money(v));
@@ -650,9 +656,12 @@
       const hero = this.towers.find((t) => t.hero);
       if (hero) this.gainHeroXp(hero, 20 + this.round * 8);
       for (const t of this.units()) t.bananaTimes = null;
-      // nail piles are swept up between rounds
-      this.traps.forEach((tr) => this.removeTrap(tr, true));
-      this.traps = [];
+      // nail piles are swept up between rounds, except Long-Life ones
+      this.traps = this.traps.filter((tr) => {
+        if (tr.p.persist && !tr.roll && !tr.gone) return true;
+        this.removeTrap(tr, true);
+        return false;
+      });
       MT.Audio.play('roundEnd');
       this.hud.toast(`Round ${this.round} complete!  +${U.money(income)}`, 1800);
       if (!this.freeplay && !this.won && this.round >= this.diff.rounds) {
@@ -1122,11 +1131,34 @@
       return pts;
     }
 
-    // Nail Minion: drop a nail pile (or banana peel) somewhere on the track in range
+    // Nail Minion: drop a nail pile (or banana peel, or a rolling spike ball)
+    // somewhere on the track in range
     placeTrap(t) {
       const s = t.stats;
       const pts = this.trackPoints(t);
       if (!pts.length || (!this.roundActive && !this.enemies.length)) return false;
+      const turn = t.shots;
+      if (s.ball && turn % s.ball.every === s.ball.every - 1) {
+        // start at the reachable point furthest along the track, so the ball
+        // rolls back through the whole range towards the oncoming mutants
+        let best = pts[0];
+        for (const q of pts) if (q.d / q.path.length > best.d / best.path.length) best = q;
+        this.rollBall(t, best.path, best.d, s.ball);
+        t.aimAt({ x: best.x, y: best.y, dead: false });
+        return true;
+      }
+      const own = this.traps.filter((tr) => tr.tower === t && !tr.roll && !tr.gone);
+      if (s.proj.perma && own.length >= (s.maxTraps || 24)) {
+        // the carpet is complete: hammer fresh nails into the emptiest pile
+        let worst = null;
+        for (const tr of own) if (!worst || tr.pierce / tr.max < worst.pierce / worst.max) worst = tr;
+        if (!worst || worst.pierce >= worst.max - 0.5) return false;
+        worst.pierce = worst.max;
+        this.fx.sparks.explode(3, worst.x, worst.y);
+        t.aimAt({ x: worst.x, y: worst.y, dead: false });
+        MT.Audio.play('nail', worst.x);
+        return true;
+      }
       let spot = null;
       if (s.smart) {
         // land right in front of the leading mutant in range
@@ -1137,44 +1169,73 @@
         }
       }
       if (!spot) spot = U.pick(pts);
-      const peel = s.peel && t.shots % s.peel.every === s.peel.every - 1;
+      const peel = s.peel && turn % s.peel.every === s.peel.every - 1;
       const p = peel
-        ? Object.assign({}, s.proj, { tex: 'fx_peel', dmg: 0, pierce: s.peel.pierce, knock: s.peel.knock, stun: { dur: 0.3 }, mine: null, type: 'normal' })
+        ? Object.assign({}, s.proj, { tex: 'fx_peel', dmg: 0, pierce: s.peel.pierce, knock: s.peel.knock, stun: { dur: 0.3 }, mine: null, dot: null, regen: 0, perma: false, slow: null, type: 'normal' })
         : s.proj;
       const x = spot.x + U.rand(-6, 6), y = spot.y + U.rand(-6, 6);
       const sprite = this.add.image(t.x, t.y - 20, p.tex).setScale((0.6 * (p.scale || 1)) / S).setDepth(980 + y * 0.001).setRotation(U.rand(-0.4, 0.4));
-      const tr = { x, y, p, pierce: p.pierce + (t.bonusPierce || 0), max: p.pierce, life: p.life || 14, tower: t, hit: new Set(), sprite };
+      const pierce = p.pierce + (t.bonusPierce || 0);
+      const tr = { x, y, p, pierce, max: pierce, life: p.life || 14, tower: t, hit: new Set(), sprite, land: 0.25 };
       // the pile is thrown in an arc onto the track
       const st = { k: 0 };
       const sx = t.x, sy = t.y - 20;
       this.tweens.add({
         targets: st, k: 1, duration: 260, ease: 'Quad.easeOut',
         onUpdate: () => sprite.setPosition(U.lerp(sx, x, st.k), U.lerp(sy, y, st.k) - Math.sin(st.k * Math.PI) * 30),
-        onComplete: () => sprite.setScale((p.scale || 1) / S),
+        onComplete: () => sprite.active && sprite.setScale((p.scale || 1) / S),
       });
       this.traps.push(tr);
       t.aimAt({ x, y, dead: false });
-      // keep the number of piles per tower under control
-      let mine = 0;
+      // keep the number of piles per tower under control (oldest go first)
+      let count = 0;
       for (let i = this.traps.length - 1; i >= 0; i--) {
-        if (this.traps[i].tower !== t) continue;
-        mine++;
-        if (mine > (s.maxTraps || 24)) {
-          this.removeTrap(this.traps[i], true);
+        const o = this.traps[i];
+        if (o.tower !== t || o.roll) continue;
+        count++;
+        if (count > (s.maxTraps || 24)) {
+          this.removeTrap(o, true);
           this.traps.splice(i, 1);
         }
       }
-      MT.Audio.play('nail');
+      MT.Audio.play('nail', x);
       return true;
+    }
+
+    // a spiked ball that rolls backwards along the track from distance d
+    rollBall(t, path, d, b) {
+      const p = {
+        tex: b.tex, dmg: b.dmg, pierce: b.pierce, type: 'sharp', armored: !!b.armored,
+        moabDmg: b.moabDmg || 0, bruteDmg: b.bruteDmg || 0, knock: b.knock || 0,
+      };
+      const q = path.at(d);
+      const sprite = this.add.image(q.x, q.y, b.tex).setScale(0.2 / S).setDepth(1000 + q.y);
+      this.tweens.add({ targets: sprite, scale: (b.scale || 1) / S, duration: 180, ease: 'Back.easeOut' });
+      const pierce = b.pierce + ((t && t.bonusPierce) || 0);
+      const tr = { x: q.x, y: q.y, p, pierce, max: pierce, life: b.travel / b.speed, tower: t, hit: new Set(), sprite, roll: { path, d, speed: b.speed, r: b.r } };
+      this.traps.push(tr);
+      this.fx.dust.explode(4, q.x, q.y + 6);
+      MT.Audio.play('rumble', q.x);
+      return tr;
     }
 
     removeTrap(tr, silent) {
       if (tr.gone) return;
       tr.gone = true;
-      if (!silent && tr.p.mine) {
-        this.explode(tr.x, tr.y, { tex: 'p_rocket', type: 'explosive', shred: 3, explode: tr.p.mine, moabDmg: Math.round((tr.p.moabDmg || 0) / 2) }, tr.tower);
+      const m = tr.p.mine;
+      if (!silent && m) {
+        this.explode(tr.x, tr.y, { tex: 'p_rocket', type: 'explosive', shred: 3, explode: m, moabDmg: Math.round((tr.p.moabDmg || 0) / 2) }, tr.tower);
+        if (m.nails) {
+          // Nail Bomb: shrapnel nails fly out in every direction
+          const np = { tex: 'p_nail', speed: 430, dmg: Math.max(2, Math.round(m.dmg / 2)), pierce: 3, type: 'sharp', armored: true, r: 5, moabDmg: 4 };
+          for (let k = 0; k < m.nails; k++) {
+            const a = (k / m.nails) * Math.PI * 2 + U.rand(-0.15, 0.15);
+            this.addProjectile(new MT.Projectile(this, tr.tower, tr.x, tr.y, a, np, { life: 0.34 }));
+          }
+        }
       }
       const sp = tr.sprite;
+      if (!sp || !sp.active) return;
       this.tweens.add({ targets: sp, alpha: 0, scale: sp.scale * 0.6, duration: 200, onComplete: () => sp.destroy() });
     }
 
@@ -1182,24 +1243,59 @@
       const T = this.traps;
       for (let i = T.length - 1; i >= 0; i--) {
         const tr = T[i];
-        tr.life -= dt;
-        // traps hit everything that steps on them, Camo included
-        for (const e of this.queryEnemies(tr.x, tr.y, 40)) {
-          if (e.dead || tr.hit.has(e.id) || !this.hittable(e, null, GROUND)) continue;
-          if (U.dist2(tr.x, tr.y, e.x, e.y) > (10 + e.radius * 0.6) ** 2) continue;
-          tr.hit.add(e.id);
-          const kids = this.applyHit(e, tr.p, tr.tower);
-          if (!kids) continue;
-          kids.forEach((k) => tr.hit.add(k.id));
-          tr.pierce--;
-          if (tr.p.tex === 'fx_peel') this.fx.dust.explode(2, e.x, e.y);
-          if (tr.pierce <= 0) break;
+        const R = tr.roll;
+        if (R) {
+          // rolling ball: travel back up the track, spinning as it goes
+          const mv = R.speed * dt;
+          R.d -= mv;
+          tr.life -= dt;
+          if (R.d <= 0) tr.life = 0;
+          const q = R.path.at(Math.max(0, R.d));
+          const dx = q.x - tr.x;
+          tr.x = q.x;
+          tr.y = q.y;
+          if (tr.sprite.active) {
+            tr.sprite.setPosition(q.x, q.y - R.r * 0.2).setDepth(1000 + q.y);
+            tr.sprite.rotation += (dx >= 0 ? 1 : -1) * (mv / R.r);
+          }
+          R.dust = (R.dust || 0) + dt;
+          if (R.dust > 0.12) {
+            R.dust = 0;
+            this.fx.dust.explode(1, q.x, q.y + R.r * 0.4);
+          }
+        } else if (!tr.p.perma && (this.roundActive || !tr.p.persist)) {
+          // Long-Life piles only age while a round is running; Perma ones never do
+          tr.life -= dt;
         }
-        if (tr.pierce <= 0 || tr.life <= 0) {
-          this.removeTrap(tr, tr.pierce > 0);
+        // the pile is still flying through the air (game time, so it works at 3x too)
+        if (tr.land > 0) tr.land -= dt;
+        // Perma-Nails regrow
+        if (tr.p.regen && tr.pierce < tr.max) tr.pierce = Math.min(tr.max, tr.pierce + tr.p.regen * dt);
+        // traps hit everything that steps on them, Camo included
+        const hitR = R ? R.r : 10;
+        if (tr.pierce >= 1 && !(tr.land > 0)) {
+          for (const e of this.queryEnemies(tr.x, tr.y, hitR + 40)) {
+            if (e.dead || tr.hit.has(e.id) || !this.hittable(e, null, GROUND)) continue;
+            if (U.dist2(tr.x, tr.y, e.x, e.y) > (hitR + e.radius * 0.6) ** 2) continue;
+            tr.hit.add(e.id);
+            const kids = this.applyHit(e, tr.p, tr.tower);
+            if (!kids) continue;
+            kids.forEach((k) => tr.hit.add(k.id));
+            tr.pierce--;
+            if (tr.p.tex === 'fx_peel') this.fx.dust.explode(2, e.x, e.y);
+            else if (R) this.fx.sparks.explode(1, e.x, e.y);
+            if (tr.pierce < 1) break;
+          }
+        }
+        const spent = tr.pierce < 1 && !tr.p.perma;
+        if (spent || tr.life <= 0) {
+          this.removeTrap(tr, false);
           T.splice(i, 1);
-        } else if (tr.sprite.active) {
-          tr.sprite.setAlpha(tr.life < 1.5 ? 0.4 + (tr.life / 1.5) * 0.6 : 1);
+        } else if (!R && tr.sprite.active && !(tr.land > 0)) {
+          // piles visibly shrink as their nails get used up
+          const frac = Math.min(1, tr.pierce / tr.max);
+          tr.sprite.setScale(((tr.p.scale || 1) / S) * (0.7 + 0.3 * frac));
+          tr.sprite.setAlpha(tr.p.perma && tr.pierce < 1 ? 0.35 : tr.life < 1.5 ? 0.4 + (tr.life / 1.5) * 0.6 : 1);
         }
       }
     }

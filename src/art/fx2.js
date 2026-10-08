@@ -198,46 +198,8 @@
       ctx.closePath();
       D.fs(ctx, '#455a64', OL, 0.8);
     });
-    const nailPile = (key, w, h, col, big) => mk(key, w, h, (ctx) => {
-      D.shadow(ctx, w / 2, h - 5, w * 0.42, 3.5, 0.35);
-      const rnd = D.rng(big ? 9 : 4);
-      const n = big ? 7 : 6;
-      for (let i = 0; i < n; i++) {
-        const x = w * 0.2 + rnd() * w * 0.6, y = h * 0.45 + rnd() * h * 0.35;
-        const rot = (rnd() - 0.5) * 2.2;
-        const len = big ? 10 + rnd() * 5 : 7 + rnd() * 3;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(rot);
-        if (big) {
-          ctx.beginPath();
-          ctx.moveTo(-2.6, 2);
-          ctx.lineTo(0, -len);
-          ctx.lineTo(2.6, 2);
-          ctx.closePath();
-          ctx.fillStyle = D.lin(ctx, -2.6, 0, 2.6, 0, [[0, '#eceff1'], [1, '#37474f']]);
-          ctx.fill();
-          ctx.strokeStyle = OL;
-          ctx.lineWidth = 0.9;
-          ctx.stroke();
-        } else {
-          ctx.strokeStyle = OL;
-          ctx.lineWidth = 2.4;
-          ctx.beginPath();
-          ctx.moveTo(0, 2);
-          ctx.lineTo(0, -len);
-          ctx.stroke();
-          ctx.strokeStyle = col;
-          ctx.lineWidth = 1.2;
-          ctx.stroke();
-          D.ellipsePath(ctx, 0, 2, 2.3, 1);
-          D.fs(ctx, col, OL, 0.6);
-        }
-        ctx.restore();
-      }
-    });
-    nailPile('fx_nails', 26, 22, '#cfd8dc', false);
-    nailPile('fx_nails_big', 32, 28, '#78909c', true);
+    // nail piles, mines and rolling spike balls (Nail Minion)
+    MT.NailArt.generate(scene);
     mk('fx_peel', 26, 18, (ctx) => {
       D.shadow(ctx, 13, 14, 11, 3, 0.3);
       for (let i = -1; i <= 1; i++) {
@@ -628,7 +590,18 @@
       ctx.stroke();
       ctx.setLineDash([]);
     });
-    ab('ab_spikes', '#eceff1', '#455a64', (ctx) => ctx.drawImage(img('fx_nails'), 6, 8, 44, 37));
+    ab('ab_spikes', '#eceff1', '#455a64', (ctx) => ctx.drawImage(img('fx_nails_big'), 6, 8, 44, 39));
+    ab('ab_wreck', '#ffe0b2', '#e65100', (ctx) => {
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 2.2;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(36 + i * 3, 16 + i * 9);
+        ctx.lineTo(50, 16 + i * 9);
+        ctx.stroke();
+      }
+      ctx.drawImage(img('p_wreckball'), 4, 8, 40, 40);
+    });
     ab('ab_ironrain', '#cfd8dc', '#263238', (ctx) => {
       ctx.strokeStyle = 'rgba(255,255,255,0.8)';
       ctx.lineWidth = 2;

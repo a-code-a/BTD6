@@ -463,6 +463,22 @@
     spikeStorm(game, t) {
       nailCarpet(game, t, 30, 1);
     },
+    // Wrecking Ball: giant spiked balls roll the whole way back up every track
+    rollingThunder(game, t) {
+      const pw = powerOf(t);
+      game.paths.forEach((path, pi) => {
+        const b = {
+          tex: 'p_wreckball', scale: 1.25, speed: 230, travel: path.length, r: 24,
+          dmg: Math.round(10 * pw), pierce: more(250, pw), moabDmg: Math.round(250 * pw), bruteDmg: 20, knock: 6, armored: true,
+        };
+        for (let k = 0; k < 4; k++) {
+          game.time.delayedCall(k * 420 + pi * 140, () => {
+            if (!game.over) game.rollBall(t, path, path.length - 10, b);
+          });
+        }
+      });
+      game.shake(0.25);
+    },
     ironRain(game, t) {
       nailCarpet(game, t, 22, powerOf(t) * 1.6);
     },

@@ -254,27 +254,50 @@
 
     nails: {
       name: 'Nail Minion', cost: 550, key: 'G', size: 16,
-      desc: 'Hammers piles of nails onto the track. Each pile pops several mutants before it is used up.',
-      trait: 'Traps: drops nail piles on the track. Traps hit Camo mutants too, no detection needed.',
+      desc: 'A carpenter minion who hammers piles of nails onto the track. Each pile pops several mutants before it is used up.',
+      trait: 'Traps: nail piles hit Camo mutants too. Upgrade into exploding mines, spike balls that roll back up the track, or a permanent nail carpet that stays between rounds.',
       base: { range: 85, rate: 1.7, attack: 'trap', maxTraps: 24, proj: P({ tex: 'fx_nails', dmg: 1, pierce: 6, type: 'sharp', r: 12, life: 14 }) },
       paths: [
-        { name: 'Sharper Nails', ups: [
-          up('Rusty Nails', 200, 'Each pile pops 3 more mutants.', (s) => { s.proj.pierce += 3; }),
-          up('Big Spikes', 450, 'Nails deal 2 damage.', (s) => { s.proj.dmg = 2; }),
-          up('Spike Mines', 1800, 'Used-up piles explode and shred armor.', (s) => { s.proj.mine = { r: 46, dmg: 3, pierce: 20 }; s.proj.pierce += 4; }),
-          up('Iron Spikes', 6000, '6 damage, 30 pierce, +20 to giants, pierces armor. Ability: Spike Storm.', (s) => { Object.assign(s.proj, { tex: 'fx_nails_big', dmg: 6, pierce: 30, moabDmg: 20, armored: true }); s.ability = 'spikeStorm'; }),
+        { name: 'Heavy Metal', ups: [
+          up('Rusty Nails', 200, 'Rusty piles pop 3 more and give mutants tetanus (damage over time).', (s) => { s.proj.pierce += 3; s.proj.tex = 'fx_nails_rust'; s.proj.dot = { dmg: 1, every: 1.5, dur: 3 }; }),
+          up('Red-Hot Nails', 450, 'Glowing nails deal 2 damage and melt through armor.', (s) => { s.proj.dmg = 2; s.proj.armored = true; s.proj.tex = 'fx_nails_hot'; }),
+          up('Spike Mines', 1800, 'Piles become spike mines that explode when used up or expired.', (s) => { s.proj.mine = { r: 46, dmg: 3, pierce: 20 }; s.proj.pierce += 4; s.proj.tex = 'fx_mine'; }),
+          up('Nail Bombs', 6000, 'Huge nail bombs: 6 damage, shrapnel, +20 vs giants. Ability: Spike Storm.', (s) => {
+            Object.assign(s.proj, { tex: 'fx_mine_big', dmg: 6, pierce: 30, moabDmg: 20, armored: true });
+            s.proj.mine = { r: 64, dmg: 6, pierce: 40, nails: 10 };
+            s.ability = 'spikeStorm';
+          }),
         ] },
-        { name: 'Nail Gun', ups: [
-          up('Quick Hammer', 180, 'Places nails 25% faster.', (s) => { s.rate *= 0.75; }),
-          up('Nail Gun', 400, 'Places nails 35% faster.', (s) => { s.rate *= 0.65; }),
-          up('Smart Spikes', 1500, 'Nails land right in front of the mutants and last twice as long.', (s) => { s.smart = true; s.proj.life *= 2; s.maxTraps += 12; }),
-          up('Nail Factory', 5500, 'Places nails 3x as fast, +2 pierce.', (s) => { s.rate *= 0.33; s.proj.pierce += 2; s.maxTraps += 20; }),
+        { name: 'Spike Balls', ups: [
+          up('Nail Gun', 250, 'Pneumatic nail gun: places piles 35% faster.', (s) => { s.rate *= 0.65; }),
+          up('Banana Peels', 500, 'Every 4th throw is a banana peel that makes mutants slide back.', (s) => { s.peel = { every: 4, knock: 14, pierce: 12 }; }),
+          up('Spiked Balls', 1500, 'Every 3rd throw is a spiked ball that rolls BACK up the track.', (s) => {
+            s.ball = { every: 3, tex: 'p_spikeball', speed: 150, travel: 380, r: 13, dmg: 2, pierce: 20, armored: true };
+          }),
+          up('Wrecking Ball', 5500, 'Giant wrecking balls, 2x speed, +30 vs giants. Ability: Rolling Thunder.', (s) => {
+            s.rate *= 0.5;
+            s.ball = { every: 2, tex: 'p_wreckball', speed: 135, travel: 620, r: 21, dmg: 5, pierce: 60, moabDmg: 30, bruteDmg: 5, knock: 5, armored: true };
+            s.ability = 'rollingThunder';
+          }),
         ] },
-        { name: 'Handy Tricks', ups: [
+        { name: 'Long Life', ups: [
           up('Long Reach', 150, '+35 range.', (s) => { s.range += 35; }),
-          up('Glue Nails', 350, 'Mutants that step on nails are slowed.', (s) => { s.proj.slow = { mul: 0.55, dur: 1.5 }; }),
-          up('Banana Peels', 1300, 'Every 3rd trap is a banana peel: mutants slip back down the track.', (s) => { s.peel = { every: 3, knock: 14, pierce: 12 }; }),
-          up('Sticky Floor', 4200, 'The glue now slows giants too and glues small mutants in place.', (s) => { s.proj.slow = { mul: 0.45, dur: 2, moab: true }; s.proj.stun = { dur: 0.6 }; }),
+          up('Smart Spikes', 350, 'Piles land right in front of the leading mutant.', (s) => { s.smart = true; }),
+          up('Long-Life Nails', 1300, 'Steel piles last 4x as long, +4 pierce, and STAY between rounds.', (s) => {
+            s.proj.life *= 4;
+            s.proj.pierce += 4;
+            s.proj.persist = true;
+            s.maxTraps += 16;
+            if (s.proj.tex === 'fx_nails' || s.proj.tex === 'fx_nails_rust') s.proj.tex = 'fx_nails_steel';
+          }),
+          up('Perma-Nails', 4200, 'Piles never wear out and regrow their nails. Glue slows (giants too).', (s) => {
+            s.proj.perma = true;
+            s.proj.regen = 0.6;
+            s.proj.pierce += 4;
+            s.proj.slow = { mul: 0.6, dur: 1.2, moab: true };
+            s.maxTraps += 10;
+            if (s.proj.tex !== 'fx_nails_hot') s.proj.tex = 'fx_nails_perma';
+          }),
         ] },
       ],
     },
@@ -560,6 +583,7 @@
     supernova: { name: 'Supernova', cd: 100, icon: 'ab_supernova', desc: 'A star explodes: destroys every small mutant, 25000 damage to giants.' },
     // nails + submarine
     spikeStorm: { name: 'Spike Storm', cd: 45, icon: 'ab_spikes', desc: 'Covers the whole track in nail piles.' },
+    rollingThunder: { name: 'Rolling Thunder', cd: 50, icon: 'ab_wreck', desc: 'Giant wrecking balls roll all the way back up every track.' },
     ironRain: { name: 'Iron Rain', cd: 50, icon: 'ab_ironrain', desc: 'Giant iron spikes rain onto the whole track and explode.' },
     nukeLaunch: { name: 'Nuclear Launch', cd: 55, icon: 'ab_nukelaunch', desc: 'A nuke hits the strongest giant: 4000 damage plus a huge blast.' },
     kraken: { name: 'Release the Kraken', cd: 45, icon: 'ab_kraken', desc: 'Tentacles grab the 5 strongest mutants, hold them and crush them.' },

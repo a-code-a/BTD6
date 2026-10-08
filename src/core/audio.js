@@ -535,6 +535,10 @@
       fm(2400, 2.76, 3, 0.09, 0.05, o);
       noise(0.04, 0.06, 'highpass', 3000, 0, o);
     },
+    rumble: (o) => {
+      noise(0.55, 0.16, 'lowpass', 380, 90, o);
+      tone('sine', 72, 48, 0.5, 0.12, o);
+    },
     sonar: () => {
       tone('sine', 1320, 1300, 0.6, 0.1, { wet: 0.7 });
       tone('sine', 1320, 1290, 0.4, 0.03, { when: 0.35, wet: 0.7 });
@@ -595,7 +599,7 @@
   const MIN_GAP = {
     pop: 0.03, bigpop: 0.08, throw: 0.05, fart: 0.12, rocket: 0.08, boom: 0.07, freeze: 0.12, laser: 0.05, jelly: 0.06, clank: 0.08,
     coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5,
-    chord: 0.15, nail: 0.07, sonar: 0.6, hover: 0.04, laserBig: 0.3, nuke: 0.5,
+    chord: 0.15, nail: 0.07, rumble: 0.25, sonar: 0.6, hover: 0.04, laserBig: 0.3, nuke: 0.5,
     dig: 0.12, shield: 0.3, shieldBreak: 0.15, squid: 0.1, gum: 0.1, cutin: 0.4, ready: 0.25,
   };
 

@@ -96,7 +96,7 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 | Tesla Minion | Chain lightning | Arc Reactor, Triple Coil, EMP Overload, Lightning Storm ability |
 | Minion Pilot | Planes circle and strafe | Rocket Pods, Gunship, Squadron of 3, Bombing Run ability |
 | Rock Star Minion | Rhythm: every 4th note is a power chord | Heavy Metal → Rock God, Minion Band buff, Disco Ball stuns, Papoy Song ability |
-| Nail Minion | Nail traps on the track, hit Camo too | Spike Mines, Smart Spikes, Banana Peels, Spike Storm ability |
+| Nail Minion | Nail traps on the track, hit Camo too | Heavy Metal (red-hot nails, spike mines, Nail Bombs + Spike Storm), Spike Balls (banana peels, spiked balls that roll back up the track, Wrecking Ball + Rolling Thunder), Long Life (Long-Life Nails that stay between rounds, a regrowing Perma-Nail carpet) |
 | Submarine Minion | Water only, homing torpedoes, sonar strips Camo | Ballistic Missile, Torpedo Barrage, Nuclear Launch & Kraken abilities |
 | Banana Farm | Income | Plantations, Golden Bananas, Banana Bank, auto-collect |
 | Gru's Lab | Support buffs | Range/speed/pierce buffs, camo & armor detection, discounts, Lab Turret |
