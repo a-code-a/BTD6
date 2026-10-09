@@ -125,17 +125,25 @@
       });
       // ---- right: abilities
       p.add(MT.text(this, 880, 232, 'ABILITIES', 22, { title: true, ox: 0, color: '#ffd83a' }));
-      this.abilities(def).forEach((a, k) => {
+      const list = this.abilities(def).concat([{ id: 'legendForm', lv: '★' + MT.LEGEND_STAR }]);
+      list.forEach((a, k) => {
         const A = MT.ABILITIES[a.id];
         if (!A) return;
-        const by = 262 + k * 210;
-        p.add(MT.UI.panel(this, 872, by, 310, 196, 'dark'));
-        const icon = this.add.image(916, by + 44, A.icon).setDisplaySize(56, 56);
+        const by = 256 + k * 110;
+        p.add(MT.UI.panel(this, 872, by, 310, 106, 'dark'));
+        const icon = this.add.image(908, by + 32, A.icon).setDisplaySize(46, 46);
         p.add(icon);
-        p.add(MT.text(this, 956, by + 30, A.name, 21, { title: true, ox: 0 }));
-        p.add(MT.text(this, 956, by + 58, `Level ${a.lv}  ·  ${A.cd}s cooldown`, 13, { ox: 0, color: '#9fd0ff' }));
-        p.add(MT.text(this, 888, by + 88, A.desc, 15, { ox: 0, oy: 0, align: 'left', wrap: 280 }));
+        p.add(MT.text(this, 940, by + 22, A.name, 19, { title: true, ox: 0 }));
+        p.add(MT.text(this, 940, by + 45, `${typeof a.lv === 'number' ? 'Level ' + a.lv : a.lv}  ·  ${A.cd}s cooldown`, 12, { ox: 0, color: '#9fd0ff' }));
+        const d = MT.text(this, 884, by + 54, A.desc, 13, { ox: 0, oy: 0, align: 'left', wrap: 290, strokeThickness: 3 });
+        if (d.height > 36) d.setFontSize(11.5);
+        p.add(d);
       });
+      // ascension: why a hero keeps mattering after level 10
+      const ay = 256 + list.length * 110;
+      const partner = MT.TOWERS[def.partner];
+      p.add(MT.text(this, 880, ay, 'ASCENSION ★', 18, { title: true, ox: 0, oy: 0, color: '#ffe082' }));
+      p.add(MT.text(this, 880, ay + 24, `Past level 10: unlimited ★ stars (round XP or bananas). Each star adds damage, speed, range, ability power and a Command aura for nearby towers.` + (partner ? ` ${partner.name}s get double.` : ''), 12, { ox: 0, oy: 0, align: 'left', wrap: 310, color: '#e8f1ff', strokeThickness: 3 }));
       if (say) {
         const q = def.quotes[Math.floor(Math.random() * def.quotes.length)];
         p.add(MT.menuBubble(this, 300, 340, q));

@@ -492,9 +492,14 @@
       this.hud.onTowersChanged();
     }
 
+    // XP still missing for the next level, or for the next star once maxed
+    heroXpToNext(t) {
+      if (t.level < MT.HERO_MAX_LEVEL) return MT.HERO_XP[t.level] - t.xp;
+      return MT.starXp(t.stars) - t.sxp;
+    }
+
     heroLevelCost(t) {
-      if (t.level >= 10) return 0;
-      return U.round5((MT.HERO_XP[t.level] - t.xp) * 2 * this.diff.price);
+      return U.round5(this.heroXpToNext(t) * 2 * this.diff.price);
     }
 
     buyHeroLevel(t) {
@@ -505,24 +510,53 @@
       }
       this.money -= cost;
       t.spent += Math.floor(cost * 0.5);
-      this.gainHeroXp(t, MT.HERO_XP[t.level] - t.xp);
+      this.gainHeroXp(t, this.heroXpToNext(t));
     }
 
+    // levels 1-10 first; past that the XP keeps flowing into ascension stars
     gainHeroXp(t, amount) {
-      t.xp += amount;
-      let leveled = false;
-      while (t.level < 10 && t.xp >= MT.HERO_XP[t.level]) {
-        t.level++;
-        leveled = true;
+      const MAX = MT.HERO_MAX_LEVEL;
+      let leveled = false, ascended = 0;
+      if (t.level < MAX) {
+        t.xp += amount;
+        amount = 0;
+        while (t.level < MAX && t.xp >= MT.HERO_XP[t.level]) {
+          t.level++;
+          leveled = true;
+        }
+        if (t.level >= MAX) {
+          amount = t.xp - MT.HERO_XP[MAX - 1];
+          t.xp = MT.HERO_XP[MAX - 1];
+        }
       }
-      if (leveled) {
+      if (t.level >= MAX && amount > 0) {
+        t.sxp += amount;
+        while (t.sxp >= MT.starXp(t.stars)) {
+          t.sxp -= MT.starXp(t.stars);
+          t.stars++;
+          ascended++;
+        }
+      }
+      if (leveled || ascended) {
         t.recompute();
         t.refreshTexture();
         this.recalcBuffs();
         const col = U.hexInt(t.def.color || '#7fdbff');
-        this.fx.ring(t.x, t.y, 60, col, { dur: 500 });
+        if (ascended) {
+          t.makeHeroVisuals();
+          t.bump = 1;
+          this.fx.shockwave(t.x, t.y, 150, 0xffd54f, 600);
+          this.fx.ring(t.x, t.y, 80, col, { dur: 600, force: true });
+          this.fx.glow.particleTint = 0xffd54f;
+          this.fx.glow.explode(24, t.x, t.y - 24);
+          this.fx.floatText(t.x, t.y - 60, (t.stars === 1 ? 'ASCENDED ★' : 'STAR ★') + t.stars + '!', '#ffe082', 22);
+          if (t.stars === MT.LEGEND_STAR) this.hud.toast(t.def.name + ' unlocked LEGEND FORM!', 2200);
+          else if (t.stars === 1) this.hud.toast(t.def.name + ' ascended! Nearby towers now get a Command bonus.', 2400);
+        } else {
+          this.fx.ring(t.x, t.y, 60, col, { dur: 500 });
+          this.fx.floatText(t.x, t.y - 50, 'LEVEL ' + t.level + '!', t.def.color || '#7fdbff', 20);
+        }
         this.fx.sparks.explode(18, t.x, t.y - 20);
-        this.fx.floatText(t.x, t.y - 50, 'LEVEL ' + t.level + '!', t.def.color || '#7fdbff', 20);
         MT.Audio.play('upgrade');
         this.hud.onTowersChanged();
       }
@@ -573,9 +607,12 @@
             const r = s.stats.buffRange || s.stats.range;
             if (U.dist(s.x, s.y, t.x, t.y) > r) continue;
             const sb = s.stats.buff;
-            b = b || { range: 0, rate: 0, pierce: 0, camo: false, armored: false, air: false };
-            b.range = Math.max(b.range, sb.range || 0);
-            b.rate = Math.max(b.rate, sb.rate || 0);
+            // a hero's partner tower gets double the aura, Legend Form doubles it again
+            const k = s.hero ? (s.def.partner === t.type ? 2 : 1) * (s.legend > 0 ? 2 : 1) : 1;
+            b = b || { range: 0, rate: 0, pierce: 0, dmg: 0, camo: false, armored: false, air: false };
+            b.range = Math.max(b.range, (sb.range || 0) * Math.min(k, 2));
+            b.rate = Math.max(b.rate, Math.min(0.6, (sb.rate || 0) * k));
+            b.dmg = Math.max(b.dmg, Math.min(1, (sb.dmg || 0) * k));
             b.pierce = Math.max(b.pierce, sb.pierce || 0);
             b.camo = b.camo || !!sb.camo;
             b.armored = b.armored || !!sb.armored;
@@ -830,6 +867,7 @@
       if (d > 0 && e.freeze > 0 && e.brittle) d += 1;
       if (d > 0 && shredded) d += 1;
       if (d <= 0) return [];
+      if (tower && tower.dmgMul > 1) d *= tower.dmgMul;
       return this.damageEnemy(e, d, tower);
     }
 
@@ -1262,7 +1300,7 @@
     abilityList() {
       const out = [];
       for (const t of this.units()) {
-        [t.stats.ability, t.stats.ability2].forEach((id) => id && out.push({ tower: t, id }));
+        [t.stats.ability, t.stats.ability2, t.stats.ability3].forEach((id) => id && out.push({ tower: t, id }));
       }
       return out;
     }

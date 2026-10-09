@@ -342,6 +342,14 @@
         D.fs(ctx, '#ffffff');
       }
     });
+    // ascension star orbiting a hero
+    mk('fx_star', 32, 32, (ctx) => {
+      ctx.fillStyle = D.rad(ctx, 16, 16, 0, 16, 16, 16, [[0, 'rgba(255,255,255,0.9)'], [0.4, 'rgba(255,255,255,0.35)'], [1, 'rgba(255,255,255,0)']]);
+      D.circlePath(ctx, 16, 16, 16);
+      ctx.fill();
+      D.starPath(ctx, 16, 16, 5, 9, 3.8);
+      D.fs(ctx, '#ffffff');
+    });
     mk('fx_pillar', 48, 320, (ctx) => {
       const g = ctx.createLinearGradient(0, 0, 0, 320);
       g.addColorStop(0, 'rgba(255,255,255,0)');
@@ -659,6 +667,16 @@
       ctx.drawImage(img('fx_tentacle'), 4, 8, 22, 40);
       ctx.drawImage(img('p_torpedo'), 22, 26, 30, 12);
       ctx.drawImage(img('p_torpedo'), 20, 36, 30, 12);
+    });
+    ab('ab_legend', '#fff59d', '#6a1b9a', (ctx) => {
+      glowDot(ctx, 28, 31, 20, '#fff8e1', '#ffb300');
+      D.starPath(ctx, 28, 32, 5, 15, 6.5);
+      ctx.fillStyle = D.lin(ctx, 0, 17, 0, 47, [[0, '#fffde7'], [0.5, '#ffd54f'], [1, '#ff8f00']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      MT.TowerArt.props.crown(ctx, 28, 13, 0.75, '#e040fb');
     });
     ab('ab_supernova', '#ffffff', '#ff8f00', (ctx) => {
       glowDot(ctx, 28, 28, 22, '#fff59d', '#ff6f00');

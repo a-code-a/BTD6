@@ -554,6 +554,10 @@
       this.moveAge = 1;
       this.level = 1;
       this.xp = 0;
+      this.stars = 0; // hero ascension past level 10
+      this.sxp = 0; // XP towards the next star
+      this.legend = 0; // Legend Form time left
+      this.dmgMul = 1;
       this.pops = 0;
       this.spent = 0;
       this.dmg = 0; // damage dealt, for the end-of-game stats
@@ -594,7 +598,7 @@
       return 49 / 92;
     }
     texKey() {
-      if (this.hero) return MT.TowerArt.heroKey(this.game, this.type, this.level);
+      if (this.hero) return MT.TowerArt.heroKey(this.game, this.type, this.level, this.stars);
       if (this.omega) return MT.TowerArt.omegaKey(this.game, this.subs.map((s) => s.type));
       if (this.ultimate) return MT.TowerArt.ultimateKey(this.game, this.type);
       if (this.fused) return MT.TowerArt.fusedKey(this.game, this.type);
@@ -612,9 +616,11 @@
     }
     // ability strength / cooldown multipliers for the bigger fusion tiers
     get power() {
+      if (this.hero) return 1 + 0.2 * this.stars;
       return this.ultimate ? 2.5 : this.component ? 1.5 : 1;
     }
     get cdMul() {
+      if (this.hero) return Math.max(0.5, Math.pow(0.95, this.stars));
       return this.ultimate ? 0.7 : this.component ? 0.8 : 1;
     }
     get totalPops() {
@@ -636,6 +642,7 @@
             const L = this.def.levels[l];
             if (L && L.fx) L.fx(s);
           }
+          MT.ascendStats(s, this.stars);
         } else {
           this.def.paths.forEach((path, pi) => {
             for (let t = 0; t < this.tiers[pi]; t++) path.ups[t].fx(s);
@@ -653,6 +660,7 @@
       const b = this.buffs;
       this.buffArmored = false;
       this.bonusPierce = 0;
+      this.dmgMul = 1 + ((b && b.dmg) || 0);
       if (b && s.attack !== 'none') {
         if (b.range) s.range *= 1 + b.range;
         if (b.rate) s.rate *= 1 - b.rate;
@@ -663,6 +671,11 @@
       if (this.giant > 0) {
         s.range *= 1.5;
         s.rate *= 0.35;
+      }
+      if (this.legend > 0) {
+        s.range *= 1.2;
+        s.rate *= 0.4;
+        this.dmgMul *= 2;
       }
       // heroes and every fusion tier can shoot down flying mutants; a Lab radar grants it too
       if (this.hero || this.fused || this.omega || (b && b.air)) s.air = true;
@@ -728,6 +741,15 @@
           MT.Abilities.kevinStomp(g, this);
         }
         if (this.giant <= 0) this.applyBuffs();
+      }
+      if (this.legend > 0) {
+        this.legend -= dt;
+        if (this.legend <= 0) {
+          this.legend = 0;
+          this.applyBuffs();
+          g.recalcBuffs();
+          g.fx.ring(this.x, this.y, 70, MT.util.hexInt(this.def.color), { dur: 400 });
+        }
       }
       if (s.attack === 'plane') this.planeA += (s.planeSpeed || 1.5) * dt;
       if (s.attack === 'none') return;
@@ -968,7 +990,7 @@
       this.tilt += (want - this.tilt) * Math.min(1, dt * 12);
       this.kick = Math.max(0, this.kick - dt * 7);
       // growth: giant Kevin / fusion pop
-      const goal = this.giant > 0 ? 2.3 : 1;
+      const goal = this.giant > 0 ? 2.3 : this.legend > 0 ? 1.35 : 1;
       this.growth += (goal - this.growth) * Math.min(1, dt * 6);
       const pop = this.age < 0.24 ? backOut(this.age / 0.24) : 1;
       const k = this.kick;
@@ -1020,7 +1042,12 @@
         const h = Math.round(255 - this.heat * 70);
         sp.setTint(Phaser.Display.Color.GetColor(255, h, Math.round(h * 0.8)));
         if (Math.random() < dt * this.heat * 14) this.game.fx.sparkle(this.x + U.rand(-14, 14), this.y - U.rand(0, 36), 0xff9100);
+      } else if (this.legend > 0) {
+        // Legend Form: shimmering gold
+        const k2 = 0.5 + 0.5 * Math.sin(time * 0.012);
+        sp.setTint(Phaser.Display.Color.GetColor(255, Math.round(236 + 19 * k2), Math.round(150 + 105 * k2)));
       } else sp.clearTint();
+      if (this.hero) this.renderHero(dt, time, px, py);
       if (this.aura) {
         const sc = this.auraScale || 0.9;
         this.aura.setPosition(px, py - 8);
@@ -1042,7 +1069,7 @@
         if (Math.random() < dt * (this.omega ? 8 : this.ultimate ? 5 : 3)) this.game.fx.sparkle(px + U.rand(-spread, spread), py - U.rand(0, spread * 2), this.auraColor);
       }
       if (this.orbs) {
-        const R = this.omega ? 70 : 50;
+        const R = this.omega ? 70 : this.hero ? 34 : 50;
         this.orbs.forEach((o, i) => {
           const a = time * 0.0018 + (i * TAU) / this.orbs.length;
           o.setPosition(px + Math.cos(a) * R, py - 24 + Math.sin(a) * R * 0.35);
@@ -1064,6 +1091,37 @@
         pl.sprite.setDepth(5500 + pos.y * 0.01);
         pl.shadow.setPosition(pos.gx, pos.gy + 4);
       });
+    }
+    // ascended heroes: aura, halo, orbiting stars and a ★ badge
+    makeHeroVisuals() {
+      const g = this.game;
+      const n = this.stars;
+      if (!n) return;
+      const col = MT.util.hexInt(this.def.color);
+      this.auraColor = n >= 10 ? 0xffd54f : col;
+      this.auraScale = 0.75 + Math.min(0.5, n * 0.04);
+      if (!this.aura) {
+        this.aura = g.add.image(this.x, this.y - 8, 'fx_aura').setBlendMode(Phaser.BlendModes.ADD);
+        this.halo = g.add.image(this.x, this.y - 8, 'fx_halo').setBlendMode(Phaser.BlendModes.ADD);
+      }
+      this.aura.setTint(col).setAlpha(Math.min(0.8, 0.4 + n * 0.04));
+      this.halo.setTint(0xffd54f).setAlpha(Math.min(0.7, 0.3 + n * 0.04)).setScale((0.8 + Math.min(0.4, n * 0.03)) / MT.Draw.S);
+      const want = n >= 10 ? 3 : n >= 5 ? 2 : 1;
+      if (!this.orbs || this.orbs.length !== want) {
+        if (this.orbs) this.orbs.forEach((o) => o.destroy());
+        this.orbs = [];
+        for (let i = 0; i < want; i++) this.orbs.push(g.add.image(this.x, this.y, 'fx_star').setTint(i % 2 ? col : 0xffe082).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95));
+      }
+      if (!this.badge) this.badge = MT.text(g, this.x, this.y, '', 13, { title: true, color: '#ffe082', strokeThickness: 3 });
+      this.badge.setText('★' + n);
+    }
+    renderHero(dt, time, px, py) {
+      // the ★ badge floats just above the hero's head (and its halo)
+      const top = MT.HeroArt.headY(this.type) * this.growth;
+      if (this.badge) this.badge.setPosition(px, py + top - 14).setDepth(1000 + this.y + 1).setScale(this.legend > 0 ? 1.2 : 1);
+      if (this.legend > 0 && Math.random() < dt * 14) {
+        this.game.fx.sparkle(px + U.rand(-26, 26), py - U.rand(0, 70), Math.random() < 0.5 ? 0xffd54f : MT.util.hexInt(this.def.color));
+      }
     }
     makeFusedVisuals() {
       const g = this.game;
@@ -1122,6 +1180,8 @@
       if (this.halo) this.halo.destroy();
       if (this.orbs) this.orbs.forEach((o) => o.destroy());
       this.aura = this.halo = this.orbs = null;
+      if (this.badge) this.badge.destroy();
+      this.badge = null;
       if (this.disableSprite) this.disableSprite.destroy();
       this.disableSprite = null;
       if (this.subs) this.subs.forEach((u) => u.destroy());

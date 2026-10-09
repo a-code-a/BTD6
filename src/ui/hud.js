@@ -454,20 +454,75 @@
       const s = this.scene;
       const H = t.def;
       const XP = MT.HERO_XP;
+      const maxed = t.level >= MT.HERO_MAX_LEVEL;
       add(MT.UI.panel(s, 12, y, 236, 54, 'card'));
-      add(MT.text(s, 24, y + 17, `Level ${t.level}`, 19, { title: true, ox: 0, color: '#ffd83a' }));
-      const next = t.level < 10 ? XP[t.level] : XP[9];
-      const prev = XP[t.level - 1];
-      const frac = t.level >= 10 ? 1 : U.clamp((t.xp - prev) / (next - prev), 0, 1);
+      add(MT.text(s, 24, y + 17, maxed ? `Level ${t.level}  ★${t.stars}` : `Level ${t.level}`, 19, { title: true, ox: 0, color: maxed && t.stars ? '#ffe082' : '#ffd83a' }));
+      let frac, xpLabel;
+      if (maxed) {
+        // past level 10 the bar fills towards the next ascension star
+        const need = MT.starXp(t.stars);
+        frac = U.clamp(t.sxp / need, 0, 1);
+        xpLabel = `${Math.floor(t.sxp)}/${need} XP`;
+      } else {
+        const next = XP[t.level], prev = XP[t.level - 1];
+        frac = U.clamp((t.xp - prev) / (next - prev), 0, 1);
+        xpLabel = `${Math.floor(t.xp)}/${next} XP`;
+      }
       const g = s.add.graphics();
       g.fillStyle(0x1b335c, 1);
       g.fillRoundedRect(24, y + 32, 210, 11, 5.5);
-      g.fillStyle(0x7fdbff, 1);
+      g.fillStyle(maxed ? 0xffc61a : 0x7fdbff, 1);
       g.fillRoundedRect(24, y + 32, Math.max(8, 210 * frac), 11, 5.5);
       g.lineStyle(2, 0x2a1d14, 1);
       g.strokeRoundedRect(24, y + 32, 210, 11, 5.5);
       add(g);
-      add(MT.text(s, 234, y + 17, t.level >= 10 ? 'MAX' : `${Math.floor(t.xp)}/${next} XP`, 12, { ox: 1, color: '#cfe3ff' }));
+      add(MT.text(s, 234, y + 17, xpLabel, 12, { ox: 1, color: '#cfe3ff' }));
+      if (maxed) this.buildAscendRows(t, y + 60, add);
+      else this.buildLevelList(t, y, add);
+      const cost = s.heroLevelCost(t);
+      this.heroBtn = new MT.UI.Button(s, 130, 424, 228, 40, {
+        style: maxed ? 'yellow' : 'blue', label: maxed ? `ASCEND ★${t.stars + 1}  ${U.money(cost)}` : `LEVEL UP  ${U.money(cost)}`, size: 18,
+        onClick: () => s.buyHeroLevel(t),
+        onHover: (on) => {
+          if (!on) return this.tip.hide();
+          if (maxed) this.tip.show(X0 - 268, 360, 'Ascend', 'Spend bananas to earn the next ★ right away. Stars also come by themselves from round XP. There is no star limit: every star makes the hero and its Command aura stronger.');
+          else this.tip.show(X0 - 268, 360, 'Level up', 'Buy the XP for the next level. Past level 10 the hero ascends and earns ★ stars without limit.');
+        },
+      });
+      add(this.heroBtn);
+    }
+
+    // level 10+: what the current stars give and what the next one adds
+    buildAscendRows(t, y, add) {
+      const s = this.scene;
+      const partner = MT.TOWERS[t.def.partner];
+      if (partner) {
+        const pt = add(MT.text(s, 18, y, `Partner tower: ${partner.name} (2x Command)`, 11, { ox: 0, oy: 0, color: '#ffd166', strokeThickness: 3 }));
+        if (pt.width > 226) pt.setScale(226 / pt.width);
+      }
+      y += 18;
+      add(MT.text(s, 18, y, 'ASCENSION', 15, { title: true, ox: 0, oy: 0, color: '#ffe082' }));
+      add(MT.text(s, 238, y + 3, `now  →  ★${t.stars + 1}`, 11, { ox: 1, oy: 0, color: '#9fb3d1', strokeThickness: 3 }));
+      y += 21;
+      const stripes = s.add.graphics();
+      add(stripes);
+      MT.ascendRows(t.stars).forEach(([label, cur, nxt], i) => {
+        if (i % 2 === 0) {
+          stripes.fillStyle(0x1b335c, 0.6);
+          stripes.fillRoundedRect(14, y - 2, 232, 17, 4);
+        }
+        add(MT.text(s, 20, y, label, 11, { ox: 0, oy: 0, color: '#cfe3ff', strokeThickness: 3 }));
+        add(MT.text(s, 172, y, cur, 11, { ox: 1, oy: 0, color: t.stars ? '#b8ffb0' : '#8094b3', strokeThickness: 3 }));
+        add(MT.text(s, 184, y, '→', 11, { oy: 0, color: '#9fb3d1', strokeThickness: 3 }));
+        add(MT.text(s, 238, y, nxt, 11, { ox: 1, oy: 0, color: '#ffe082', strokeThickness: 3 }));
+        y += 17;
+      });
+      add(MT.text(s, 130, y + 4, MT.ascendMilestone(t.stars), 11, { oy: 0, wrap: 230, color: '#ff9cf0', strokeThickness: 3 }));
+    }
+
+    buildLevelList(t, y, add) {
+      const s = this.scene;
+      const H = t.def;
       // the level list must end above the LEVEL UP button
       let ly = y + 60;
       const lines = [];
@@ -487,12 +542,6 @@
           yy += line.height;
         });
       }
-      const cost = s.heroLevelCost(t);
-      this.heroBtn = new MT.UI.Button(s, 130, 424, 228, 40, {
-        style: 'blue', label: t.level >= 10 ? 'MAX LEVEL' : `LEVEL UP  ${U.money(cost)}`, size: 18,
-        onClick: () => s.buyHeroLevel(t),
-      });
-      add(this.heroBtn);
     }
 
     refreshUpgradeButtons() {
@@ -516,7 +565,7 @@
       }
       if (t.hero && this.heroBtn) {
         const cost = s.heroLevelCost(t);
-        this.heroBtn.setEnabled(t.level < 10 && cost <= s.money);
+        this.heroBtn.setEnabled(cost <= s.money);
         return;
       }
       R.rows.forEach((r) => {
@@ -553,7 +602,8 @@
         c.on('pointerdown', () => s.useAbility(ab.tower, ab.id));
         c.on('pointerover', () => {
           c.setScale(1.1);
-          this.tip.show(x - 20, y - 130, A.name, A.desc + `\nCooldown: ${Math.round(A.cd * ab.tower.cdMul)}s` + (i < 9 ? `\nHotkey: ${i + 1}` : ''));
+          const pw = ab.tower.hero && ab.tower.stars ? `\nAscension power: x${ab.tower.power.toFixed(1)}` : '';
+          this.tip.show(x - 20, y - 130, A.name, A.desc + `\nCooldown: ${Math.round(A.cd * ab.tower.cdMul)}s` + pw + (i < 9 ? `\nHotkey: ${i + 1}` : ''));
         });
         c.on('pointerout', () => {
           c.setScale(1);
@@ -753,10 +803,14 @@
         s.units().forEach((t) => (t.abilityCd = {}));
         this.toast('Ability cooldowns reset!', 1200);
       }, 13);
+      // first click: level 10, every click after that: +5 ascension stars
       B(282, 282, 100, 32, 'HERO MAX', 'blue', () => {
         const h = s.towers.find((t) => t.hero);
-        if (h) s.gainHeroXp(h, MT.HERO_XP[9] - h.xp + 1);
-        else this.toast('Place your hero first!', 1200);
+        if (!h) return this.toast('Place your hero first!', 1200);
+        if (h.level < MT.HERO_MAX_LEVEL) return s.gainHeroXp(h, MT.HERO_XP[9] - h.xp + 1);
+        let xp = -h.sxp;
+        for (let k = 0; k < 5; k++) xp += MT.starXp(h.stars + k);
+        s.gainHeroXp(h, xp);
       }, 13);
     }
 

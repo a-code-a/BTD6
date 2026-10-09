@@ -51,11 +51,247 @@
     }
   }
 
+  // twin tanks strapped to the back (AVL jetpack / Vector's squid tanks)
+  function jetpack(ctx, cx, metal, accent, squids) {
+    for (const s of [-1, 1]) {
+      const x = cx + s * 15;
+      // nozzle flame
+      if (!squids) {
+        ctx.beginPath();
+        ctx.moveTo(x - 3.5, 78);
+        ctx.quadraticCurveTo(x, 96, x + 3.5, 78);
+        ctx.closePath();
+        ctx.fillStyle = D.lin(ctx, 0, 76, 0, 94, [[0, '#ffffff'], [0.35, '#fff176'], [1, 'rgba(255,112,67,0)']]);
+        ctx.fill();
+      }
+      D.rrPath(ctx, x - 5.5, 42, 11, 34, 5);
+      ctx.fillStyle = squids
+        ? D.lin(ctx, x - 5, 0, x + 5, 0, [[0, 'rgba(225,245,254,0.95)'], [0.5, 'rgba(129,212,250,0.85)'], [1, 'rgba(79,195,247,0.95)']])
+        : D.lin(ctx, x - 5, 0, x + 5, 0, [[0, '#ffffff'], [0.45, metal], [1, D.shade(metal, -0.4)]]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      if (squids) {
+        D.ellipsePath(ctx, x, 56, 3.2, 4.2);
+        D.fs(ctx, '#f06292', OL, 0.7);
+        for (let i = -1; i <= 1; i++) {
+          ctx.strokeStyle = '#ec407a';
+          ctx.lineWidth = 1.1;
+          ctx.beginPath();
+          ctx.moveTo(x + i * 1.6, 60);
+          ctx.quadraticCurveTo(x + i * 3, 64, x + i * 1.5, 67);
+          ctx.stroke();
+        }
+      }
+      // caps + accent band
+      D.rrPath(ctx, x - 6.5, 40, 13, 5, 2);
+      D.fs(ctx, D.shade(metal, -0.25), OL, 1);
+      D.rrPath(ctx, x - 6, 72, 12, 5, 2);
+      D.fs(ctx, D.shade(metal, -0.35), OL, 1);
+      ctx.fillStyle = accent;
+      ctx.fillRect(x - 5, 50, 10, 3);
+    }
+  }
+
+  // Nefario's goo reactor: a bubbling glass tank on his back
+  function gooTank(ctx, cx) {
+    const x = cx - 15;
+    D.rrPath(ctx, x - 9, 34, 18, 40, 7);
+    ctx.fillStyle = D.lin(ctx, x - 9, 0, x + 9, 0, [[0, 'rgba(241,255,214,0.95)'], [0.4, '#9be15d'], [1, '#3b8a12']]);
+    ctx.fill();
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    const rnd = D.rng(21);
+    for (let i = 0; i < 5; i++) {
+      D.circlePath(ctx, x - 5 + rnd() * 10, 42 + rnd() * 26, 1 + rnd() * 1.6);
+      D.fs(ctx, 'rgba(255,255,255,0.75)');
+    }
+    D.rrPath(ctx, x - 10, 31, 20, 6, 2.5);
+    D.fs(ctx, '#8d6e63', OL, 1.1);
+    D.rrPath(ctx, x - 10, 71, 20, 6, 2.5);
+    D.fs(ctx, '#8d6e63', OL, 1.1);
+    // pressure dial
+    D.circlePath(ctx, x, 27, 4);
+    D.fs(ctx, '#eceff1', OL, 1);
+    ctx.strokeStyle = '#e53935';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 27);
+    ctx.lineTo(x + 2.4, 25);
+    ctx.stroke();
+  }
+
+  // ---------------------------------------------------------------- render pipeline
+  // Every hero is painted on its own layer, then wrapped in a dark silhouette
+  // outline with a soft rim light so it reads clearly against busy maps.
+  // Ascension tiers add a golden look: tier 1 (★5) and tier 2 (★10).
+  const LOOK = {
+    gru: { color: '#7fdbff', head: [45, 7] },
+    lucy: { color: '#4dd0e1', head: [46, 11] },
+    nefario: { color: '#9be15d', head: [47, 15] },
+    kevin: { color: '#ffd83a', head: [44, 16] },
+    vector: { color: '#ff8a3a', head: [46, 14] },
+  };
+  const GOLD = '#ffd54f';
+
+  function layer() {
+    return D.canvas(96, 110);
+  }
+  // draw a raw (supersampled) canvas onto a scaled context
+  function blit(ctx, c, dx = 0, dy = 0, op, alpha) {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (op) ctx.globalCompositeOperation = op;
+    if (alpha != null) ctx.globalAlpha = alpha;
+    ctx.drawImage(c, dx, dy);
+    ctx.restore();
+  }
+  // solid-colour copy of a layer's silhouette, optionally grown outwards
+  function silhouette(src, col, grow, dx = 0, dy = 0) {
+    const L = layer();
+    const n = grow ? 12 : 1;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * D.TAU;
+      blit(L.ctx, src, dx + (grow ? Math.cos(a) * grow : 0), dy + (grow ? Math.sin(a) * grow : 0));
+    }
+    L.ctx.save();
+    L.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    L.ctx.globalCompositeOperation = 'source-in';
+    L.ctx.fillStyle = col;
+    L.ctx.fillRect(0, 0, L.c.width, L.c.height);
+    L.ctx.restore();
+    return L.c;
+  }
+  // the bright edge on the lit (upper-left) side of a layer
+  function rim(src, col, off) {
+    const L = layer();
+    blit(L.ctx, src);
+    blit(L.ctx, src, off, off, 'destination-out');
+    L.ctx.save();
+    L.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    L.ctx.globalCompositeOperation = 'source-in';
+    L.ctx.fillStyle = col;
+    L.ctx.fillRect(0, 0, L.c.width, L.c.height);
+    L.ctx.restore();
+    return L.c;
+  }
+
+  // hero-coloured ground badge so heroes stand out from the towers
+  function emblem(ctx, col, stage, tier) {
+    const cx = 45, cy = 101;
+    D.shadow(ctx, cx, cy, 24, 7, 0.35);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(1, 0.3);
+    const R = 25;
+    ctx.fillStyle = D.rad(ctx, 0, 0, 0, 0, 0, R, [[0, D.rgba(col, 0.05)], [0.7, D.rgba(col, 0.32)], [1, D.rgba(col, 0.05)]]);
+    D.circlePath(ctx, 0, 0, R);
+    ctx.fill();
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = tier ? GOLD : D.rgba(col, 0.85);
+    D.circlePath(ctx, 0, 0, R - 1.5);
+    ctx.stroke();
+    if (stage >= 5) {
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = D.rgba(tier ? '#fff8e1' : col, 0.6);
+      D.circlePath(ctx, 0, 0, R - 6);
+      ctx.stroke();
+    }
+    if (stage >= 10) {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * D.TAU + Math.PI / 4;
+        D.starPath(ctx, Math.cos(a) * (R - 1.5), Math.sin(a) * (R - 1.5), 4, 4.5, 1.6);
+        D.fs(ctx, tier ? '#fffde7' : D.shade(col, 0.5));
+      }
+    }
+    ctx.restore();
+  }
+
+  // ascended: flickering energy behind the hero; legendary adds light wings
+  function backAura(ctx, col, tier) {
+    const cx = 45;
+    if (tier >= 2) {
+      // feathered wings of light, longest feathers on top
+      for (const s of [-1, 1]) {
+        for (let f = 4; f >= 0; f--) {
+          const len = 40 - f * 4.5;
+          ctx.save();
+          ctx.translate(cx + s * 7, 54);
+          ctx.scale(s, 1);
+          ctx.rotate(-0.95 + f * 0.3);
+          ctx.beginPath();
+          ctx.moveTo(0, -2.5);
+          ctx.quadraticCurveTo(len * 0.55, -7, len, -1.5);
+          ctx.quadraticCurveTo(len * 0.6, 4, 0, 2.5);
+          ctx.closePath();
+          ctx.fillStyle = D.lin(ctx, 0, 0, len, 0, [[0, D.rgba(GOLD, 0.95)], [0.55, 'rgba(255,253,231,0.95)'], [1, D.rgba(col, 0.55)]]);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(160,100,0,0.7)';
+          ctx.lineWidth = 0.8;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+    // tongues of light rising behind the body
+    const rnd = D.rng(77);
+    for (let i = 0; i < 9; i++) {
+      const x = cx - 22 + i * 5.5 + (rnd() - 0.5) * 3;
+      const top = 22 + Math.abs(i - 4) * 5 + rnd() * 6;
+      ctx.beginPath();
+      ctx.moveTo(x - 5, 96);
+      ctx.quadraticCurveTo(x - 4, (top + 96) / 2, x, top);
+      ctx.quadraticCurveTo(x + 4, (top + 96) / 2, x + 5, 96);
+      ctx.closePath();
+      ctx.fillStyle = D.lin(ctx, 0, top, 0, 96, [[0, D.rgba(GOLD, 0)], [0.4, D.rgba(i % 2 ? col : GOLD, 0.45)], [1, D.rgba('#ffffff', 0.15)]]);
+      ctx.fill();
+    }
+  }
+
+  function paintHero(ctx, id, stage, tier) {
+    const look = LOOK[id];
+    const col = look.color;
+    emblem(ctx, col, stage, tier);
+    if (stage >= 10) TA.props.glowRing(ctx, 45, 58, 48, tier ? GOLD : col, tier ? 0.55 : 0.4);
+    if (tier) backAura(ctx, col, tier);
+    // character layer
+    const body = layer();
+    MT.HeroArt[id](body.ctx, stage);
+    // dark outer outline, then the character, then a soft rim light
+    blit(ctx, silhouette(body.c, OL, 1.7));
+    if (tier) blit(ctx, silhouette(body.c, GOLD, 3.2), 0, 0, 'destination-over', 0.9);
+    blit(ctx, body.c);
+    blit(ctx, rim(body.c, tier ? '#fff3c4' : '#ffffff', 2.2), 0, 0, null, tier ? 0.55 : 0.4);
+    blit(ctx, rim(body.c, '#1a1030', -2.6), 0, 0, null, 0.16);
+    // a floating halo of stars over the head for ascended heroes
+    if (tier) {
+      const [hx, hy] = look.head;
+      ctx.save();
+      ctx.translate(hx, hy);
+      ctx.scale(1, 0.32);
+      D.circlePath(ctx, 0, 0, 11);
+      ctx.strokeStyle = 'rgba(122,82,0,0.8)';
+      ctx.lineWidth = 4.4;
+      ctx.stroke();
+      ctx.strokeStyle = tier >= 2 ? '#fffde7' : GOLD;
+      ctx.lineWidth = 2.6;
+      ctx.stroke();
+      ctx.restore();
+      const n = tier >= 2 ? 5 : 3;
+      for (let i = 0; i < n; i++) {
+        const a = Math.PI * 1.1 + (i / (n - 1)) * Math.PI * 0.8;
+        D.starPath(ctx, hx + Math.cos(a) * 11, hy + Math.sin(a) * 3.5, 5, tier >= 2 ? 3.2 : 2.7, 1.3);
+        D.fs(ctx, '#fffde7', '#b37400', 0.7);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- Lucy Wilde
   function lucy(ctx, stage) {
     const cx = 45;
-    D.shadow(ctx, cx, 102, 20, 6);
-    if (stage >= 10) glowRing(ctx, cx, 58, 48, '#4dd0e1', 0.5);
+    if (stage >= 10) jetpack(ctx, cx, '#eceff1', '#26c6da');
     const hair = '#e64a19';
     // hair (back)
     ctx.beginPath();
@@ -186,8 +422,7 @@
   // ---------------------------------------------------------------- Dr. Nefario
   function nefario(ctx, stage) {
     const cx = 44;
-    D.shadow(ctx, cx, 102, 21, 6);
-    if (stage >= 10) glowRing(ctx, cx, 58, 48, '#9be15d', 0.5);
+    if (stage >= 10) gooTank(ctx, cx);
     boots(ctx, cx, 84, '#3e2723', '#455a64', 6);
     // lab coat, a bit hunched
     ctx.beginPath();
@@ -322,11 +557,7 @@
   // ---------------------------------------------------------------- Kevin
   function kevin(ctx, stage) {
     const cx = 44, cy = 64, w = 32, h = 58;
-    D.shadow(ctx, cx, 102, 19, 5.5);
-    if (stage >= 10) {
-      glowRing(ctx, cx, 58, 50, '#ffd83a', 0.55);
-      cape(ctx, cx, cy, w, h * 0.9, '#c62828');
-    }
+    if (stage >= 10) cape(ctx, cx, cy, w, h * 0.9, '#c62828');
     const o = {
       x: cx, y: cy, w, h, eyes: 2, hair: 'sprout', mouth: 'happy', seed: 131, lookX: 0.6,
       arms: [{ x0: cx - 15, y0: cy + 3, x1: cx - 20, y1: cy + 17 }],
@@ -384,8 +615,7 @@
   // ---------------------------------------------------------------- Vector
   function vector(ctx, stage) {
     const cx = 45;
-    D.shadow(ctx, cx, 102, 20, 6);
-    if (stage >= 10) glowRing(ctx, cx, 58, 48, '#ff8a3a', 0.5);
+    if (stage >= 10) jetpack(ctx, cx, '#b0bec5', '#ff7a1a', true);
     const suit = '#ff7a1a';
     // legs: track pants + sneakers
     for (const s of [-1, 1]) {
@@ -499,12 +729,18 @@
     kevin,
     vector,
   };
+  MT.HeroArt.paint = paintHero;
+  // top of the head relative to the sprite origin (y = 64 in the texture)
+  MT.HeroArt.headY = (id) => (LOOK[id] ? LOOK[id].head[1] : 10) - 64;
 
-  TA.heroKey = function (scene, id, level) {
-    const stage = level >= 10 ? 10 : level >= 5 ? 5 : 1;
-    if (id === 'gru') return TA.gruKey(scene, level);
-    const key = `hero_${id}_${stage}`;
-    if (!scene.textures.exists(key)) D.make(scene, key, 96, 110, (ctx) => MT.HeroArt[id](ctx, stage));
+  // art stage from the level (1 / 5 / 10) and ascension tier from the stars
+  TA.heroStage = (level) => (level >= 10 ? 10 : level >= 5 ? 5 : 1);
+  TA.heroTier = (stars) => (stars >= 10 ? 2 : stars >= 5 ? 1 : 0);
+  TA.heroKey = function (scene, id, level, stars) {
+    const stage = TA.heroStage(level);
+    const tier = TA.heroTier(stars || 0);
+    const key = `hero_${id}_${stage}${tier ? '_a' + tier : ''}`;
+    if (!scene.textures.exists(key)) D.make(scene, key, 96, 110, (ctx) => paintHero(ctx, id, stage, tier));
     return key;
   };
 })();

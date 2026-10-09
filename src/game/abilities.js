@@ -209,12 +209,14 @@
     },
 
     // ------------------------------------------------------------ heroes
+    // (hero power grows with every ascension star)
     shrinkRay(game, t, all) {
+      const pw = powerOf(t);
       game.fx.ring(t.x, t.y, 1100, 0x40c4ff, { disc: true, dur: 700, depth: 6000, force: true });
       all.forEach((e) => {
         game.fx.sparks.explode(2, e.x, e.y);
-        if (!e.boss) game.damageEnemy(e, 1, t);
-        else game.damageEnemy(e, Math.min(400, Math.ceil(e.maxHp * 0.1)), t);
+        if (!e.boss) game.damageEnemy(e, pw >= 2 ? 2 : 1, t);
+        else game.damageEnemy(e, Math.min(400 * pw, Math.ceil(e.maxHp * 0.1)), t);
       });
     },
     moonHeist(game, t) {
@@ -234,31 +236,36 @@
           game.fx.debris.explode(16, tx, ty);
           game.shake(0.3);
           MT.Audio.play('boom');
-          if (target && !target.dead) game.damageEnemy(target, 3000, t);
-          alive(game).forEach((e) => game.damageEnemy(e, 5, t));
+          const pw = powerOf(t);
+          if (target && !target.dead) game.damageEnemy(target, 3000 * pw, t);
+          alive(game).forEach((e) => game.damageEnemy(e, 5 * pw, t));
         },
       });
     },
     lipstickTaser(game, t) {
-      const list = game.enemiesInRange(t.x, t.y, 270, true).slice(0, 70);
+      const pw = powerOf(t);
+      const R = 270 + 75 * (pw - 1);
+      const list = game.enemiesInRange(t.x, t.y, R, true).slice(0, more(70, pw));
       list.forEach((e, i) => {
         if (i < 26) game.fx.lightning(t.x, t.y - 30, e.x, e.y, 0xff4fa3, 2.2, 0.35);
         e.tryStun(e.boss ? 1.2 : 2.2);
-        game.damageEnemy(e, e.boss ? 60 : 3, t);
+        game.damageEnemy(e, (e.boss ? 60 : 3) * pw, t);
       });
-      game.fx.ring(t.x, t.y, 270, 0xff4fa3, { disc: true, dur: 500, force: true });
+      game.fx.ring(t.x, t.y, R, 0xff4fa3, { disc: true, dur: 500, force: true });
       game.fx.sparks.explode(20, t.x, t.y - 30);
       MT.Audio.play('zap');
     },
     airstrike(game, t) {
-      bomberRun(game, t, { tex: 'fx_jet', scale: 1, dur: 2000, spacing: 60, r: 60, dmg: 10, pierce: 40, moab: 300 });
+      const pw = powerOf(t);
+      bomberRun(game, t, { tex: 'fx_jet', scale: 1, dur: 2000, spacing: 60, r: 60, dmg: 10 * pw, pierce: more(40, pw), moab: 300 * pw });
       game.fx.floatText(t.x, t.y - 70, 'AVL, GO!', '#4dd0e1', 22);
     },
     fartGun(game, t) {
-      const R = 300;
+      const pw = powerOf(t);
+      const R = 300 + 75 * (pw - 1);
       game.enemiesInRange(t.x, t.y, R, true).forEach((e) => {
-        if (e.boss) game.damageEnemy(e, 250, t);
-        else game.applyHit(e, { dmg: 6, knock: 18, type: 'normal' }, t);
+        if (e.boss) game.damageEnemy(e, 250 * pw, t);
+        else game.applyHit(e, { dmg: 6 * pw, knock: 18, type: 'normal' }, t);
       });
       for (let i = 0; i < 10; i++) game.fx.gas.explode(4, t.x + U.rand(-R, R) * 0.7, t.y + U.rand(-R, R) * 0.5);
       game.fx.swirl(t.x, t.y, R, 0x9be15d);
@@ -274,7 +281,7 @@
       let shown = 0;
       all.forEach((e) => {
         if (e.boss) {
-          game.damageEnemy(e, Math.min(Math.ceil(e.maxHp * 0.2), 8000), t);
+          game.damageEnemy(e, Math.min(Math.ceil(e.maxHp * 0.2), 8000 * powerOf(t)), t);
           return;
         }
         if (shown++ < 40) cured(game, e.x, e.y);
@@ -284,17 +291,18 @@
       MT.Audio.play('victory');
     },
     stampede(game, t) {
+      const pw = powerOf(t);
       game.paths.forEach((path) => {
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < more(12, pw); i++) {
           const sprite = game.add.image(-100, -100, 'fx_runner').setScale(1 / S).setDepth(1000);
-          game.runners.push({ kind: 'minion', path, dist: path.length + 30 + i * 30, speed: 300, hit: new Set(), pierce: 30, tower: t, sprite, ph: Math.random() * 6 });
+          game.runners.push({ kind: 'minion', path, dist: path.length + 30 + i * 30, speed: 300, hit: new Set(), pierce: more(30, pw), pw, tower: t, sprite, ph: Math.random() * 6 });
         }
       });
       game.fx.floatText(t.x, t.y - 70, 'BANANAAA!', '#ffd83a', 24);
       MT.Audio.play('bello');
     },
     giantKevin(game, t) {
-      t.giant = 10;
+      t.giant = 10 + 5 * (powerOf(t) - 1);
       t.stompT = 0.5;
       t.applyBuffs();
       game.fx.shockwave(t.x, t.y, 200, 0xffd83a, 600);
@@ -303,10 +311,11 @@
       MT.Audio.play('roar');
     },
     piranhaFrenzy(game, t) {
-      const targets = byStrength(alive(game)).slice(0, 6);
+      const pw = powerOf(t);
+      const targets = byStrength(alive(game)).slice(0, more(6, pw));
       targets.forEach((e, i) => {
         const sprite = game.add.image(t.x, t.y - 20, 'fx_piranha').setScale(1 / S).setDepth(6300);
-        const b = { kind: 'piranha', e, t: 3, dps: 0, sprite, flying: true, tower: t };
+        const b = { kind: 'piranha', e, t: 3, dps: 0, pw, sprite, flying: true, tower: t };
         game.biters.push(b);
         const st = { k: 0 };
         const sx = t.x, sy = t.y - 20;
@@ -328,11 +337,12 @@
     pyramidDrop(game, t, all) {
       const target = strongestBoss(game) || byStrength(all)[0];
       const tx = target ? target.x : W / 2, ty = target ? target.y : H / 2;
+      const pw = powerOf(t);
       skyDrop(game, tx, ty, 'fx_pyramid', 1.4, 1000, (x, y) => {
-        if (target && !target.dead) game.damageEnemy(target, 5000, t);
+        if (target && !target.dead) game.damageEnemy(target, 5000 * pw, t);
         game.enemiesInRange(x, y, 170, true).forEach((e) => {
-          if (e.boss) game.damageEnemy(e, 600, t);
-          else game.damageEnemy(e, 20, t);
+          if (e.boss) game.damageEnemy(e, 600 * pw, t);
+          else game.damageEnemy(e, 20 * pw, t);
         });
         const pyr = game.add.image(x, y + 10, 'fx_pyramid').setOrigin(0.5, 0.85).setScale(1.4 / S).setDepth(1000 + y + 30);
         game.tweens.add({ targets: pyr, alpha: 0, y: y + 30, delay: 600, duration: 700, onComplete: () => pyr.destroy() });
@@ -343,6 +353,22 @@
         MT.Audio.play('boom');
       });
       game.fx.floatText(t.x, t.y - 70, 'OH YEAH!', '#ff8a3a', 24);
+    },
+
+    // every ascended hero (star 5+): a golden power-up with a big entrance
+    legendForm(game, t) {
+      t.legend = 10 + 0.5 * t.stars;
+      t.applyBuffs();
+      game.recalcBuffs();
+      const col = U.hexInt(t.def.color);
+      game.fx.shockwave(t.x, t.y, 260, 0xffd54f, 700);
+      game.fx.ring(t.x, t.y, t.stats.buffRange || 180, col, { dur: 900, force: true });
+      game.fx.screenFlash(0xffe082, 0.22, 400);
+      game.fx.glow.particleTint = 0xffd54f;
+      game.fx.glow.explode(30, t.x, t.y - 30);
+      game.fx.floatText(t.x, t.y - 80, 'LEGEND FORM!', '#ffe082', 26);
+      game.shake(0.12);
+      MT.Audio.play('roar');
     },
 
     // ------------------------------------------------------------ super fusions
@@ -553,9 +579,10 @@
 
   function kevinStomp(game, t) {
     const R = 200;
+    const pw = powerOf(t);
     game.enemiesInRange(t.x, t.y, R, true).forEach((e) => {
-      if (e.boss) game.damageEnemy(e, 120, t);
-      else game.applyHit(e, { dmg: 8, knock: 4, type: 'normal' }, t);
+      if (e.boss) game.damageEnemy(e, 120 * pw, t);
+      else game.applyHit(e, { dmg: 8 * pw, knock: 4, type: 'normal' }, t);
     });
     game.fx.shockwave(t.x, t.y + 10, R, 0xffd83a, 420);
     game.fx.dust.explode(10, t.x, t.y + 20);
@@ -577,7 +604,8 @@
           for (const e of game.queryEnemies(p.x, p.y, 30)) {
             if (e.dead || r.hit.has(e.id) || U.dist2(p.x, p.y, e.x, e.y) > (e.radius + 12) ** 2) continue;
             r.hit.add(e.id);
-            const kids = e.boss ? game.damageEnemy(e, 50, r.tower) : game.applyHit(e, { dmg: 4, knock: 6, type: 'normal' }, r.tower);
+            const pw = r.pw || 1;
+            const kids = e.boss ? game.damageEnemy(e, 50 * pw, r.tower) : game.applyHit(e, { dmg: 4 * pw, knock: 6, type: 'normal' }, r.tower);
             if (kids) kids.forEach((k) => r.hit.add(k.id));
             r.pierce--;
             if (r.pierce <= 0) break;
@@ -627,7 +655,7 @@
       if (b.kind === 'kraken') {
         game.damageEnemy(b.e, b.dps * dt, b.tower);
       } else if (b.kind === 'piranha') {
-        game.damageEnemy(b.e, (b.e.boss ? 350 : 60) * dt, b.tower);
+        game.damageEnemy(b.e, (b.e.boss ? 350 : 60) * (b.pw || 1) * dt, b.tower);
       } else if (b.kind === 'beam') {
         game.damageEnemy(b.e, b.dps * dt, b.tower);
         b.tick -= dt;

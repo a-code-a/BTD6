@@ -545,6 +545,7 @@
     giantKevin: { name: 'GIANT KEVIN', cd: 70, icon: 'ab_giant', desc: 'Kevin grows huge for 10s and stomps everything nearby.' },
     piranhaFrenzy: { name: 'Piranha Frenzy', cd: 40, icon: 'ab_piranha', desc: 'Piranhas devour the 6 strongest mutants.' },
     pyramidDrop: { name: 'Pyramid Heist', cd: 70, icon: 'ab_pyramid', desc: 'Drops a stolen pyramid on the biggest giant: 5000 damage.' },
+    legendForm: { name: 'Legend Form', cd: 75, icon: 'ab_legend', desc: 'Unlocks at ★5. For 10s (+0.5s per star) the hero grows, attacks 2.5x faster, deals 2x damage and doubles its Command aura.' },
     // super fusions
     bananaApocalypse: { name: 'Banana Apocalypse', cd: 50, icon: 'ab_apocalypse', desc: '30 golden banana meteors rain onto the track.' },
     nuclearToot: { name: 'Nuclear Toot', cd: 60, icon: 'ab_nuke', desc: 'Everything on screen takes 30 damage and is poisoned. 2500 to giants.' },

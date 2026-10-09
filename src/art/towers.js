@@ -878,9 +878,9 @@
 
   // ---------- Gru (hero) ----------
   function gru(ctx, level) {
-    const cx = 45, foot = 102;
-    D.shadow(ctx, cx, foot, 22, 6.5);
-    if (level >= 10) glowRing(ctx, cx, 55, 48, '#7fdbff', 0.45);
+    const cx = 45;
+    // stage 10: the full super-villain cape
+    if (level >= 10) cape(ctx, cx, 58, 34, 62, '#1c3f7a');
     const coat = '#2b2d33';
     // legs
     for (const s of [-1, 1]) {
@@ -1047,6 +1047,24 @@
     D.circlePath(ctx, ex + 7, 0, 3.4);
     ctx.fillStyle = D.rad(ctx, ex + 7, 0, 0.5, ex + 7, 0, 4, [[0, '#ffffff'], [1, '#00b0ff']]);
     ctx.fill();
+    if (big) {
+      D.rrPath(ctx, 2, -12, 10, 7, 3);
+      ctx.fillStyle = D.lin(ctx, 0, -12, 0, -5, [[0, '#e1f5fe'], [1, '#4fc3f7']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      D.circlePath(ctx, 5, -10, 1.2);
+      D.fs(ctx, '#ffffff');
+    }
+    if (level >= 10) {
+      // charged coils along the barrel
+      glowRing(ctx, ex + 6, 0, 6, '#80d8ff', 0.9);
+      for (let i = 0; i < 3; i++) {
+        D.circlePath(ctx, 1 + i * 4, 0, 1.3);
+        D.fs(ctx, '#e1f5fe');
+      }
+    }
     ctx.restore();
   }
 
@@ -1060,12 +1078,6 @@
       if (!scene.textures.exists(key)) {
         D.make(scene, key, TW, TH, (ctx) => P[type](ctx, t));
       }
-      return key;
-    },
-    gruKey(scene, level) {
-      const stage = level >= 10 ? 10 : level >= 5 ? 5 : 1;
-      const key = `hero_gru_${stage}`;
-      if (!scene.textures.exists(key)) D.make(scene, key, 96, 110, (ctx) => gru(ctx, stage));
       return key;
     },
     originY(type) {
