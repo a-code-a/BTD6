@@ -14,6 +14,12 @@
   const FLY = 24;
   // art that faces right and should turn with the direction of travel
   const FACERS = { zeppelin: 1, mecha: 1, vector: 1, bratt: 1, scarlet: 1, jetpack: 1, glider: 1 };
+  // side-view airships that steer along the track in pseudo-3D: they pitch
+  // up / down with the path, look shorter when heading towards or away from
+  // the camera, and swing round (instead of snapping) when they turn back
+  const STEERERS = { zeppelin: 1 };
+  const PITCH = 0.62; // share of the path's slope the hull follows
+  const angDiff = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
   // ===================================================================== Enemy
   class Enemy {
@@ -83,6 +89,8 @@
       this.sprite.setDepth(1000 + this.y);
       this.overlay = null;
       if (this.flying) this.shadow = game.add.image(this.x, this.y + FLY, 'fx_shadow').setAlpha(0.3).setDepth(990).setScale((this.radius * 2.2) / 128, (this.radius * 1.2) / 48);
+      // airships cast a flat shadow on the track below the tilted hull
+      else if (STEERERS[type]) this.shadow = game.add.image(this.x, this.y, 'fx_shadow').setAlpha(0.32).setDepth(990);
       if (def.ai) MT.BossFight.attach(game, this);
     }
     texKey() {
@@ -274,11 +282,22 @@
         sx *= 1.035;
         sy *= 0.97;
       }
+      if (STEERERS[this.type]) {
+        const st = this.steer(dt);
+        sx *= st.sx;
+        sy *= st.sy;
+        rot = rot * 0.4 + st.rot;
+        if (this.shadow) {
+          // a top-down projection, so it simply lies along the heading
+          const r = this.radius;
+          this.shadow.setPosition(this.x, this.y + r * 0.75).setRotation(this.head).setScale((r * 2) / 128, (r * 0.7) / 48);
+        }
+      }
       sp.setScale(sx / S, sy / S);
       sp.x = this.x;
       sp.y = this.y + lift;
       sp.rotation = rot;
-      if (FACERS[this.type]) sp.setFlipX(this.dir < 0);
+      if (FACERS[this.type] && !STEERERS[this.type]) sp.setFlipX(this.dir < 0);
       sp.setDepth(1000 + this.y + (this.flying ? 400 : 0));
       if (this.def.alwaysCamo) sp.setAlpha(0.62 + Math.sin(time * 0.004 + this.wobble) * 0.16);
       // status tint
@@ -290,6 +309,29 @@
       else if (this.shredT > 0) sp.setTint(0xffcf9e);
       else sp.clearTint();
       this.updateOverlay();
+    }
+    // heading-based pose for STEERERS: { sx, sy, rot } multipliers
+    steer(dt) {
+      const d = U.clamp(this.dist, 6, this.path.length - 6);
+      const want = this.path.angleAt(d);
+      // ease the heading so corners become smooth banked turns
+      if (this.head == null) this.head = want;
+      else this.head += angDiff(this.head, want) * Math.min(1, dt * 2.5);
+      const c = Math.cos(this.head), s = Math.sin(this.head);
+      // facing eases between -1 and 1: going through 0 reads as the hull
+      // swinging round towards the camera
+      if (this.face == null) this.face = c < 0 ? -1 : 1;
+      const goal = Math.abs(c) > 0.2 ? Math.sign(c) : this.face < 0 ? -1 : 1;
+      this.face += (goal - this.face) * Math.min(1, dt * 3);
+      const f = this.face;
+      const side = f < 0 ? -1 : 1;
+      // nose dips when flying down-screen (towards the camera), lifts going up
+      const pitch = Math.atan2(s, Math.abs(c)) * PITCH;
+      return {
+        sx: side * Math.max(0.18, Math.abs(f)) * (1 - 0.28 * Math.abs(s)),
+        sy: 1 + 0.07 * s,
+        rot: pitch * side,
+      };
     }
     // the shield dome of a Shield Carrier (or a boss shielding itself)
     renderBubble(time, dt) {
