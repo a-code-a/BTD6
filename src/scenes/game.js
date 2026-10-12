@@ -113,12 +113,15 @@
       if (this.mode === 'boss') MT.BossFight.prepare(this);
       else this.hud.toast(this.sandbox ? 'SANDBOX: unlimited bananas! Open the sandbox panel (top right).' : 'Place some minions, then press PLAY!', 3200);
       this.hud.refreshPreview();
-      MT.Audio.music('game');
+      MT.Audio.battle(this.mapDef.theme);
+      MT.Audio.music('battle');
       this.musicCheck = 0;
       window.__mt = this;
       this.events.once('shutdown', () => {
         if (window.__mt === this) window.__mt = null;
         this.input.keyboard.removeAllListeners();
+        // leaving from the pause menu: un-muffle the music again
+        MT.Audio.muffle(false);
       });
     }
 
@@ -708,6 +711,8 @@
       else if (!this.sandbox) MT.Save.award(this.mapDef.id, this.diff.id);
       if (!this.sandbox) MT.Save.addStats(this.totalPops, this.round, true);
       MT.Audio.play('victory');
+      // party music once the fanfare is done
+      MT.Audio.music('victory', 1.8);
       this.over = true;
       this.hud.showVictory();
     }
@@ -726,6 +731,7 @@
       this.defeatReason = reason || null;
       MT.Save.addStats(this.totalPops, this.round, false);
       MT.Audio.play('defeat');
+      MT.Audio.music('defeat', 2.4);
       this.hud.showDefeat();
     }
 
@@ -1400,12 +1406,16 @@
         for (let i = 0; i < steps; i++) this.step(h);
       }
       this.renderFrame(time, delta / 1000);
-      // boss music while one of the big endgame giants is on the field
+      // boss music while one of the big endgame giants (or a villain) is on the field;
+      // after the game is over the victory / defeat song keeps playing
       this.musicCheck -= real;
-      if (this.musicCheck <= 0) {
+      if (this.musicCheck <= 0 && !this.over) {
         this.musicCheck = 1;
-        const bossy = this.enemies.some((e) => !e.dead && (e.def.final || e.def.bossFight || e.type === 'zeppelin' || e.type === 'mecha' || e.type === 'goo' || e.type === 'phantom'));
-        MT.Audio.music(bossy ? 'boss' : 'game');
+        const live = this.enemies.filter((e) => !e.dead);
+        // (keep the villain theme for the short moment between the boss going down and the victory)
+        const villain = this.bossDown || live.some((e) => e.def.bossFight);
+        const bossy = villain || live.some((e) => e.def.final || e.type === 'zeppelin' || e.type === 'mecha' || e.type === 'goo' || e.type === 'phantom');
+        MT.Audio.music(villain ? 'villain' : bossy ? 'boss' : 'battle');
       }
     }
 

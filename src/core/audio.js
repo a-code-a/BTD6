@@ -4,10 +4,11 @@
 //    formant synth, with stereo panning and a shared reverb
 //  - instruments (ukulele pluck via Karplus-Strong, drums) are pre-rendered
 //    into small buffers once, then replayed cheaply
-//  - three songs (menu, battle, boss) run on a look-ahead sequencer and
-//    crossfade when the music changes
+//  - the songs (songs.js) run on a look-ahead sequencer, each through its own
+//    small mixer with stereo panning and reverb, and crossfade when the music
+//    changes; the battle songs rotate as a playlist
 (function () {
-  let ctx = null, master = null, comp = null, sfxBus = null, musicBus = null, verbIn = null, noiseBuf = null;
+  let ctx = null, master = null, comp = null, sfxBus = null, musicBus = null, musicLP = null, musicIR = null, verbIn = null, noiseBuf = null;
   const last = {};
   const BUF = {};
   const plucks = {};
@@ -34,15 +35,22 @@
     comp.connect(master);
     sfxBus = ctx.createGain();
     sfxBus.connect(comp);
+    // music: volume, then a low-pass that muffles it while the game is paused
     musicBus = ctx.createGain();
-    musicBus.connect(master);
-    // shared reverb
+    musicLP = ctx.createBiquadFilter();
+    musicLP.type = 'lowpass';
+    musicLP.frequency.value = 20000;
+    musicLP.Q.value = 0.5;
+    musicBus.connect(musicLP);
+    musicLP.connect(master);
+    musicIR = roomImpulse(1.7);
+    // shared effects reverb; it runs through the effects volume like the dry sound
     const verb = ctx.createConvolver();
     verb.buffer = impulse(1.9, 3.2);
     verbIn = ctx.createGain();
-    verbIn.gain.value = 0.9;
+    verbIn.gain.value = 1.4;
     verbIn.connect(verb);
-    verb.connect(master);
+    verb.connect(sfxBus);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -63,7 +71,7 @@
     if (!ctx) return;
     const v = settings();
     sfxBus.gain.setTargetAtTime(0.8 * v.sfx, ctx.currentTime, 0.05);
-    musicBus.gain.setTargetAtTime(0.42 * v.music, ctx.currentTime, 0.05);
+    musicBus.gain.setTargetAtTime(0.5 * v.music, ctx.currentTime, 0.05);
     if (v.music > 0 && wantSong && !song) startSong(wantSong);
   }
 
@@ -73,6 +81,24 @@
     for (let c = 0; c < 2; c++) {
       const d = b.getChannelData(c);
       for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+    }
+    return b;
+  }
+
+  // warmer reverb for the music: a short pre-delay and a tail that gets darker
+  // as it fades, like a real room
+  function roomImpulse(sec) {
+    const sr = ctx.sampleRate, len = Math.floor(sr * sec), pre = Math.floor(sr * 0.015);
+    const b = ctx.createBuffer(2, len, sr);
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c);
+      let lp = 0;
+      for (let i = pre; i < len; i++) {
+        const x = (i - pre) / (len - pre);
+        const k = 0.75 - 0.65 * x;
+        lp += k * (Math.random() * 2 - 1 - lp);
+        d[i] = lp * Math.pow(1 - x, 2.8);
+      }
     }
     return b;
   }
@@ -187,10 +213,17 @@
     src.buffer = buf;
     if (o.rate) src.playbackRate.value = o.rate;
     const g = ctx.createGain();
-    g.gain.value = vol;
+    t = Math.max(ctx.currentTime, t);
+    g.gain.setValueAtTime(vol, t);
     src.connect(g);
     route(g, o);
-    src.start(Math.max(ctx.currentTime, t));
+    src.start(t);
+    if (o.dur) {
+      // damp it early (palm-muted strings)
+      g.gain.setValueAtTime(vol, t + o.dur);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + o.dur + 0.06);
+      src.stop(t + o.dur + 0.08);
+    }
   }
 
   // ---------------------------------------------------------------- pre-rendered instruments
@@ -251,6 +284,52 @@
         const hp = n - p;
         p = n;
         d[i] = hp * 0.22 * Math.sin(Math.PI * Math.min(1, t / 0.1));
+      }
+    });
+    // ---- extra kit for the music: tom (pitched with the playback rate), crash, latin percussion
+    BUF.tom = makeBuf(0.5, (d, sr) => {
+      let ph = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        ph += (2 * Math.PI * (98 + 80 * Math.exp(-t * 16))) / sr;
+        d[i] = Math.sin(ph) * 0.85 * Math.exp(-t * 7.5) + (t < 0.004 ? (Math.random() - 0.5) * 0.4 : 0);
+      }
+    });
+    BUF.crash = makeBuf(1.8, (d, sr) => {
+      // bright noise plus a few clanging square partials, like a cymbal
+      const fs = [431, 687, 1009, 1497, 2213, 3313];
+      let p = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const n = Math.random() * 2 - 1;
+        const hp = n - p;
+        p = n;
+        let ring = 0;
+        for (let k = 0; k < fs.length; k++) ring += Math.sin(2 * Math.PI * fs[k] * t) > 0 ? 0.025 : -0.025;
+        d[i] = (hp * 0.32 + ring) * Math.exp(-t * 2.4) * Math.min(1, t / 0.002);
+      }
+    });
+    BUF.clave = makeBuf(0.1, (d, sr) => {
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        d[i] = Math.sin(2 * Math.PI * 2450 * t) * 0.5 * Math.exp(-t * 50);
+      }
+    });
+    BUF.cowbell = makeBuf(0.4, (d, sr) => {
+      let lp = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        const sq = (Math.sin(2 * Math.PI * 562 * t) > 0 ? 1 : -1) + (Math.sin(2 * Math.PI * 845 * t) > 0 ? 1 : -1);
+        lp += 0.35 * (sq - lp);
+        d[i] = lp * 0.16 * (Math.exp(-t * 30) * 0.6 + Math.exp(-t * 8) * 0.4);
+      }
+    });
+    BUF.conga = makeBuf(0.4, (d, sr) => {
+      let ph = 0;
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        ph += (2 * Math.PI * 330 * (1 + 0.12 * Math.exp(-t * 45))) / sr;
+        d[i] = Math.sin(ph) * 0.7 * Math.exp(-t * 10) + (t < 0.008 ? (Math.random() - 0.5) * 0.3 * (1 - t / 0.008) : 0);
       }
     });
   }
@@ -616,8 +695,7 @@
   }
 
   // ================================================================ music
-  // Each song is a function of the 16th-note step that schedules its notes.
-  let song = null, songGain = null, nextT = 0, step = 0, timer = null;
+  // ---- instruments: each takes a start time and the mixer bus it plays into
 
   function bass(m, t, dur, vol, dest, bright = 900, wave = 'sawtooth') {
     const osc = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -635,7 +713,7 @@
     osc.stop(t + dur + 0.05);
   }
 
-  function pad(notes, t, dur, vol, dest) {
+  function pad(notes, t, dur, vol, dest, cut = 1100) {
     notes.forEach((m) => {
       [-7, 7].forEach((det) => {
         const osc = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
@@ -643,7 +721,7 @@
         osc.frequency.value = N(m);
         osc.detune.value = det;
         f.type = 'lowpass';
-        f.frequency.value = 1100;
+        f.frequency.value = cut;
         g.gain.setValueAtTime(0.0001, t);
         g.gain.exponentialRampToValueAtTime(vol, t + dur * 0.35);
         g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -656,19 +734,27 @@
     });
   }
 
-  // kazoo / whistle lead
-  function lead(m, t, dur, vol, dest, kind = 'kazoo') {
+  // melody voices: kazoo, whistle, square, saw (synth lead) or brass (trumpet).
+  // `from` slides up or down from the previous note, like a theremin.
+  function lead(m, t, dur, vol, dest, kind = 'kazoo', from) {
+    const f = N(m);
     const osc = ctx.createOscillator(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain();
     osc.type = kind === 'whistle' ? 'sine' : kind === 'square' ? 'square' : 'sawtooth';
-    osc.frequency.value = N(m);
-    vib.frequency.value = kind === 'whistle' ? 5.5 : 6.5;
-    vg.gain.value = N(m) * (kind === 'whistle' ? 0.012 : 0.018);
+    osc.frequency.setValueAtTime(from ? N(from) : f, t);
+    if (from) osc.frequency.exponentialRampToValueAtTime(f, t + Math.min(0.09, dur * 0.4));
+    // vibrato fades in on longer notes
+    vib.frequency.value = kind === 'whistle' ? 5.5 : kind === 'brass' ? 5.8 : 6.5;
+    const depth = f * (kind === 'whistle' ? 0.012 : kind === 'saw' ? 0.006 : 0.016);
+    vg.gain.setValueAtTime(depth * 0.25, t);
+    vg.gain.linearRampToValueAtTime(depth, t + Math.min(0.35, dur));
     vib.connect(vg);
     vg.connect(osc.frequency);
+    const atk = kind === 'brass' ? 0.04 : 0.025;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
-    g.gain.setValueAtTime(vol, t + dur * 0.7);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.gain.exponentialRampToValueAtTime(vol, t + atk);
+    g.gain.setValueAtTime(vol, t + Math.max(atk, dur * 0.75));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.04);
+    const end = t + dur + 0.1;
     let n = osc;
     if (kind === 'kazoo') {
       const bp = ctx.createBiquadFilter();
@@ -681,167 +767,286 @@
       osc.connect(bp);
       bp.connect(lp);
       n = lp;
-    } else if (kind === 'square') {
+    } else if (kind === 'square' || kind === 'saw' || kind === 'brass') {
       const lp = ctx.createBiquadFilter();
       lp.type = 'lowpass';
-      lp.frequency.value = 2200;
+      if (kind === 'brass') {
+        // the tone brightens as the player blows into the note
+        lp.Q.value = 1.5;
+        lp.frequency.setValueAtTime(f * 1.5, t);
+        lp.frequency.exponentialRampToValueAtTime(Math.min(9000, f * 5), t + 0.07);
+        lp.frequency.exponentialRampToValueAtTime(Math.min(9000, f * 3), t + Math.max(0.12, dur));
+      } else lp.frequency.value = kind === 'saw' ? 2800 : 2200;
       osc.connect(lp);
       n = lp;
+      if (kind === 'saw') {
+        // a second, slightly detuned oscillator makes it wide and shimmery
+        const o2 = ctx.createOscillator();
+        o2.type = 'sawtooth';
+        o2.frequency.setValueAtTime(from ? N(from) : f, t);
+        if (from) o2.frequency.exponentialRampToValueAtTime(f, t + Math.min(0.09, dur * 0.4));
+        o2.detune.value = 11;
+        vg.connect(o2.frequency);
+        o2.connect(lp);
+        o2.start(t);
+        o2.stop(end);
+      }
     }
     n.connect(g);
     g.connect(dest);
-    const send = ctx.createGain();
-    send.gain.value = 0.25;
-    g.connect(send);
-    send.connect(verbIn);
     osc.start(t);
     vib.start(t);
-    osc.stop(t + dur + 0.05);
-    vib.stop(t + dur + 0.05);
+    osc.stop(end);
+    vib.stop(end);
   }
 
-  function strum(chord, t, vol, dest, bright = 0.5, down = true) {
+  function strum(chord, t, vol, dest, bright = 0.5, down = true, dur) {
     const notes = down ? chord : chord.slice().reverse();
-    notes.forEach((m, i) => playBuf(pluckBuf(m, bright), t + i * 0.014, vol, { dest }));
+    notes.forEach((m, i) => playBuf(pluckBuf(m, bright), t + i * 0.014, vol, { dest, dur }));
   }
 
-  function bell(m, t, vol, dest) {
+  function pluck(m, t, vol, dest, bright = 0.5, dur) {
+    playBuf(pluckBuf(m, bright), t, vol, { dest, dur });
+  }
+
+  // two-operator FM bell / glockenspiel
+  function bell(m, t, vol, dest, dur = 1.2) {
     const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
     car.frequency.value = N(m);
     mod.frequency.value = N(m) * 3.5;
     mg.gain.setValueAtTime(N(m) * 2, t);
-    mg.gain.exponentialRampToValueAtTime(N(m) * 0.1, t + 1.2);
+    mg.gain.exponentialRampToValueAtTime(N(m) * 0.1, t + dur);
     mod.connect(mg);
     mg.connect(car.frequency);
-    env(g.gain, t, 0.003, 1.2, vol);
+    env(g.gain, t, 0.003, dur, vol);
     car.connect(g);
     g.connect(dest);
-    const send = ctx.createGain();
-    send.gain.value = 0.5;
-    g.connect(send);
-    send.connect(verbIn);
     car.start(t);
     mod.start(t);
-    car.stop(t + 1.3);
-    mod.stop(t + 1.3);
+    car.stop(t + dur + 0.1);
+    mod.stop(t + dur + 0.1);
   }
 
-  // chord shapes (MIDI) for the ukulele
-  const CH = {
-    C: [60, 64, 67, 72], Am: [57, 60, 64, 69], F: [57, 60, 65, 69], G: [55, 59, 62, 67], Dm: [57, 62, 65, 69],
-    Bb: [58, 62, 65, 70], Em: [55, 59, 64, 67], Gm: [55, 58, 62, 67], A: [57, 61, 64, 69], D: [57, 62, 66, 69],
-  };
-  const ROOT = { C: 36, Am: 33, F: 41, G: 43, Dm: 38, Bb: 34, Em: 40, Gm: 43, A: 45, D: 38 };
+  // a few sine partials, each with its own decay (steel drum, marimba)
+  function partials(m, t, vol, dest, list, bend) {
+    const f = N(m);
+    list.forEach(([ratio, amp, dur]) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(f * ratio * (bend || 1), t);
+      if (bend) o.frequency.exponentialRampToValueAtTime(f * ratio, t + 0.04);
+      env(g.gain, t, 0.003, dur, vol * amp);
+      o.connect(g);
+      g.connect(dest);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    });
+  }
+  const steel = (m, t, vol, dest, dur = 1) => partials(m, t, vol, dest, [[1, 1, dur], [2, 0.4, dur * 0.55], [3, 0.16, dur * 0.3], [4.16, 0.05, 0.1]], 1.012);
+  const marimba = (m, t, vol, dest) => partials(m, t, vol, dest, [[1, 1, 0.55], [3.93, 0.22, 0.07], [9.2, 0.05, 0.02]]);
 
-  const SONGS = {
-    // relaxed lounge with ukulele, upright bass, shaker and a whistled tune
-    menu: {
-      bpm: 96,
-      len: 128,
-      play(s, t, dest, sx) {
-        const bar = Math.floor(s / 16) % 8, b = s % 16;
-        const prog = ['C', 'Am', 'F', 'G', 'C', 'Am', 'Dm', 'G'];
-        const c = prog[bar];
-        if (b === 0 || b === 6 || b === 8 || b === 14) strum(CH[c], t, b === 0 ? 0.32 : 0.22, dest, 0.45, b !== 6 && b !== 14);
-        if (b === 0) bass(ROOT[c], t, 0.6, 0.38, dest, 500, 'triangle');
-        if (b === 8) bass(ROOT[c] + 7, t, 0.5, 0.3, dest, 500, 'triangle');
-        if (b % 4 === 2) playBuf(BUF.shaker, t, 0.35, { dest });
-        if (b === 4 || b === 12) playBuf(BUF.kick, t, 0.12, { dest });
-        const MEL = [
-          [76, 0, 0, 0, 79, 0, 76, 0, 74, 0, 72, 0, 0, 0, 0, 0], [72, 0, 74, 0, 76, 0, 0, 0, 69, 0, 0, 0, 0, 0, 0, 0],
-          [77, 0, 0, 0, 76, 0, 74, 0, 72, 0, 74, 0, 0, 0, 0, 0], [74, 0, 72, 0, 71, 0, 0, 0, 67, 0, 0, 0, 0, 0, 0, 0],
-          [76, 0, 79, 0, 84, 0, 0, 0, 83, 0, 81, 0, 79, 0, 0, 0], [81, 0, 0, 0, 79, 0, 76, 0, 72, 0, 0, 0, 0, 0, 0, 0],
-          [74, 0, 77, 0, 81, 0, 0, 0, 79, 0, 77, 0, 76, 0, 74, 0], [72, 0, 0, 0, 74, 0, 0, 0, 71, 0, 0, 0, 0, 0, 0, 0],
-        ];
-        const m = MEL[bar][b];
-        if (m) lead(m, t, sx * 1.6, 0.11, dest, 'whistle');
-        if (b === 0 && bar % 2 === 1) bell(84 + (bar % 4), t + sx * 12, 0.04, dest);
-      },
-    },
-    // bouncy battle march: drums, bass, ska ukulele and a kazoo melody
-    game: {
-      bpm: 126,
-      len: 128,
-      play(s, t, dest, sx) {
-        const bar = Math.floor(s / 16) % 8, b = s % 16;
-        const prog = ['F', 'Dm', 'Bb', 'C', 'F', 'Dm', 'Bb', 'C'];
-        const c = prog[bar];
-        if (b === 0 || b === 8) playBuf(BUF.kick, t, 0.75, { dest });
-        if (b === 10 && bar % 2) playBuf(BUF.kick, t, 0.5, { dest });
-        if (b === 4 || b === 12) playBuf(BUF.snare, t, 0.45, { dest });
-        if (b % 2 === 0) playBuf(BUF.hat, t, b % 4 === 2 ? 0.5 : 0.3, { dest });
-        if (b === 14 && bar === 7) playBuf(BUF.ohat, t, 0.4, { dest });
-        if (b % 4 === 2) strum(CH[c], t, 0.24, dest, 0.7, true);
-        const r = ROOT[c];
-        const bl = [r, 0, r + 12, 0, r + 7, 0, r + 12, 0, r, 0, r + 12, 0, r + 7, 0, r + 10, 0][b];
-        if (bl) bass(bl, t, sx * 1.7, 0.3, dest, 1100);
-        const MEL = [
-          [72, 0, 72, 74, 77, 0, 77, 0, 76, 0, 74, 0, 72, 0, 0, 0], [74, 0, 74, 77, 81, 0, 79, 0, 77, 0, 76, 0, 74, 0, 0, 0],
-          [70, 0, 74, 0, 77, 0, 82, 0, 81, 0, 79, 0, 77, 0, 74, 0], [76, 0, 0, 0, 79, 0, 0, 0, 72, 0, 0, 0, 0, 0, 0, 0],
-          [72, 0, 72, 74, 77, 0, 77, 0, 81, 0, 79, 0, 77, 0, 0, 0], [74, 0, 77, 0, 81, 0, 84, 0, 86, 0, 84, 0, 81, 0, 0, 0],
-          [82, 0, 81, 0, 79, 0, 77, 0, 79, 0, 81, 0, 82, 0, 0, 0], [84, 0, 0, 0, 79, 0, 76, 0, 77, 0, 0, 0, 0, 0, 0, 0],
-        ];
-        const m = MEL[bar][b];
-        if (m && (Math.floor(s / 128) % 2 === 0 || bar >= 4)) lead(m, t, sx * 1.7, 0.09, dest, 'kazoo');
-      },
-    },
-    // tense boss track in D minor: four-on-the-floor, driving bass, stabs
-    boss: {
-      bpm: 150,
-      len: 128,
-      play(s, t, dest, sx) {
-        const bar = Math.floor(s / 16) % 8, b = s % 16;
-        const prog = ['Dm', 'Dm', 'Bb', 'A', 'Dm', 'Gm', 'Bb', 'A'];
-        const c = prog[bar];
-        if (b % 4 === 0) playBuf(BUF.kick, t, 0.85, { dest });
-        if (b === 4 || b === 12) playBuf(BUF.clap, t, 0.4, { dest });
-        playBuf(BUF.hat, t, b % 2 ? 0.18 : 0.3, { dest });
-        const r = ROOT[c] - 12 + 12;
-        if (b % 2 === 0) bass(b % 4 === 0 ? r : r + 12, t, sx * 1.8, 0.32, dest, 1500);
-        if (b === 2 || b === 10) pad(CH[c].map((m) => m + 12), t, sx * 1.5, 0.03, dest);
-        const MOT = [
-          [74, 0, 0, 73, 74, 0, 77, 0, 76, 0, 74, 0, 73, 0, 0, 0], [74, 0, 0, 73, 74, 0, 81, 0, 79, 0, 77, 0, 76, 0, 0, 0],
-          [77, 0, 0, 76, 77, 0, 82, 0, 81, 0, 79, 0, 77, 0, 0, 0], [76, 0, 0, 0, 73, 0, 0, 0, 69, 0, 0, 0, 0, 0, 0, 0],
-        ];
-        const m = MOT[bar % 4][b];
-        if (m && bar >= 2) lead(m, t, sx * 1.6, 0.06, dest, 'square');
-        if (b === 0 && bar === 0) pad([50, 57, 62], t, sx * 16, 0.035, dest);
-      },
-    },
-  };
+  // vibraphone: a mellow bar with a slow wobble
+  function vibes(m, t, vol, dest, dur = 1) {
+    const d = Math.max(0.8, dur * 1.4);
+    const trem = ctx.createGain(), lfo = ctx.createOscillator(), lg = ctx.createGain();
+    trem.gain.value = 0.75;
+    lfo.frequency.value = 5.2;
+    lg.gain.value = 0.25;
+    lfo.connect(lg);
+    lg.connect(trem.gain);
+    trem.connect(dest);
+    partials(m, t, vol, trem, [[1, 1, d], [4, 0.12, 0.25], [10, 0.03, 0.05]]);
+    lfo.start(t);
+    lfo.stop(t + d + 0.1);
+  }
 
-  function startSong(name) {
-    wantSong = name;
+  // electric piano (FM, ratio 1): warm, bell-like attack that mellows out
+  function epiano(notes, t, dur, vol, dest) {
+    notes.forEach((m) => {
+      const f = N(m), d = Math.max(0.35, dur * 1.3);
+      const car = ctx.createOscillator(), mod = ctx.createOscillator(), mg = ctx.createGain(), g = ctx.createGain();
+      car.frequency.value = f;
+      mod.frequency.value = f;
+      mg.gain.setValueAtTime(f * 1.4, t);
+      mg.gain.exponentialRampToValueAtTime(f * 0.15, t + 0.6);
+      mod.connect(mg);
+      mg.connect(car.frequency);
+      env(g.gain, t, 0.004, d, vol);
+      car.connect(g);
+      g.connect(dest);
+      car.start(t);
+      mod.start(t);
+      car.stop(t + d + 0.05);
+      mod.stop(t + d + 0.05);
+    });
+  }
+
+  // plucky synth for arpeggios and ostinatos: two oscillators through a closing filter
+  function synth(m, t, dur, vol, dest, cut = 2400) {
+    const f = N(m);
+    const lp = ctx.createBiquadFilter(), g = ctx.createGain();
+    lp.type = 'lowpass';
+    lp.Q.value = 4;
+    lp.frequency.setValueAtTime(cut, t);
+    lp.frequency.exponentialRampToValueAtTime(Math.max(180, cut * 0.12), t + dur);
+    env(g.gain, t, 0.003, dur, vol);
+    lp.connect(g);
+    g.connect(dest);
+    [['sawtooth', 0], ['square', 7]].forEach(([type, det]) => {
+      const o = ctx.createOscillator();
+      o.type = type;
+      o.frequency.value = f;
+      o.detune.value = det;
+      o.connect(lp);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    });
+  }
+
+  // brass section chord stab / swell
+  function horn(notes, t, dur, vol, dest) {
+    notes.forEach((m) => {
+      const f = N(m);
+      const lp = ctx.createBiquadFilter(), g = ctx.createGain();
+      lp.type = 'lowpass';
+      lp.Q.value = 1.2;
+      lp.frequency.setValueAtTime(f * 1.5, t);
+      lp.frequency.exponentialRampToValueAtTime(Math.min(9000, f * 6), t + 0.05);
+      lp.frequency.exponentialRampToValueAtTime(Math.min(9000, f * 3), t + Math.max(0.1, dur));
+      env(g.gain, t, 0.025, 0.12, vol, Math.max(0.01, dur - 0.1));
+      lp.connect(g);
+      g.connect(dest);
+      [-6, 6].forEach((det) => {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.detune.value = det;
+        o.connect(lp);
+        o.start(t);
+        o.stop(t + dur + 0.2);
+      });
+    });
+  }
+
+  const drum = (name, t, vol, dest, rate) => playBuf(BUF[name], t, vol, { dest, rate });
+
+  MT.MusicKit = { N, bass, pad, lead, strum, pluck, bell, steel, marimba, vibes, epiano, synth, horn, drum };
+
+  // ---- mixer: every song gets its own channels, reverb and fader
+  // channel: [stereo pan, reverb send]; the ducked ones dip under the kick when a song pumps
+  const CHANNELS = {
+    drums: [0, 0.05], perc: [0.35, 0.14], bass: [0, 0], chords: [-0.3, 0.18], pad: [0, 0.32],
+    arp: [-0.45, 0.26], lead: [0.12, 0.26], counter: [0.42, 0.3],
+  };
+  const DUCKED = { chords: 1, pad: 1, arp: 1 };
+
+  function makeMix(S, dest) {
+    const fade = ctx.createGain();
+    fade.connect(dest);
+    const verb = ctx.createConvolver();
+    verb.buffer = musicIR;
+    const wet = ctx.createGain();
+    wet.gain.value = S.reverb != null ? S.reverb : 1;
+    verb.connect(wet);
+    wet.connect(fade);
+    const duck = ctx.createGain();
+    duck.connect(fade);
+    const m = { fade };
+    Object.keys(CHANNELS).forEach((k) => {
+      const [pan, send] = CHANNELS[k];
+      const g = ctx.createGain();
+      g.gain.value = (S.gain || 1) * ((S.levels && S.levels[k]) || 1);
+      let n = g;
+      if (pan && ctx.createStereoPanner) {
+        const p = ctx.createStereoPanner();
+        p.pan.value = pan;
+        g.connect(p);
+        n = p;
+      }
+      n.connect(DUCKED[k] ? duck : fade);
+      if (send) {
+        const s = ctx.createGain();
+        s.gain.value = send;
+        n.connect(s);
+        s.connect(verb);
+      }
+      m[k] = g;
+    });
+    // sidechain-style pump: chords, pads and arpeggios dip on the kick
+    m.pump = (t, depth = 0.4) => {
+      duck.gain.setValueAtTime(1 - depth, t);
+      duck.gain.setTargetAtTime(1, t + 0.015, 0.07);
+    };
+    return m;
+  }
+
+  // ---- sequencer
+  // A song (MT.SONGS) is a row of 8-bar sections played in the order of its
+  // `form`; its play(i, t, mix, sx) schedules the notes of one 16th-note step.
+  // A playlist (the battle music) moves on to its next song after `loops` passes.
+  let song = null, mix = null, group = null, nextT = 0, step = 0, timer = null;
+  const LISTS = { battle: { order: ['march', 'tropical', 'funk', 'space', 'western'], idx: 0 } };
+  // each map opens the battle playlist with the song that suits it best
+  const THEME_SONG = { yard: 'march', city: 'march', jungle: 'tropical', beach: 'tropical', lab: 'funk', factory: 'funk', moon: 'space', snow: 'space', desert: 'western', volcano: 'western' };
+
+  function info(S, n) {
+    const per = (S.bars || 8) * 16, total = per * S.form.length;
+    const s = n % total, sec = Math.floor(s / per), ss = s % per;
+    return { n, pass: Math.floor(n / total), sec: S.form[sec], secIdx: sec, ss, bar: Math.floor(ss / 16), b: ss % 16 };
+  }
+  // swing pushes the off-beat 8ths (and optionally the odd 16ths) a little late
+  const swingOf = (S, n) => (n % 4 === 2 ? S.swing || 0 : 0) + (n % 2 === 1 ? S.swing16 || 0 : 0);
+
+  const resolve = (key) => (LISTS[key] ? LISTS[key].order[LISTS[key].idx % LISTS[key].order.length] : key);
+
+  function startSong(key, delay = 0) {
+    wantSong = key;
     if (!ctx || settings().music <= 0) return;
-    if (song === name && timer) return;
+    if (group === key && timer) return;
+    group = key;
+    playTrack(resolve(key), ctx.currentTime + delay + 0.12, delay > 0 ? 0.12 : 0.4);
+  }
+
+  // fadeIn: time constant of the fade-in, or 0 to come in at full volume
+  // (and let the previous song's last notes ring out instead of fading them)
+  function playTrack(name, at, fadeIn) {
+    const S = MT.SONGS && MT.SONGS[name];
+    if (!S) return;
     const now = ctx.currentTime;
-    if (songGain) {
-      const old = songGain;
-      old.gain.setTargetAtTime(0.0001, now, 0.35);
-      setTimeout(() => old.disconnect(), 2500);
+    if (mix) {
+      const old = mix;
+      if (fadeIn) old.fade.gain.setTargetAtTime(0.0001, now, 0.35);
+      setTimeout(() => old.fade.disconnect(), 4000);
     }
     song = name;
-    songGain = ctx.createGain();
-    songGain.gain.setValueAtTime(0.0001, now);
-    songGain.gain.setTargetAtTime(1, now + 0.05, 0.4);
-    songGain.connect(musicBus);
+    mix = makeMix(S, musicBus);
+    if (fadeIn) {
+      mix.fade.gain.setValueAtTime(0.0001, now);
+      mix.fade.gain.setTargetAtTime(1, Math.max(now, at - 0.07), fadeIn);
+    }
     step = 0;
-    nextT = now + 0.12;
+    nextT = at;
     if (!timer) timer = setInterval(schedule, 30);
   }
 
   function schedule() {
     if (!ctx || !song) return;
-    const S = SONGS[song];
-    const sx = 60 / S.bpm / 4;
-    while (nextT < ctx.currentTime + 0.18) {
+    let S = MT.SONGS[song];
+    while (nextT < ctx.currentTime + 0.2) {
+      const total = (S.bars || 8) * 16 * S.form.length;
+      if (LISTS[group] && step >= total * (S.loops || 2)) {
+        // playlist: on to the next song after a short breath
+        LISTS[group].idx++;
+        playTrack(resolve(group), nextT + 0.45, 0);
+        S = MT.SONGS[song];
+        continue;
+      }
       try {
-        S.play(step % S.len, nextT, songGain, sx);
+        S.play(info(S, step), nextT + swingOf(S, step) * (15 / S.bpm), mix, 15 / S.bpm);
       } catch (e) {
         // keep the loop alive
         if (MT.DEBUG_AUDIO) console.warn('music', song, e);
       }
-      nextT += sx;
+      nextT += 15 / S.bpm;
       step++;
     }
   }
@@ -849,21 +1054,93 @@
   function stopMusic() {
     if (timer) clearInterval(timer);
     timer = null;
-    if (songGain && ctx) songGain.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.2);
+    if (mix && ctx) {
+      const old = mix;
+      old.fade.gain.setTargetAtTime(0.0001, ctx.currentTime, 0.2);
+      setTimeout(() => old.fade.disconnect(), 2000);
+    }
+    mix = null;
     song = null;
+    group = null;
+  }
+
+  // test hook: render a song offline (no speakers needed) and measure it.
+  // Notes are scheduled just ahead of the render position like during real
+  // playback, so the render time is a fair hint of the CPU cost.
+  // `solo` keeps only one mixer channel to check the balance of the parts.
+  function renderSong(name, sec = 20, solo, from = 0) {
+    const S = MT.SONGS[name];
+    const live = ctx;
+    const off = new OfflineAudioContext(2, Math.ceil(sec * live.sampleRate), live.sampleRate);
+    const errors = [];
+    const sx = 15 / S.bpm;
+    let m = null, n = from, t = 0.05;
+    const fill = (until) => {
+      ctx = off;
+      try {
+        if (!m) {
+          m = makeMix(S, off.destination);
+          if (solo) Object.keys(CHANNELS).forEach((k) => k !== solo && (m[k].gain.value = 0));
+        }
+        for (; t < Math.min(until, sec - 0.3); n++, t += sx) {
+          try {
+            S.play(info(S, n), t + swingOf(S, n) * sx, m, sx);
+          } catch (e) {
+            errors.push(e.message);
+          }
+        }
+      } finally {
+        ctx = live;
+      }
+    };
+    fill(0.5);
+    for (let s = 0.25; s < sec - 0.3; s += 0.25) {
+      off.suspend(s).then(() => {
+        fill(s + 0.5);
+        off.resume();
+      });
+    }
+    return off.startRendering().then((buf) => {
+      let peak = 0, sum = 0;
+      for (let c = 0; c < buf.numberOfChannels; c++) {
+        const d = buf.getChannelData(c);
+        for (let i = 0; i < d.length; i++) {
+          const v = Math.abs(d[i]);
+          if (v > peak) peak = v;
+          sum += v * v;
+        }
+      }
+      const rms = Math.sqrt(sum / (buf.length * buf.numberOfChannels));
+      return { name, solo, peak: +peak.toFixed(3), rmsDb: +(20 * Math.log10(rms + 1e-9)).toFixed(1), errors: errors.length, firstError: errors[0] };
+    });
   }
 
   MT.Audio = {
     init,
     play,
     say,
-    // pick the music track: 'menu', 'game' or 'boss'
-    music(name) {
+    // pick the music: a song ('menu', 'boss', 'villain', 'victory', 'defeat'...)
+    // or the 'battle' playlist; `delay` (seconds) leaves room for a jingle first
+    music(name, delay) {
       wantSong = name;
-      if (ctx && settings().music > 0) startSong(name);
+      if (ctx && settings().music > 0) startSong(name, delay);
     },
-    // test hook: the live context, master bus and current song
-    debug: () => ({ ctx, master, song, names: Object.keys(SOUNDS) }),
+    // the battle playlist starts with the song that suits this map theme
+    battle(theme) {
+      const L = LISTS.battle, first = THEME_SONG[theme] || 'march';
+      if (group === 'battle' && timer && resolve('battle') === first) return;
+      const k = L.order.indexOf(first);
+      L.order = L.order.slice(k).concat(L.order.slice(0, k));
+      L.idx = 0;
+      if (group === 'battle') group = null;
+    },
+    // muffle the music, e.g. while the game is paused
+    muffle(on) {
+      if (!ctx) return;
+      musicLP.frequency.setTargetAtTime(on ? 650 : 20000, ctx.currentTime, on ? 0.06 : 0.12);
+    },
+    // test hook: the live context, master bus, current song and an offline renderer
+    debug: () => ({ ctx, master, song, group, names: Object.keys(SOUNDS), songs: Object.keys(MT.SONGS || {}), render: renderSong }),
     applySettings() {
       applySettings();
       if (settings().music > 0) {

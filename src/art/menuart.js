@@ -575,6 +575,9 @@
     MT.Audio.init();
     if (scene._leaving) return;
     scene._leaving = true;
+    // Phaser reuses the scene object when you come back to this screen, so the
+    // flag must be cleared again or every button here stops working
+    scene.events.once('shutdown', () => (scene._leaving = false));
     scene.cameras.main.fadeOut(240, 10, 8, 30);
     scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start(key, data));
   }

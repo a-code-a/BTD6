@@ -872,10 +872,12 @@
       if (s.paused) {
         s.paused = false;
         this.hideOverlay();
+        MT.Audio.muffle(false);
         return;
       }
       s.paused = true;
       s.cancelPlacing();
+      MT.Audio.muffle(true);
       this.showPauseMenu();
     }
 
@@ -1030,11 +1032,16 @@
 
     restart() {
       const s = this.scene;
+      if (this.leaving) return;
+      this.leaving = true;
       s.scene.restart(Object.assign({}, s.launchData, { map: s.mapDef.id, diff: s.diff.id, hero: s.heroId }));
     }
 
     home(to = 'Menu') {
       const s = this.scene;
+      // a second click while the screen fades out would start the next scene twice
+      if (this.leaving) return;
+      this.leaving = true;
       s.cameras.main.fadeOut(250, 20, 30, 50);
       s.cameras.main.once('camerafadeoutcomplete', () => s.scene.start(to));
     }

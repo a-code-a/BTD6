@@ -6,8 +6,8 @@ purple minions.
 
 Every graphic in the game is drawn procedurally in code with the Canvas 2D API: the minions, Gru,
 the purple mutants, the villains, all ten maps, the menus, projectiles, effects, icons and UI. The game
-uses no image files. Sound effects, the minion voices and the three music tracks (menu, battle, boss)
-are synthesized live with the Web Audio API.
+uses no image files. Sound effects, the minion voices and all ten songs are synthesized live with the
+Web Audio API.
 
 ## Play
 
@@ -205,13 +205,30 @@ recovered from an attack is immune for a few seconds, so it can't be locked down
 - **Gru's Secret Lab** (two lanes), **Arctic Base** (two lanes) and **Villain-Con City** (Advanced)
 - **Volcano Lair** and **Minion Factory** (Expert)
 
+## Music
+
+| Song | Plays |
+| --- | --- |
+| Banana Lounge | Menus |
+| Backyard Brigade (march) | Battles on Gru's Backyard and Villain-Con City |
+| Banana Island (calypso) | Battles on Banana Jungle and Banana Beach |
+| Lab Rat Funk | Battles in Gru's Secret Lab and the Minion Factory |
+| Moonwalk (synth-pop) | Battles on the Moon and the Arctic Base |
+| Banana Gulch (western) | Battles in the Pyramid Desert and the Volcano Lair |
+| Giant Alert | While a big endgame giant is on the field |
+| Villain Showdown | Boss Battles |
+| Banana Party / Sad Banana | After a win / after a loss |
+
+Each map opens with its own battle song, and in a long game the five battle songs take turns. The music
+is muffled while the game is paused.
+
 ## Project layout
 
 ```
 index.html            entry page (loads scripts in order)
 lib/phaser.min.js     Phaser 3.90 (MIT)
 fonts/                Luckiest Guy (Apache 2.0), Fredoka (OFL)
-src/core/             config, save data, Web Audio synth
+src/core/             config, save data, Web Audio synth, the songs
 src/art/              procedural painters: minions, towers, heroes, enemies, villains, maps, menu, effects/icons
 src/data/             towers & upgrades & fusions, heroes, enemies, rounds, maps
 src/game/             path, entities (enemy/projectile/tower), effects layer, abilities, giants, bosses,
