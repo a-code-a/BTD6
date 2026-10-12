@@ -393,7 +393,7 @@
     nuclearToot(game, t, all) {
       const pw = powerOf(t);
       const cloud = game.add.image(t.x, t.y, 'fx_nuke').setOrigin(0.5, 0.95).setScale(0.2 / S).setDepth(6300).setAlpha(0.95);
-      game.tweens.add({ targets: cloud, scale: 1.6 / S, duration: 900, ease: 'Cubic.easeOut' });
+      game.tweens.add({ targets: cloud, scale: 1.15 / S, duration: 900, ease: 'Cubic.easeOut' });
       game.tweens.add({ targets: cloud, alpha: 0, y: t.y - 40, delay: 1100, duration: 900, onComplete: () => cloud.destroy() });
       game.fx.shockwave(t.x, t.y, 1200, 0x9be15d, 900);
       game.fx.screenFlash(0xb8ff7a, 0.45, 700);
@@ -500,7 +500,7 @@
         blast(game, t, x, y, 150, 30, 250, 800);
         game.fx.shockwave(x, y, 300, 0xb8ff7a, 800);
         const cloud = game.add.image(x, y + 20, 'fx_nuke').setOrigin(0.5, 0.95).setScale(0.2 / S).setDepth(6300);
-        game.tweens.add({ targets: cloud, scale: 1 / S, duration: 700, ease: 'Cubic.easeOut' });
+        game.tweens.add({ targets: cloud, scale: 0.8 / S, duration: 700, ease: 'Cubic.easeOut' });
         game.tweens.add({ targets: cloud, alpha: 0, delay: 900, duration: 800, onComplete: () => cloud.destroy() });
         game.fx.screenFlash(0xd8ffb0, 0.4, 600);
         game.shake(0.35);

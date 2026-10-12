@@ -12,12 +12,13 @@
         lifespan: 380, tint: [0x9b59d0, 0x7b2fb0, 0xc490ea, 0x5e2585],
       }).setDepth(4000);
       this.sparks = P('fx_spark', {
-        speed: { min: 60, max: 160 }, scale: { start: 0.7, end: 0 }, lifespan: 300, rotate: { min: 0, max: 360 },
+        speed: { min: 60, max: 160 }, scale: { start: 0.6, end: 0 }, lifespan: 300, rotate: { min: 0, max: 360 },
         tint: [0xffffff, 0xffd83a, 0xffb300],
       }).setDepth(4001);
+      // explosion smoke stays small and thin so it never fogs up the track
       this.smoke = P('fx_puff', {
-        speed: { min: 20, max: 70 }, scale: { start: 0.6, end: 1.4 }, alpha: { start: 0.55, end: 0 },
-        lifespan: 700, tint: [0x5d5d5d, 0x8a8a8a, 0x3b3b3b],
+        speed: { min: 20, max: 60 }, scale: { start: 0.35, end: 0.8 }, alpha: { start: 0.42, end: 0 },
+        lifespan: 550, tint: [0x5d5d5d, 0x8a8a8a, 0x3b3b3b], maxAliveParticles: 120,
       }).setDepth(3990);
       this.snow = P('fx_snow', {
         speed: { min: 30, max: 120 }, scale: { start: 0.9, end: 0.2 }, alpha: { start: 1, end: 0 },
@@ -31,7 +32,7 @@
         tint: [0x9be15d, 0x6abf2a, 0xc5f08a],
       }).setDepth(3980);
       this.dust = P('fx_puff', {
-        speed: { min: 30, max: 90 }, scale: { start: 0.45, end: 0.9 }, alpha: { start: 0.6, end: 0 }, lifespan: 450,
+        speed: { min: 30, max: 90 }, scale: { start: 0.32, end: 0.65 }, alpha: { start: 0.55, end: 0 }, lifespan: 420,
         tint: [0xfff3d6, 0xe9d9b5, 0xffffff],
       }).setDepth(3990);
       this.trail = P('fx_puff', {
@@ -57,24 +58,38 @@
       this.beamG = scene.add.graphics().setDepth(3500);
       this.ringPool = [];
       this.active = { boom: 0, ring: 0, text: 0, stomp: 0, swirl: 0 };
+      // how many explosions went off just now (decays over ~1/3 s); see busy()
+      this.heat = 0;
+      this.lastFlash = -1e9;
+      this.lastFlashA = 0;
       // full-map overlays for flashes and danger vignettes (never covers the HUD)
       this.flashRect = scene.add.rectangle(0, 0, W, H, 0xffffff, 1).setOrigin(0).setDepth(6800).setAlpha(0).setVisible(false);
       this.vig = scene.add.image(W / 2, H / 2, 'fx_vignette').setDisplaySize(W, H).setDepth(6790).setAlpha(0).setVisible(false);
     }
 
+    // 0 = calm, 1 = lots of explosions at once: effects then get smaller,
+    // fainter and sparser so the mutants stay visible in the late game
+    busy() {
+      return Math.min(1, this.heat / 18);
+    }
+
+    // Effect textures are painted at S x resolution (like all art); the sizes
+    // here are in map pixels, so every scale below is divided by S. A blast
+    // drawn with radius r covers exactly the area it damages.
     pop(x, y, big) {
-      this.puffs.explode(big ? 14 : 4, x, y);
+      const busy = this.busy();
+      this.puffs.explode(big ? 12 : busy > 0.5 ? 2 : 4, x, y);
       if (big) {
-        this.sparks.explode(10, x, y);
-        this.smoke.explode(8, x, y);
+        this.sparks.explode(8, x, y);
+        this.smoke.explode(4, x, y);
       }
-      if (this.activePops > 45) return;
+      if (this.activePops > (busy > 0.5 ? 24 : 40)) return;
       let img = this.popPool.pop();
       if (!img) img = this.scene.add.image(0, 0, 'fx_pop').setDepth(4005);
       this.activePops++;
-      img.setVisible(true).setPosition(x, y).setScale(big ? 0.9 : 0.3).setAlpha(1).setRotation(Math.random() * 3);
+      img.setVisible(true).setPosition(x, y).setScale(big ? 0.7 : 0.22).setAlpha(big ? 1 : 0.9).setRotation(Math.random() * 3);
       this.scene.tweens.add({
-        targets: img, scale: big ? 1.6 : 0.6, alpha: 0, duration: big ? 320 : 170, ease: 'Quad.easeOut',
+        targets: img, scale: big ? 1.2 : 0.42, alpha: 0, duration: big ? 300 : 160, ease: 'Quad.easeOut',
         onComplete: () => {
           img.setVisible(false);
           this.activePops--;
@@ -84,13 +99,16 @@
     }
 
     boom(x, y, r) {
-      this.smoke.explode(Math.min(10, 3 + Math.floor(r / 10)), x, y);
-      this.sparks.explode(5, x, y);
-      if (this.active.boom > 24) return;
+      const busy = this.busy();
+      this.heat++;
+      if (busy < 0.7) this.smoke.explode(Math.min(6, 2 + Math.floor(r / 20)), x, y);
+      this.sparks.explode(busy < 0.5 ? 4 : 2, x, y);
+      if (this.active.boom > (busy > 0.5 ? 10 : 16)) return;
       this.active.boom++;
-      const img = this.scene.add.image(x, y, 'fx_boom').setDepth(4010).setScale(0.2).setRotation(Math.random() * 6);
+      const k = (r / 48 / S) * (1 - busy * 0.3);
+      const img = this.scene.add.image(x, y, 'fx_boom').setDepth(4010).setScale(k * 0.25).setAlpha(0.9 - busy * 0.3).setRotation(Math.random() * 6);
       this.scene.tweens.add({
-        targets: img, scale: (r / 46) * 1.0, alpha: 0, duration: 300, ease: 'Cubic.easeOut',
+        targets: img, scale: k, alpha: 0, duration: 260, ease: 'Cubic.easeOut',
         onComplete: () => { img.destroy(); this.active.boom--; },
       });
     }
@@ -100,13 +118,14 @@
       this.active.ring++;
       let img = this.ringPool.pop();
       if (!img) img = this.scene.add.image(0, 0, 'fx_ring').setDepth(opts.depth || 2950);
-      img.setVisible(true).setPosition(x, y).setTint(color).setAlpha(opts.alpha || 0.9).setScale((r * 0.2) / 58).setDepth(opts.depth || 2950);
+      img.setVisible(true).setPosition(x, y).setTint(color).setAlpha(opts.alpha || 0.8).setScale((r * 0.2) / 58 / S).setDepth(opts.depth || 2950);
       this.scene.tweens.add({
-        targets: img, scale: r / 58, alpha: 0, duration: opts.dur || 350, ease: 'Quad.easeOut',
+        targets: img, scale: r / 58 / S, alpha: 0, duration: opts.dur || 350, ease: 'Quad.easeOut',
         onComplete: () => { img.setVisible(false); this.ringPool.push(img); this.active.ring--; },
       });
       if (opts.disc) {
-        const d = this.scene.add.image(x, y, 'fx_disc').setDepth(2940).setTint(color).setAlpha(0.6).setScale((r * 2) / 128);
+        this.heat += 0.5;
+        const d = this.scene.add.image(x, y, 'fx_disc').setDepth(2940).setTint(color).setAlpha(0.4 - this.busy() * 0.2).setScale(r / 64 / S);
         this.scene.tweens.add({ targets: d, alpha: 0, duration: opts.dur || 350, onComplete: () => d.destroy() });
       }
     }
@@ -157,16 +176,22 @@
     swirl(x, y, r, color) {
       if (this.active.swirl > 6) return;
       this.active.swirl++;
-      const img = this.scene.add.image(x, y - 6, 'fx_swirl').setDepth(2945).setTint(color).setAlpha(0.75).setScale((r * 0.5) / 64);
+      const img = this.scene.add.image(x, y - 6, 'fx_swirl').setDepth(2945).setTint(color).setAlpha(0.7).setScale((r * 0.5) / 64 / S);
       this.scene.tweens.add({
-        targets: img, scale: r / 64, angle: 220, alpha: 0, duration: 420, ease: 'Quad.easeOut',
+        targets: img, scale: r / 64 / S, angle: 220, alpha: 0, duration: 420, ease: 'Quad.easeOut',
         onComplete: () => { img.destroy(); this.active.swirl--; },
       });
       this.gas.explode(3, x + (Math.random() - 0.5) * r, y + (Math.random() - 0.5) * r * 0.6);
     }
 
-    // a short full-map colour flash (alpha-limited, never blinding)
+    // a short full-map colour flash (alpha-limited, never blinding); a weaker
+    // flash right after another one is skipped so abilities don't strobe
     screenFlash(color, alpha = 0.35, dur = 300) {
+      alpha = Math.min(0.35, alpha * 0.6);
+      const now = this.scene.time.now;
+      if (now - this.lastFlash < 400 && alpha <= this.lastFlashA) return;
+      this.lastFlash = now;
+      this.lastFlashA = alpha;
       const r = this.flashRect;
       this.scene.tweens.killTweensOf(r);
       r.setFillStyle(color, 1).setAlpha(alpha).setVisible(true);
@@ -183,8 +208,10 @@
     }
 
     shockwave(x, y, r, color, dur = 450) {
-      const img = this.scene.add.image(x, y, 'fx_shock').setDepth(4006).setTint(color).setAlpha(0.95).setScale((r * 0.15) / 64);
-      this.scene.tweens.add({ targets: img, scale: r / 64, alpha: 0, duration: dur, ease: 'Cubic.easeOut', onComplete: () => img.destroy() });
+      const busy = this.busy();
+      this.heat += 1;
+      const img = this.scene.add.image(x, y, 'fx_shock').setDepth(4006).setTint(color).setAlpha(0.75 - busy * 0.35).setScale((r * 0.15) / 64 / S);
+      this.scene.tweens.add({ targets: img, scale: r / 64 / S, alpha: 0, duration: dur, ease: 'Cubic.easeOut', onComplete: () => img.destroy() });
     }
 
     // the big multi-stage explosion when a giant goes down
@@ -207,9 +234,9 @@
       }
       this.shockwave(x, y, r * (tier === 3 ? 5 : tier === 2 ? 3 : 2.3), color, tier === 3 ? 700 : 420);
       if (tier >= 2) {
-        const flash = s.add.image(x, y, 'fx_disc').setDepth(4007).setTint(tier === 3 ? 0xffffff : color).setAlpha(tier === 3 ? 0.85 : 0.5).setScale((r * 1.1) / 64);
+        const flash = s.add.image(x, y, 'fx_disc').setDepth(4007).setTint(tier === 3 ? 0xffffff : color).setAlpha(tier === 3 ? 0.7 : 0.4).setScale((r * 1.1) / 64 / S);
         if (tier === 3) flash.setBlendMode(Phaser.BlendModes.ADD);
-        s.tweens.add({ targets: flash, scale: (r * 2.3) / 64, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+        s.tweens.add({ targets: flash, scale: (r * 2.3) / 64 / S, alpha: 0, duration: 260, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
       }
       const n = tier === 3 ? 8 : tier === 2 ? 3 : 1;
       for (let i = 0; i < n; i++) {
@@ -377,6 +404,7 @@
     }
 
     update(dt) {
+      this.heat *= Math.exp(-dt * 3);
       const g = this.beamG;
       g.clear();
       for (let i = this.beams.length - 1; i >= 0; i--) {

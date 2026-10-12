@@ -462,7 +462,7 @@
         case 'vortex': {
           if (!o.sprite) o.sprite = g.add.image(o.x, o.y, 'fx_vortex').setDepth(1990).setBlendMode(Phaser.BlendModes.NORMAL);
           const k = Math.min(1, (o.max - o.life) * 4, o.life * 3);
-          o.sprite.setScale((k * o.r * 2.2) / 128).setRotation(o.sprite.rotation - dt * 6).setAlpha(0.9 * k);
+          o.sprite.setScale((k * o.r * 2.2) / 128 / S).setRotation(o.sprite.rotation - dt * 6).setAlpha(0.9 * k);
           if (Math.random() < dt * 20) {
             const a = Math.random() * TAU;
             g.fx.sparkle(o.x + Math.cos(a) * o.r, o.y + Math.sin(a) * o.r * 0.6, 0xffd740);
@@ -497,7 +497,7 @@
         case 'puddle': {
           if (!o.sprite) o.sprite = g.add.image(o.x, o.y, 'fx_puddle').setDepth(985).setRotation(o.rot).setTint(0xff6fa0);
           const k = Math.min(1, (o.max - o.life) * 5, o.life);
-          o.sprite.setScale((k * o.r * 2.2) / 96, (k * o.r * 1.5) / 96).setAlpha(0.85 * k);
+          o.sprite.setScale((k * o.r * 2.2) / 96 / S, (k * o.r * 1.5) / 96 / S).setAlpha(0.85 * k);
           if (Math.random() < dt * 4) g.fx.goo.explode(1, o.x + U.rand(-o.r, o.r) * 0.7, o.y + U.rand(-o.r, o.r) * 0.4);
           break;
         }

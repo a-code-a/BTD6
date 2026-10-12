@@ -3,8 +3,9 @@
 // d=dasher z=zoomer r=rascal j=jailbird h=hulk b=brute t=tincan M=mega T=titan Z=zeppelin
 // P=phantom X=mecha G=goo E=El Macho (final boss)
 // a=glider (flying) J=jetpack (flying) m=mole (burrows) s=shield carrier
+// enemy heroes (the Boss Battle villains): V=Vector K=Bratt S=Scarlet (flying)
 (function () {
-  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin', P: 'phantom', X: 'mecha', G: 'goo', E: 'macho', a: 'glider', J: 'jetpack', m: 'mole', s: 'shield' };
+  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin', P: 'phantom', X: 'mecha', G: 'goo', E: 'macho', a: 'glider', J: 'jetpack', m: 'mole', s: 'shield', V: 'vector', K: 'bratt', S: 'scarlet' };
 
   // compact notation: "c30@.55+4cf" => 30 chompers, 0.55s apart, start at 4s, camo+fortified
   const R = [
@@ -53,40 +54,40 @@
     'h10@.6 M2@6+4 J10@.8+6',
     'h28@.4 b15@.6+8',
     'j50@.2 b10@.8+6 s8@1+10',
-    'z120@.08 b20@.6+8 t10@.8+14c',
+    'z120@.08 b20@.6+8 t10@.8+14c V1@1+4',
     'M1@1 b16@.6+3c m20@.4+6',
     'z70@.1c b12@.8+6',
     'z120@.08 h50@.2+8 J16@.6+4 a40@.15+8',
     'c343@.03 h41@.2+6 b29@.4+12',
-    'b20@.4 M8@2.2+6',
+    'b30@.3 M10@2+6 T1@1+20',
     'h15@.4c b10@.6+4f',
-    'M10@2 b25@.4+5 s12@.8+4f',
+    'M10@2 b25@.4+5 s12@.8+4f S1@1+6',
     'z80@.08c M3@3+5',
     'b35@.3 M6@2.5+6',
-    'M10@1.8 b45@.3+4 J24@.4+6',
+    'M10@1.8 b45@.3+4 J24@.4+6 T2@5+12',
     'h40@.2c M8@2+4 P1@2+12',
-    'b40@.3 M12@1.6+6',
+    'b40@.3 M12@1.6+6 P1@1+14',
     'b50@.25f M13@1.6+6 m30@.3+8f',
-    'b80@.15 M6@2+8',
-    'T1@1 M4@3+6 X1@1+14',
+    'b80@.15 M6@2+8 T2@4+10',
+    'T2@3 M8@1.5+6 X1@1+14 K1@1+20',
     'b25@.3c M16@1.1+4',
     'h120@.1 M18@1+6 s20@.5+6 J20@.5+10',
-    'b120@.1 t75@.1+6',
+    'b120@.1 t75@.1+6 X1@1+12',
     'M9@1.5f b30@.3+3 X1@1+10',
     'T3@4 M20@1+6',
-    'M22@1 b30@.3+6f G1@1+12 J30@.3+4f',
+    'M22@1 b30@.3+6f G1@1+12 J30@.3+4f V1@1+16',
     'b50@.2f M15@1+6',
     'T4@3 M10@1.2+6 P2@4+12',
-    't150@.06cf b40@.2+10',
+    't150@.06cf b40@.2+10 T3@3+12f',
     'h200@.04 M12@1+8 X2@5+10 s30@.3+8f',
     'T6@2.5 b60@.15+4',
-    'M40@.6 G2@5+12',
+    'M40@.6 G2@5+12 S1@1+8 K1@1+20',
     'b100@.1cf T4@3+8',
     'T8@2 M20@.8+6 P4@3+10 m60@.15+4f J30@.3+8f',
-    'T10@1.6 M30@.6+4',
+    'T10@1.6 M30@.6+4 Z1@1+20',
     'b200@.06c T6@2+10 X3@4+14',
     'T12@1.4 M30@.5+4 G2@6+12',
-    'Z1@1 T6@2+8 P4@2+10 a120@.05+2 J40@.25+8f',
+    'Z1@1 T6@2+8 P4@2+10 a120@.05+2 J40@.25+8f V1@1+14',
     'T20@1 M40@.4+6f X2@4+10 G2@6+14',
     'Z2@8 T10@1.5+10 E1@1+22',
   ];
@@ -118,13 +119,27 @@
     groups.push({ type: 'shield', count: 10 + k * 2, spacing: 0.3, delay: 1, camo: false, fort: k > 2 });
     if (k % 2 === 1) groups.push({ type: 'mole', count: 40 + k * 4, spacing: 0.1, delay: 2, camo: k % 3 === 1, fort: true });
     if (k % 10 === 0) groups.push({ type: 'macho', count: Math.max(1, Math.floor(k / 10)), spacing: 18, delay: 16, camo: false, fort: k >= 30 });
+    // the enemy heroes keep coming back, more of them the longer you survive
+    if (k % 3 === 0) {
+      const n = 1 + Math.floor(k / 15);
+      for (let i = 0; i < n; i++) groups.push({ type: VILLAINS[(k / 3 + i) % 3], count: 1, spacing: 1, delay: 6 + i * 8, camo: false, fort: false });
+    }
     return groups;
   }
 
+  // enemy heroes: the Boss Battle villains also invade classic games
+  const VILLAINS = ['vector', 'bratt', 'scarlet'];
+  const HERO_TIP = { vector: 'His squids ink your towers!', bratt: 'His gum bombs trap your towers!', scarlet: 'She flies: only anti-air can hurt her!' };
+
   MT.Rounds = {
     get(n) {
-      if (n < R.length) return parse(R[n]);
-      return freeplay(n);
+      const groups = n < R.length ? parse(R[n]) : freeplay(n);
+      // an enemy hero gets tougher the later it shows up, and walks faster
+      // than in its own boss battle so a round doesn't drag on
+      groups.forEach((g) => {
+        if (MT.ENEMIES[g.type].bossFight) Object.assign(g, { hpMul: Math.max(1, n / 30), speedMul: 2.5 });
+      });
+      return groups;
     },
     // flattened, time-sorted spawn list
     spawns(n) {
@@ -133,7 +148,7 @@
     flatten(groups) {
       const list = [];
       groups.forEach((g) => {
-        for (let i = 0; i < g.count; i++) list.push({ t: g.delay + i * g.spacing, type: g.type, camo: g.camo, fort: g.fort });
+        for (let i = 0; i < g.count; i++) list.push({ t: g.delay + i * g.spacing, type: g.type, camo: g.camo, fort: g.fort, hpMul: g.hpMul, speedMul: g.speedMul });
       });
       list.sort((a, b) => a.t - b.t);
       return list;
@@ -151,11 +166,15 @@
       if (k >= 12 && k % 3 === 1) g.push(G('mega', 1 + Math.floor((k - 12) / 4), 3, 6, false, k > 18));
       return g;
     },
-    // Speed / health ramp in freeplay (like BTD6 after round 80)
+    // Late-game ramp so maxed and fused towers still meet a challenge: giants
+    // and Barrel Brutes get +5% health per round after round 40 (2x at round 60,
+    // 3x at 80) and everything gets up to 20% faster from round 60 on. Freeplay
+    // keeps climbing much faster from there.
     scaling(n) {
-      if (n <= 80) return { speed: 1, hp: 1 };
+      if (n <= 40) return { speed: 1, hp: 1 };
+      if (n <= 80) return { speed: 1 + Math.max(0, n - 60) * 0.01, hp: 1 + (n - 40) * 0.05 };
       const k = n - 80;
-      return { speed: 1 + Math.min(1.5, k * 0.02), hp: 1 + k * 0.05 + (n > 100 ? (n - 100) * 0.1 : 0) };
+      return { speed: 1.2 + Math.min(1.3, k * 0.03), hp: 3 * (1 + k * 0.2) + (n > 100 ? (n - 100) * 0.6 : 0) };
     },
     // cash per pop multiplier (BTD6 style income falloff)
     cashMul(n) {
@@ -171,6 +190,9 @@
       const g = this.get(n);
       const types = g.map((x) => x.type);
       if (types.includes('macho')) return 'FINAL BOSS: MUTANT EL MACHO!';
+      const heroes = [...new Set(types.filter((t) => MT.ENEMIES[t].bossFight))];
+      if (heroes.length > 1) return 'THE VILLAINS TEAM UP! Spread out your towers.';
+      if (heroes.length) return `ENEMY HERO: ${MT.ENEMIES[heroes[0]].name.toUpperCase()}! ${HERO_TIP[heroes[0]]}`;
       if (types.includes('mecha') && n <= 80) return 'MECHA MUTANTS! Their EMP shuts down towers.';
       if (types.includes('goo') && n <= 80) return 'GOO BEHEMOTH! It regenerates, burst it fast!';
       if (types.includes('phantom') && n <= 80) return 'PHANTOM MUTANTS! Camo giants that teleport.';

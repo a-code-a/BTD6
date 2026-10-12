@@ -736,8 +736,15 @@
     }
 
     leak(e) {
-      const cost = Math.max(1, Math.ceil(MT.enemyRbe(e.type, e.fort) - (e.maxHp - e.hp)));
-      if (e.def.bossFight && !this.sandbox) {
+      // lives lost = health left on it + everything still inside it
+      const kids = e.def.children.reduce((sum, c) => sum + MT.enemyRbe(c, false), 0);
+      // an enemy hero in a classic game steals half of your starting lives
+      const heroCap = e.def.bossFight ? Math.ceil(this.diff.lives / 2) : Infinity;
+      const cost = Math.max(1, Math.min(heroCap, Math.ceil(kids + e.hp)));
+      if (e.def.bossFight && this.mode !== 'boss' && !this.sandbox) {
+        this.hud.toast(`${e.def.name} escaped with ${cost} lives!`, 2400, true);
+      }
+      if (e.def.bossFight && this.mode === 'boss' && !this.sandbox) {
         // a boss reaching the end of the track wins the battle
         e.leaked = true;
         e.destroy();
@@ -1440,7 +1447,7 @@
         const list = this.spawnList;
         while (this.spawnIdx < list.length && list[this.spawnIdx].t <= this.roundTime) {
           const s = list[this.spawnIdx++];
-          this.spawnEnemy(s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort });
+          this.spawnEnemy(s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort, hpMul: s.hpMul, speedMul: s.speedMul });
         }
         for (const t of this.units()) {
           if (t.bananaTimes && t.bananaTimes.length && t.bananaTimes[0] <= this.roundTime) {

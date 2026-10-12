@@ -40,11 +40,12 @@
       const sc = game.scaling;
       let hp = def.hp;
       if (this.fort) hp = type === 'tincan' ? 4 : hp * 2;
-      if (this.boss) hp = Math.round(hp * sc.hp);
+      // the late-game health ramp hits giants and the barrel brutes
+      if (this.boss || type === 'brute') hp = Math.round(hp * sc.hp);
       if (o.hpMul) hp = Math.round(hp * o.hpMul);
       this.maxHp = hp;
       this.hp = hp;
-      this.speed = def.speed * MT.CFG.SPEED_UNIT * sc.speed;
+      this.speed = def.speed * MT.CFG.SPEED_UNIT * sc.speed * (o.speedMul || 1);
       this.radius = def.radius;
       this.freeze = 0;
       this.brittle = false;

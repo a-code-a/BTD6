@@ -578,8 +578,11 @@
     // Phaser reuses the scene object when you come back to this screen, so the
     // flag must be cleared again or every button here stops working
     scene.events.once('shutdown', () => (scene._leaving = false));
+    const start = () => scene._leaving && scene.scene.start(key, data);
     scene.cameras.main.fadeOut(240, 10, 8, 30);
-    scene.cameras.main.once('camerafadeoutcomplete', () => scene.scene.start(key, data));
+    scene.cameras.main.once('camerafadeoutcomplete', start);
+    // safety net: if anything cuts the fade short, switch screens anyway
+    scene.time.delayedCall(400, start);
   }
 
   // Standard sub-screen header: title + back button.

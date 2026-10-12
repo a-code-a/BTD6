@@ -298,7 +298,7 @@
       if (E.flying) tags.push(['FLYING', 0x29b6f6]);
       if (E.burrow) tags.push(['TUNNELS', 0x8d6e63]);
       if (E.shield) tags.push(['SHIELDS', 0x26c6da]);
-      if (E.bossFight) tags.push(['BOSS BATTLE', 0xff5a4a]);
+      if (E.bossFight) tags.push(['BOSS BATTLE', 0xff5a4a], ['ENEMY HERO', 0xff8a3a]);
       let cx = 740;
       tags.forEach(([s, col]) => {
         const c = chip(this, cx, 340, s, col);
@@ -334,9 +334,9 @@
           mecha: 'Its EMP shuts down towers nearby. Spread your towers out.',
           goo: 'Burst it down quickly before it heals. Jelly slow has no effect.',
           macho: 'Gets angrier at 66% and 33% health. Save your abilities for him!',
-          vector: 'Boss battle: his squids ink a tower for a few seconds. Stun or freeze him to slow his attacks down.',
-          bratt: 'Boss battle: gum bombs trap whole clusters of towers, so spread out. His keytar stuns towers close to him.',
-          scarlet: 'Boss battle: she flies, so only anti-air hurts her. Lava lamps melt towers for a few seconds.',
+          vector: 'Boss battle, and an enemy hero from round 45: his squids ink a tower for a few seconds. Stun or freeze him to slow his attacks down.',
+          bratt: 'Boss battle, and an enemy hero from round 60: gum bombs trap whole clusters of towers, so spread out. His keytar stuns towers close to him.',
+          scarlet: 'Boss battle, and an enemy hero from round 52: she flies, so only anti-air hurts her. Lava lamps melt towers for a few seconds.',
         };
         p.add(MT.text(this, 516, 552, tips[id] || 'Big, tough and full of smaller mutants.', 16, { ox: 0, oy: 0, align: 'left', wrap: 700, color: '#ffe28a' }));
       }

@@ -174,6 +174,14 @@ The endgame (late Hard rounds and freeplay) adds monsters with their own powers:
 - **Goo Behemoth**: regenerates health and ignores jelly.
 - **Mutant El Macho**: the final boss of round 80 (and every 10th freeplay round). He gets angrier and
   calls in reinforcements as his health drops.
+- **Enemy heroes**: the Boss Battle villains invade classic games: Mutant Vector in rounds 45, 66 and 78,
+  Scarlet Overkill in 52 and 72, Balthazar Bratt in 60 and 72, and every third freeplay round (more of
+  them the further you get). They ink, gum or melt your strongest towers and call in minions. One that
+  escapes steals half of your starting lives.
+
+From round 41 on, giants and Barrel Brutes get 5% more health every round (twice as much by round 60,
+three times by round 80), and from round 61 everything moves up to 20% faster. In freeplay both keep
+climbing much faster, so even a defense full of super towers falls eventually.
 
 Every new giant gets a warning banner when it first appears, and giants explode in a multi-stage
 burst when they go down.

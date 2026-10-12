@@ -61,7 +61,8 @@
     const ih = icon.height / S;
     icon.setScale(Math.min(1, (bh - 18) / ih) / S);
     c.add(icon);
-    c.add(MT.text(s, 40, -bh / 2 + 26, def.bossFight ? '!!  BOSS BATTLE  !!' : big ? '!!  FINAL BOSS  !!' : '!  WARNING  !', 18, { title: true, color: '#ffc61a' }));
+    const label = def.bossFight ? (game.mode === 'boss' ? '!!  BOSS BATTLE  !!' : '!!  ENEMY HERO  !!') : big ? '!!  FINAL BOSS  !!' : '!  WARNING  !';
+    c.add(MT.text(s, 40, -bh / 2 + 26, label, 18, { title: true, color: '#ffc61a' }));
     c.add(MT.text(s, 40, big ? -2 : 4, def.name.toUpperCase(), big ? 44 : 36, { title: true, color: info.color }));
     c.add(MT.text(s, 40, bh / 2 - 22, info.tag, 16, { color: '#ffffff' }));
     MT.Audio.play(big ? 'roar' : 'warning');
