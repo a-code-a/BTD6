@@ -52,6 +52,11 @@
         speedY: { min: -70, max: -30 }, speedX: { min: -25, max: 25 }, scale: { start: 0.8, end: 0.3 }, alpha: { start: 1, end: 0 },
         lifespan: 900, tint: [0xff4081, 0x40c4ff, 0xffd83a, 0x7be35a, 0xb388ff],
       }).setDepth(4004);
+      // water droplets for the Fireman's jets and puddles
+      this.water = P('fx_puff', {
+        speed: { min: 40, max: 130 }, scale: { start: 0.28, end: 0 }, alpha: { start: 0.9, end: 0 }, lifespan: 360,
+        tint: [0x4fc3f7, 0x81d4fa, 0xe1f5fe], gravityY: 160,
+      }).setDepth(4000);
       this.popPool = [];
       this.activePops = 0;
       this.beams = [];

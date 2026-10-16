@@ -17,11 +17,13 @@
     vector: { color: '#ff8a3a', tag: 'Squid launcher armed. Oh yeah!' },
     bratt: { color: '#c06bff', tag: 'Bubblegum, keytar, mullet. It is 1985 again!' },
     scarlet: { color: '#ff4a6a', tag: 'Flying in a rocket dress: only anti-air can hurt her!' },
+    elmacho: { color: '#ff4a3a', tag: 'Back in his volcano, and Pollito came along!' },
+    maxime: { color: '#9ccc65', tag: 'Le Mal has arrived. Watch out for the Roach Ray!' },
   };
   // death-burst colour per giant
-  const DEATH = { mega: 0xc490ea, titan: 0xff7a5a, zeppelin: 0xffd83a, phantom: 0xb3a6ff, mecha: 0x80d8ff, goo: 0x9be15d, macho: 0xff4a3a, vector: 0xff8a3a, bratt: 0xc06bff, scarlet: 0xff4a6a };
+  const DEATH = { mega: 0xc490ea, titan: 0xff7a5a, zeppelin: 0xffd83a, phantom: 0xb3a6ff, mecha: 0x80d8ff, goo: 0x9be15d, macho: 0xff4a3a, vector: 0xff8a3a, bratt: 0xc06bff, scarlet: 0xff4a6a, elmacho: 0xff4a3a, maxime: 0x9ccc65 };
   // gentle screen shake when a giant goes down (much smaller than before)
-  const SHAKE = { mega: 0.08, titan: 0.16, zeppelin: 0.26, phantom: 0.12, mecha: 0.2, goo: 0.16, macho: 0.75, vector: 0.6, bratt: 0.6, scarlet: 0.6 };
+  const SHAKE = { mega: 0.08, titan: 0.16, zeppelin: 0.26, phantom: 0.12, mecha: 0.2, goo: 0.16, macho: 0.75, vector: 0.6, bratt: 0.6, scarlet: 0.6, elmacho: 0.7, maxime: 0.6 };
 
   function onSpawn(game, e) {
     if (game.seenBoss[e.type]) return;
@@ -100,6 +102,7 @@
       MT.Audio.play('emp');
     }
     if (big) {
+      MT.Progress.onMacho(game);
       game.slowmo = 0.9;
       game.fx.screenFlash(0xffffff, 0.55, 700);
       game.fx.bigText('EL MACHO DEFEATED!', '#ffd83a', 56, 'The PX-41 menace is over... for now.');

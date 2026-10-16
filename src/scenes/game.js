@@ -4,6 +4,39 @@
   const CFG = MT.CFG;
   const S = MT.Draw.S;
   const TARGET_MODES = ['First', 'Last', 'Close', 'Strong'];
+  // some towers have their own targeting modes on top of (or instead of) the usual four
+  const PLANE_MODES = ['Circle', 'Figure 8', 'Wide', 'Hunt'];
+  const TRAP_MODES = ['Spread', 'Close', 'Far'];
+  const SMART_TRAP_MODES = ['Smart', 'Spread', 'Close', 'Far'];
+  const LOB_MODES = TARGET_MODES.concat(['Spot']);
+  const SNIPER_MODES = TARGET_MODES.concat(['Camo', 'Giants']);
+  MT.targetModes = function (t) {
+    const s = t.stats || t.baseStats || {};
+    if (t.omega || t.hero) return TARGET_MODES;
+    if (s.attack === 'plane') return PLANE_MODES;
+    if (s.attack === 'trap') return s.smart ? SMART_TRAP_MODES : TRAP_MODES;
+    if (s.attack === 'lob') return LOB_MODES;
+    if (t.type === 'sniper' || s.attack === 'instant') return SNIPER_MODES;
+    return TARGET_MODES;
+  };
+  MT.targetName = (t) => {
+    const list = MT.targetModes(t);
+    return list[t.targetMode] || list[0];
+  };
+  // a stand-in "mutant" for a fixed point on the map (Catapult Spot mode)
+  MT.spotTarget = (spot) => ({
+    x: spot.x, y: spot.y, id: -1, dead: false, flying: false, dist: 0,
+    path: { at: () => ({ x: spot.x + U.rand(-16, 16), y: spot.y + U.rand(-10, 10) }) },
+    speedNow: () => 0,
+  });
+  const MODE_TIPS = {
+    First: 'Attacks the mutant furthest along the track.', Last: 'Attacks the mutant furthest back.', Close: 'Attacks the closest mutant.', Strong: 'Attacks the toughest mutant.',
+    Camo: 'Prefers Camo mutants, then the first one.', Giants: 'Prefers the biggest giant, then the first mutant.',
+    Circle: 'Planes fly a tight circle around the airfield.', 'Figure 8': 'Planes fly a long figure 8 that covers more track.', Wide: 'Planes fly a big, wide loop.', Hunt: 'The whole patrol follows the leading mutant across the map.',
+    Spread: 'Nails land anywhere on the track in range.', Far: 'Nails land on the far end of the range (towards the exit).', Smart: 'Nails land right in front of the leading mutant.',
+    Spot: 'Boulders always land on a spot you pick. Click the map to move it.',
+  };
+  MT.MODE_TIPS = MODE_TIPS;
   const CELL = 80, GOX = 120, GOY = 120;
   const GCOLS = Math.ceil((CFG.MAP_W + GOX * 2) / CELL), GROWS = Math.ceil((CFG.H + GOY * 2) / CELL);
   // screen shake: maximum offset in logical px at full trauma, and how fast it fades
@@ -25,9 +58,14 @@
       this.heroDef = MT.HEROES[this.heroId];
       // 'classic' rounds, 'boss' battle (data.boss + data.tier) or the sandbox
       this.mode = data.boss ? 'boss' : 'classic';
-      this.bossId = data.boss || null;
+      // Boss Rush: every villain in a row, in one arena (bossId = the current one)
+      this.rush = data.boss === 'rush';
+      this.rushQueue = this.rush ? MT.BossFight.RUSH.slice() : null;
+      this.bossId = this.rush ? this.rushQueue.shift() : data.boss || null;
       this.bossTier = data.tier || 'normal';
       this.sandbox = !!this.diff.sandbox;
+      // a saved game to continue (see MT.RunSave)
+      this.resume = data.resume || null;
       this.launchData = data;
     }
 
@@ -61,6 +99,7 @@
       this.biters = [];
       this.zones = []; // lingering gas / fire clouds on the ground
       this.traps = []; // nail piles and banana peels on the track
+      this.camoTraps = []; // Camo Sprinkler powers
       this.giantObjs = []; // vortices, tornadoes, shells... from the giant towers
       this.moving = null; // tower currently being relocated
       // Phaser reuses the scene object on restart: clear everything a previous game left behind
@@ -73,10 +112,25 @@
       this.boss = null;
       this.seenBoss = {};
       this.fusionHinted = {};
-      this.money = this.mode === 'boss' ? MT.BossFight.startCash(this) : CFG.START_CASH;
-      this.lives = this.diff.lives;
+      // Gru's Lab research (meta progression); the sandbox does without
+      this.perks = MT.Progress.perks(this.sandbox);
+      this.sellRate = CFG.SELL_RATE + this.perks.sell;
+      this.money = (this.mode === 'boss' ? MT.BossFight.startCash(this) : CFG.START_CASH) + this.perks.cash;
+      this.maxLives = this.diff.lives + this.perks.lives;
+      this.lives = this.maxLives;
       // numbers for the end-of-game report
       this.stat = { time: 0, livesLost: 0, abilities: 0, built: 0, sold: [] };
+      // the +$ cheat switches Gru Coins and achievements off for this game
+      this.cheated = false;
+      this.coinsEarned = 0;
+      this.popsBanked = 0;
+      this.cnt = { regrow: 0, healer: 0, powers: 0, fusions: 0 };
+      this.heroUsed = false;
+      this.spotting = null; // a Catapult waiting for its target spot to be clicked
+      this.powerPlacing = null; // a power waiting to be dropped on the track
+      this.powerCd = {};
+      this.dirty = false; // something changed between rounds: save the game soon
+      this.saveT = 0;
       this.sbQueue = [];
       this.sbT = 0;
       this.round = 0;
@@ -108,10 +162,18 @@
       this.ghost = this.add.image(0, 0, MT.TowerArt.key(this, 'banana', [0, 0, 0])).setScale(1 / S).setAlpha(0.75).setVisible(false).setDepth(5900);
 
       this.hud = new MT.HUD(this);
+      // clickable / animated things on interactive maps
+      this.mapFx = MT.MapFX.create(this);
       this.setupInput();
       this.cameras.main.fadeIn(350, 20, 30, 50);
-      if (this.mode === 'boss') MT.BossFight.prepare(this);
+      if (this.resume) {
+        // continue a saved game right where the last round ended
+        MT.RunSave.restore(this, this.resume);
+        this.hud.toast(this.round ? `Welcome back! Round ${this.round} is done, press PLAY for round ${this.round + 1}.` : 'Welcome back! Press PLAY for round 1.', 3400);
+      } else if (this.mode === 'boss') MT.BossFight.prepare(this);
       else this.hud.toast(this.sandbox ? 'SANDBOX: unlimited bananas! Open the sandbox panel (top right).' : 'Place some minions, then press PLAY!', 3200);
+      // interactive maps explain their gadget right after
+      if (this.mapDef.hint && this.mode !== 'boss' && !this.resume) this.time.delayedCall(3400, () => !this.over && this.hud.toast(this.mapDef.hint, 4200));
       this.hud.refreshPreview();
       MT.Audio.battle(this.mapDef.theme);
       MT.Audio.music('battle');
@@ -136,16 +198,19 @@
     }
 
     price(base, x, y) {
-      let v = base * this.diff.price;
+      let v = base * this.diff.price * (1 - this.perks.discount);
       if (x != null) v *= 1 - this.discountAt(x, y);
       return U.round5(v);
     }
 
+    // Labs (and Dru's level 7 perk) make towers in their ring cheaper
     discountAt(x, y) {
       let d = 0;
       for (const t of this.units()) {
         const b = t.stats.buff;
-        if (t.type === 'lab' && b && b.discount && U.dist(x, y, t.x, t.y) <= t.stats.range) d = Math.max(d, b.discount);
+        if (!b || !b.discount || (t.type !== 'lab' && !t.hero)) continue;
+        const r = t.hero ? t.stats.buffRange || t.stats.range : t.stats.range;
+        if (U.dist(x, y, t.x, t.y) <= r) d = Math.max(d, b.discount);
       }
       return d;
     }
@@ -170,6 +235,8 @@
     }
 
     inWater(x, y, margin) {
+      // the AVL Undersea Base is all water: submarines go anywhere
+      if (this.mapDef.allWater) return true;
       return this.layout.pools.some((wa) => MT.MapArt.waterDist(wa, x, y) <= -margin);
     }
 
@@ -186,6 +253,8 @@
     }
 
     spawnEnemy(type, o) {
+      // interactive maps may pick the route (e.g. Vector's drawbridges)
+      if (this.mapFx && !o.dist) o.path = this.mapFx.route(o);
       const e = new MT.Enemy(this, type, o);
       this.enemies.push(e);
       if (e.boss) MT.Bosses.onSpawn(this, e);
@@ -195,9 +264,14 @@
     // a boss attack (or EMP) knocks a tower out for a while
     disableTower(t, dur, kind) {
       if (!t || t.dead) return;
+      // El Macho (level 7) shrugs it all off
+      if (t.stats && t.stats.tank) {
+        this.fx.floatText(t.x, t.y - 60, 'NOPE!', '#ffcc80', 16);
+        return;
+      }
       t.disabled = Math.max(t.disabled, dur);
       t.disableKind = kind;
-      const key = { ink: 'fx_inksplat', gum: 'fx_gumbubble', lava: 'fx_meltdown' }[kind];
+      const key = { ink: 'fx_inksplat', gum: 'fx_gumbubble', lava: 'fx_meltdown', peck: 'fx_feathers', roach: 'fx_roach' }[kind];
       if (!key || t.disableSprite) return;
       const sp = this.add.image(t.x, t.y - 16, key);
       sp.baseScale = ((t.size + 8) / 24) / S;
@@ -215,12 +289,24 @@
       this.money += v;
     }
 
+    // Vampire life drain: lives come back, up to what the game started with
+    healLives(n, x, y) {
+      if (this.sandbox || this.over || this.lives >= this.maxLives) return 0;
+      const got = Math.min(n, this.maxLives - this.lives);
+      this.lives += got;
+      if (x != null) this.fx.floatText(x, y, '+' + got + ' ♥', '#ff5c7a', 16);
+      return got;
+    }
+
     cheatMoney() {
       if (this.over) return;
       this.money += CFG.CHEAT_MONEY;
       MT.Audio.play('coin');
-      this.hud.toast(`CHEAT: +${U.money(CFG.CHEAT_MONEY)} bananas!`, 1600);
+      const first = !this.cheated;
+      this.cheated = true;
+      this.hud.toast(`CHEAT: +${U.money(CFG.CHEAT_MONEY)} bananas!` + (first ? '\nNo Gru Coins or achievements in this game.' : ''), first ? 2600 : 1600);
       this.hud.flashMoney();
+      this.markDirty();
     }
 
     // Gentle, capped screen shake. Amounts add up but never exceed a few pixels,
@@ -237,7 +323,7 @@
       if (x < size * 0.7 || x > CFG.MAP_W - size * 0.7 || y < size * 0.7 || y > CFG.H - size * 0.7) return false;
       const pw = this.mapDef.pathWidth / 2;
       for (const p of this.paths) if (p.distTo(x, y) < pw + size * 0.8) return false;
-      if (o.water) {
+      if (o.water && !this.mapDef.allWater) {
         if (!this.inWater(x, y, size * 0.45)) return false;
       } else {
         for (const b of this.layout.blockers) if (U.dist(x, y, b.x, b.y) < b.r + size * 0.55) return false;
@@ -276,6 +362,10 @@
         this.pointer.y = p.worldY;
         if (this.over || this.paused) return;
         if (p.rightButtonDown()) {
+          if (this.spotting || this.powerPlacing) {
+            this.cancelSpecial();
+            return;
+          }
           if (this.moving) {
             this.cancelMove();
             return;
@@ -287,6 +377,14 @@
         if (over.length) return;
         const x = p.worldX, y = p.worldY;
         if (x >= CFG.MAP_W) return;
+        if (this.powerPlacing) {
+          MT.Powers.drop(this, x, y);
+          return;
+        }
+        if (this.spotting) {
+          this.setSpot(this.spotting, x, y);
+          return;
+        }
         if (this.moving) {
           this.tryMove(x, y);
           return;
@@ -304,7 +402,9 @@
         if (this.over) return;
         const k = ev.key;
         if (k === 'Escape') {
-          if (this.moving) this.cancelMove();
+          if (this.spotting || this.powerPlacing) this.cancelSpecial();
+          else if (this.hud.powersOpen) this.hud.togglePowers(false);
+          else if (this.moving) this.cancelMove();
           else if (this.placing) this.cancelPlacing();
           else if (this.selected) this.select(null);
           else this.hud.togglePause();
@@ -319,6 +419,7 @@
         // 1-9 fire the abilities in the ability bar
         if (k.length === 1 && k >= '1' && k <= '9') return this.hud.useAbilitySlot(+k - 1);
         const up = k.toUpperCase();
+        if (up === 'P') return this.hud.togglePowers();
         if (up === this.heroDef.key) return this.startPlacing(this.heroId);
         for (const id of MT.TOWER_ORDER) if (MT.TOWERS[id].key === up) return this.startPlacing(id);
         if (this.selected) {
@@ -352,6 +453,7 @@
       }
       this.select(null);
       this.cancelMove();
+      this.cancelSpecial();
       this.placing = { type };
       const key = hero ? MT.TowerArt.heroKey(this, type, 1) : MT.TowerArt.key(this, type, [0, 0, 0]);
       this.ghost.setTexture(key).setOrigin(0.5, hero ? 64 / 110 : type === 'farm' || type === 'lab' ? 58 / 92 : 49 / 92).setVisible(true);
@@ -385,8 +487,20 @@
       t.spent = cost;
       this.stat.built++;
       this.towers.push(t);
-      if (hero) this.heroPlaced = true;
+      if (hero) {
+        this.heroPlaced = true;
+        this.heroUsed = true;
+        // Hero Training research: the hero arrives a level or two up
+        const lv = Math.min(MT.HERO_MAX_LEVEL, 1 + this.perks.heroLevel);
+        if (lv > 1) {
+          t.level = lv;
+          t.xp = MT.HERO_XP[lv - 1];
+          t.recompute();
+          t.refreshTexture();
+        }
+      }
       this.recalcBuffs();
+      this.markDirty();
       this.fx.dust.explode(10, x, y + 14);
       MT.Audio.play(hero ? 'bello' : 'place');
       const lines = hero ? def.quotes : type === 'farm' || type === 'lab' ? null : ['Bello!', 'Banana!', 'Bee-do!', 'Tank yu!', 'Poopaye!', 'Tulaliloo!', 'Bapples!'];
@@ -451,6 +565,7 @@
       MT.Audio.play('place');
       this.hud.showTower(t);
       this.hud.onTowersChanged();
+      this.markDirty();
     }
 
     select(t) {
@@ -479,10 +594,17 @@
       }
       this.money -= cost;
       t.spent += cost;
+      const wasSmart = !!t.baseStats.smart;
       t.tiers[pi]++;
       t.recompute();
+      // Smart Spikes switch the Nail Minion to its new Smart targeting
+      if (!wasSmart && t.baseStats.smart) {
+        t.targetName = 'Smart';
+        t.syncTarget();
+      }
       t.refreshTexture();
       this.recalcBuffs();
+      this.markDirty();
       t.bump = 1;
       this.fx.upgradeBurst(t, pi, t.tiers[pi]);
       MT.Audio.play('upgrade');
@@ -514,6 +636,12 @@
       this.money -= cost;
       t.spent += Math.floor(cost * 0.5);
       this.gainHeroXp(t, this.heroXpToNext(t));
+      this.markDirty();
+    }
+
+    // XP the hero earns by itself from a round or a boss wave (Fast Learner research adds to it)
+    roundHeroXp(t, amount) {
+      this.gainHeroXp(t, Math.round(amount * this.perks.xp));
     }
 
     // levels 1-10 first; past that the XP keeps flowing into ascension stars
@@ -555,6 +683,7 @@
           this.fx.floatText(t.x, t.y - 60, (t.stars === 1 ? 'ASCENDED ★' : 'STAR ★') + t.stars + '!', '#ffe082', 22);
           if (t.stars === MT.LEGEND_STAR) this.hud.toast(t.def.name + ' unlocked LEGEND FORM!', 2200);
           else if (t.stars === 1) this.hud.toast(t.def.name + ' ascended! Nearby towers now get a Command bonus.', 2400);
+          MT.Ach.check(this);
         } else {
           this.fx.ring(t.x, t.y, 60, col, { dur: 500 });
           this.fx.floatText(t.x, t.y - 50, 'LEVEL ' + t.level + '!', t.def.color || '#7fdbff', 20);
@@ -570,7 +699,7 @@
     towerRecord(t, sold) {
       const subs = t.subs || [];
       return {
-        name: t.name, key: t.texKey(), hero: t.hero, omega: t.omega, ultimate: t.ultimate, fused: t.fused, sold: !!sold,
+        name: t.name, type: t.type, key: t.texKey(), hero: t.hero, omega: t.omega, ultimate: t.ultimate, fused: t.fused, sold: !!sold,
         pops: Math.floor(t.totalPops), dmg: Math.round(subs.reduce((a, u) => a + u.dmg, t.dmg)),
         spent: t.spent, earned: Math.round(subs.reduce((a, u) => a + u.earned, t.earned)),
       };
@@ -589,17 +718,76 @@
       this.recalcBuffs();
       this.select(null);
       this.hud.onTowersChanged();
+      this.markDirty();
     }
 
     cycleTarget(t, dir) {
-      t.targetMode = (t.targetMode + dir + TARGET_MODES.length) % TARGET_MODES.length;
-      if (t.subs) t.subs.forEach((u) => (u.targetMode = t.targetMode));
+      const list = MT.targetModes(t);
+      t.targetMode = (t.targetMode + dir + list.length) % list.length;
+      t.targetName = list[t.targetMode];
+      if (t.subs) {
+        t.subs.forEach((u) => {
+          u.targetName = t.targetName;
+          u.syncTarget();
+        });
+      }
+      // switching a Catapult to Spot asks for the spot right away
+      if (t.targetName === 'Spot') this.startSpotting(t);
+      else if (this.spotting === t) this.cancelSpecial();
       this.hud.showTower(t);
+      this.markDirty();
+    }
+
+    // ------------------------------------------------------------------ Catapult spot / powers
+    startSpotting(t) {
+      this.cancelPlacing();
+      this.cancelMove();
+      this.powerPlacing = null;
+      this.spotting = t;
+      this.hud.toast('Click the map where the boulders should land  ·  Esc to cancel', 2400);
+    }
+
+    setSpot(t, x, y) {
+      t.spot = { x: Math.round(x), y: Math.round(y) };
+      this.spotting = null;
+      this.fx.ring(x, y, 40, 0xff7043, { dur: 400, force: true });
+      MT.Audio.play('place');
+      if (this.selected === t) this.hud.showTower(t);
+      this.markDirty();
+    }
+
+    // stop picking a Catapult spot or dropping a power
+    cancelSpecial() {
+      if (this.spotting && !this.spotting.spot) {
+        // no spot picked yet: fall back to normal targeting
+        const t = this.spotting;
+        t.targetMode = 0;
+        t.targetName = MT.targetModes(t)[0];
+        if (this.selected === t) this.hud.showTower(t);
+      }
+      this.spotting = null;
+      if (this.powerPlacing) {
+        this.powerPlacing = null;
+        this.hud.refreshPowers();
+      }
+    }
+
+    // something changed between rounds: autosave a moment later
+    markDirty() {
+      this.dirty = true;
+      this.saveT = 0.8;
     }
 
     recalcBuffs() {
       const units = this.units();
       const supports = units.filter((t) => t.stats.buff);
+      // Dru's Gold Rush: every pop near him pays more
+      const rich = units.filter((t) => t.stats.cashAura);
+      for (const t of units) {
+        let cb = 0;
+        for (const r of rich) if (U.dist(r.x, r.y, t.x, t.y) <= r.stats.cashAura.r) cb = Math.max(cb, r.stats.cashAura.pct * (r.legend > 0 ? 2 : 1));
+        t.cashBonus = cb;
+      }
       for (const t of units) {
         const isAttacker = t.baseStats.attack !== 'none';
         let b = null;
@@ -683,33 +871,73 @@
 
     endRound() {
       this.roundActive = false;
-      const bonus = 100 + this.round;
+      const bonus = Math.round((100 + this.round) * this.perks.round);
       const income = bonus + this.flatIncome();
       this.money += income;
+      // Bank of Evil: loan repayments come out of the round's bananas
+      if (this.mapFx) this.money -= this.mapFx.roundEnd(income);
       this.collectAllPickups();
       const hero = this.towers.find((t) => t.hero);
-      if (hero) this.gainHeroXp(hero, 20 + this.round * 8);
+      if (hero) {
+        this.roundHeroXp(hero, 20 + this.round * 8);
+        // Agnes patches up a life or two every round
+        if (hero.stats.lifeRegen) this.healLives(hero.stats.lifeRegen, hero.x, hero.y - 60);
+      }
+      if (this.perks.regen) this.healLives(this.perks.regen);
       for (const t of this.units()) t.bananaTimes = null;
-      // nail piles are swept up between rounds
-      this.traps.forEach((tr) => this.removeTrap(tr, true));
-      this.traps = [];
+      // nail piles are swept up between rounds (power traps stay until they are used up)
+      this.traps = this.traps.filter((tr) => {
+        if (tr.keep) return true;
+        this.removeTrap(tr, true);
+        return false;
+      });
       MT.Audio.play('roundEnd');
-      this.hud.toast(`Round ${this.round} complete!  +${U.money(income)}`, 1800);
+      // Gru Coins for every round survived, pops and counters for the achievements
+      const coins = MT.Progress.endRound(this);
+      this.hud.toast(`Round ${this.round} complete!  +${U.money(income)}` + (coins ? `   ·   +${coins} Gru Coin${coins > 1 ? 's' : ''}` : ''), 1800);
+      MT.Ach.check(this);
       if (!this.freeplay && !this.won && this.round >= this.diff.rounds) {
         this.won = true;
         this.victory();
         return;
       }
+      this.autosave();
       this.hud.onRoundState();
       this.hud.refreshPreview();
       if (MT.Save.settings().autoStart) this.time.delayedCall(400, () => !this.over && !this.paused && this.startRound());
     }
 
+    // ------------------------------------------------------------------ saved games
+    runKey() {
+      return MT.Save.runKey(this.mapDef.id, this.diff.id);
+    }
+
+    // classic games are saved between rounds, so they can be continued later
+    autosave() {
+      if (this.mode !== 'classic' || this.sandbox || this.over || this.roundActive) return;
+      // wait until a fusion animation is over (its partners are already gone)
+      if (this.towers.some((t) => t.fusing)) {
+        this.markDirty();
+        return;
+      }
+      MT.RunSave.save(this);
+      this.dirty = false;
+    }
+
     victory() {
       if (this.over) return;
-      if (this.mode === 'boss') MT.Save.bossWin(this.bossId, this.bossTier, this.stat.time);
-      else if (!this.sandbox) MT.Save.award(this.mapDef.id, this.diff.id);
-      if (!this.sandbox) MT.Save.addStats(this.totalPops, this.round, true);
+      let first = false;
+      if (this.mode === 'boss') first = MT.Save.bossWin(this.rush ? 'rush' : this.bossId, this.bossTier, this.stat.time);
+      else if (!this.sandbox) first = MT.Save.award(this.mapDef.id, this.diff.id);
+      this.firstWin = first;
+      if (!this.sandbox) {
+        MT.Save.addStats(this.totalPops - this.popsBanked, this.round, true);
+        this.popsBanked = this.totalPops;
+        MT.Progress.victory(this, first);
+        MT.Ach.check(this, { won: true });
+      }
+      // a won game starts over; FREEPLAY saves it again after its first round
+      if (this.mode === 'classic') MT.Save.clearRun(this.runKey());
       MT.Audio.play('victory');
       // party music once the fanfare is done
       MT.Audio.music('victory', 1.8);
@@ -722,6 +950,7 @@
       this.freeplay = true;
       this.hud.hideOverlay();
       this.hud.onRoundState();
+      this.autosave();
     }
 
     defeat(reason) {
@@ -729,7 +958,11 @@
       this.over = true;
       this.lives = 0;
       this.defeatReason = reason || null;
-      MT.Save.addStats(this.totalPops, this.round, false);
+      MT.Save.addStats(this.totalPops - this.popsBanked, this.round, false);
+      this.popsBanked = this.totalPops;
+      MT.Progress.defeat(this);
+      MT.Ach.check(this, { lost: true });
+      if (this.mode === 'classic') MT.Save.clearRun(this.runKey());
       MT.Audio.play('defeat');
       MT.Audio.music('defeat', 2.4);
       this.hud.showDefeat();
@@ -798,7 +1031,7 @@
     // best enemy for tower t (respecting its targeting mode) around a point
     findTargetFrom(t, x, y, range) {
       const s = t.stats;
-      const mode = TARGET_MODES[t.targetMode];
+      const mode = MT.targetName(t);
       let best = null, bestScore = -Infinity;
       for (const e of this.enemies) {
         if (e.dead || (e.camo && !s.camo) || !this.hittable(e, t)) continue;
@@ -806,10 +1039,13 @@
         const d2 = U.dist2(x, y, e.x, e.y);
         if (d2 > rr * rr) continue;
         let score;
-        if (mode === 'First') score = -e.remaining;
-        else if (mode === 'Last') score = e.remaining;
+        if (mode === 'Last') score = e.remaining;
         else if (mode === 'Close') score = -d2;
-        else score = e.def.rbe * 1000 + e.hp - e.remaining * 0.001;
+        else if (mode === 'Strong') score = e.def.rbe * 1000 + e.hp - e.remaining * 0.001;
+        else if (mode === 'Camo') score = (e.camo ? 1e9 : 0) - e.remaining;
+        else if (mode === 'Giants') score = e.boss ? 1e9 + e.def.rbe * 10 - e.remaining * 0.001 : -e.remaining;
+        // First, and the flight patterns / trap modes, which go for the leader
+        else score = -e.remaining;
         if (s.preferBoss && e.boss) score += 1e12;
         if (s.preferUnslowed && e.slowT <= 0) score += 1e12;
         if (score > bestScore) {
@@ -849,6 +1085,13 @@
         this.absorb(src, e, Math.max(1, d));
         return [];
       }
+      // Rubber Mutants shrug off energy, Magma Mutants fire and ice (super towers break through)
+      const imm = e.def.immune;
+      const breaks = tower && (tower.fused || tower.omega);
+      if (imm && !breaks && imm.includes(p.type)) {
+        this.immuneFx(e);
+        return null;
+      }
       const harmful = p.type === 'sharp' || p.type === 'cold';
       const shredded = e.shredT > 0; // rocket shred: armor is off and every hit does +1
       if (e.def.armored && harmful && !p.armored && !(tower && tower.buffArmored) && !shredded) {
@@ -857,10 +1100,20 @@
         return null;
       }
       if (p.shred) e.shredT = Math.max(e.shredT, p.shred);
+      // water / ninja smoke washes the Camo paint off for good
+      if (p.decamo && e.camo) {
+        e.camo = false;
+        e.sprite.setTexture(e.texKey()).setAlpha(1);
+        this.fx.sparkle(e.x, e.y - e.radius, 0x80deea);
+      }
+      // Alchemist gold: the mutant pays extra when it pops
+      if (p.gold && !e.boss) e.gold = Math.max(e.gold || 0, p.gold);
+      if (p.knockBoss && e.boss && !e.def.final && !e.def.bossFight) e.dist = Math.max(0, e.dist - p.knockBoss * 3);
       if (p.slow && (!e.boss || p.slow.moab)) {
         const strong = tower && ((tower.type === 'jelly' && tower.tiers[2] >= 4) || tower.fused);
         const mul = e.boss ? Math.max(p.slow.mul, strong ? 0.5 : 0.7) : p.slow.mul;
-        e.applySlow(mul, p.slow.dur, p.slow.soak, tower && tower.type === 'jelly' && (tower.tiers[0] >= 1 || tower.fused));
+        const acid = (tower && tower.type === 'jelly' && (tower.tiers[0] >= 1 || tower.fused)) || p.slow.look === 'acid';
+        e.applySlow(mul, p.slow.dur, p.slow.soak, acid, p.slow.look);
       }
       if (p.dot && (!e.boss || !p.slow || p.slow.moab)) e.applyDot(p.dot, tower);
       if (p.freeze) {
@@ -875,7 +1128,7 @@
       }
       if (p.knock && !e.boss) e.dist = Math.max(0, e.dist - p.knock * 3);
       let d = dmgOverride != null ? dmgOverride : p.dmg;
-      if (e.boss) d += p.moabDmg || 0;
+      if (e.boss) d += (p.moabDmg || 0) + (tower && d > 0 ? this.perks.giant : 0);
       if (e.type === 'brute') d += p.bruteDmg || 0;
       if (d > 0 && e.freeze > 0 && e.brittle) d += 1;
       if (d > 0 && shredded) d += 1;
@@ -926,7 +1179,14 @@
       if (e.dead) return [];
       if (tower) tower.dmg += Math.min(d, Math.max(0, e.hp));
       e.hp -= d;
+      // a regrow mutant that keeps getting hit never gets the chance to grow back
+      if (e.regrow) e.regrow.t = MT.REGROW_TIME;
       if (e.hp > 0) {
+        // Rage Mutant: every hit makes it faster
+        if (e.def.rage) {
+          e.rageHits++;
+          e.enrage = Math.min(e.def.rage.max, 1 + e.rageHits * e.def.rage.step);
+        }
         e.setDamageState();
         if (e.boss) {
           e.onHurt();
@@ -947,11 +1207,31 @@
 
     popEnemy(e, tower) {
       e.destroy();
-      this.money += this.cashMul;
+      let cash = this.cashMul;
+      if (e.gold) cash += e.gold;
+      if (this.timed.length && this.timed.some((f) => f.type === 'goldenTouch')) cash *= 3;
+      if (tower && tower.cashBonus) cash *= 1 + tower.cashBonus;
+      if (cash > this.cashMul && Math.random() < 0.35) this.fx.sparkle(e.x, e.y - 6, 0xffd740);
+      this.money += cash;
       this.totalPops++;
+      if (e.regrow) this.cnt.regrow++;
+      if (e.type === 'healer') this.cnt.healer++;
       if (tower) {
         tower.pops++;
-        tower.earned += this.cashMul;
+        tower.earned += cash;
+        // Vampire life drain: every N pops heal a life (a few lives per round at most)
+        const ls = tower.stats && tower.stats.lifesteal;
+        if (ls) {
+          if (tower.lsRound !== this.round) {
+            tower.lsRound = this.round;
+            tower.lsHealed = 0;
+          }
+          tower.lsPops = (tower.lsPops || 0) + 1;
+          if (tower.lsPops >= ls && tower.lsHealed < (tower.stats.healCap || 3)) {
+            tower.lsPops = 0;
+            if (this.healLives(1, tower.x, tower.y - 40)) tower.lsHealed++;
+          }
+        }
       }
       if (e.boss) MT.Bosses.death(this, e);
       else this.fx.pop(e.x, e.y, false);
@@ -961,9 +1241,12 @@
     spawnChildren(e) {
       const kids = [];
       const n = e.def.children.length;
+      // regrow children remember what they came out of, so they can grow back into it
+      const rg = e.regrow;
+      const chain = rg ? rg.chain.concat([e.type]) : null;
       e.def.children.forEach((type, i) => {
         const off = (i - (n - 1) / 2) * (e.boss ? 16 : 6);
-        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, this.childDist(e, type) + off), camo: e.camo, burst: e.boss });
+        const k = new MT.Enemy(this, type, { path: e.pathIndex, dist: Math.max(0, this.childDist(e, type) + off), camo: e.camo, burst: e.boss, regrow: !!rg, regrowChain: chain, regrowFort: rg && rg.fort });
         if (e.slowSoak && e.slowT > 0) {
           k.applySlow(e.slowMul, e.slowT, true, e.slowAcid);
           if (e.dot) k.dot = Object.assign({}, e.dot);
@@ -980,6 +1263,83 @@
       if (!!MT.ENEMIES[type].flying === e.flying) return e.dist;
       const route = (MT.ENEMIES[type].flying ? this.airPaths : this.paths)[e.pathIndex];
       return route.project(e.x, e.y + (e.flying ? MT.Enemy.FLY : 0));
+    }
+
+    // a regrow mutant left alone grows back into the mutant it was popped out of
+    regrowEnemy(e) {
+      const rg = e.regrow;
+      const type = rg.chain[rg.chain.length - 1];
+      const k = new MT.Enemy(this, type, {
+        path: e.pathIndex, dist: Math.max(0, this.childDist(e, type)), camo: e.camo, fort: rg.fort, burst: true,
+        regrow: true, regrowChain: rg.chain.slice(0, -1), regrowFort: rg.fort,
+      });
+      // status effects carry over
+      if (e.slowT > 0) k.applySlow(e.slowMul, e.slowT, e.slowSoak, e.slowAcid, e.slowLook);
+      k.freeze = e.freeze;
+      k.stun = e.stun;
+      k.shredT = e.shredT;
+      k.gold = e.gold;
+      if (e.dot) k.dot = Object.assign({}, e.dot);
+      e.destroy();
+      this.enemies.push(k);
+      if (k.boss) MT.Bosses.onSpawn(this, k);
+      this.fx.ring(k.x, k.y, k.radius * 1.5, 0x76ff03, { dur: 320 });
+      this.fx.sparkle(k.x, k.y - k.radius, 0xb2ff59);
+      if (Math.random() < 0.3) MT.Audio.play('shield', k.x);
+      return k;
+    }
+
+    // Medic Mutant: heals the giants, brutes and shields around it
+    healPulse(src) {
+      const h = src.def.heal;
+      let n = 0;
+      for (const o of this.queryEnemies(src.x, src.y, h.r + 40)) {
+        if (o.dead || o.burrowed || o.def.final || o.def.bossFight || U.dist2(src.x, src.y, o.x, o.y) > h.r * h.r) continue;
+        let healed = false;
+        if (o.hp < o.maxHp) {
+          o.hp = Math.min(o.maxHp, o.hp + (o.boss ? o.maxHp * h.boss : Math.max(1, o.maxHp * h.pct)));
+          o.setDamageState();
+          healed = true;
+        }
+        const bb = o.bubble;
+        if (bb && !bb.self && !(bb.broken > 0) && bb.hp < bb.max) {
+          bb.hp = Math.min(bb.max, bb.hp + bb.max * 0.35);
+          healed = true;
+        }
+        if (healed && ++n <= 5) this.fx.floatText(o.x, o.y - o.radius - 10, '+', '#7CFF6B', 18);
+      }
+      this.fx.ring(src.x, src.y, h.r, 0x7cff6b, { dur: 450, alpha: n ? 0.85 : 0.35 });
+      if (n) MT.Audio.play('shield', src.x);
+    }
+
+    // a hit bounced off an immune mutant
+    immuneFx(e) {
+      if (e.immFx > 0) return;
+      e.immFx = 0.45;
+      const fire = e.def.immune.includes('fire');
+      this.fx.floatText(e.x, e.y - e.radius - 8, 'IMMUNE', fire ? '#ffab40' : '#ff8fd0', 12);
+      this.fx.sparkle(e.x, e.y - e.radius * 0.5, fire ? 0xff7a1a : 0xff80ab);
+      if (Math.random() < 0.4) MT.Audio.play('clank', e.x);
+    }
+
+    // El Macho's punches: the target and everything right next to it
+    meleeHit(t, target) {
+      const p = t.stats.proj;
+      const r = p.r || 34;
+      const list = [];
+      for (const e of this.queryEnemies(target.x, target.y, r + 40)) {
+        if (e.dead || (e.camo && !t.stats.camo) || !this.hittable(e, t)) continue;
+        const d2 = U.dist2(target.x, target.y, e.x, e.y);
+        if (d2 <= (r + e.radius * 0.5) ** 2) list.push([d2, e]);
+      }
+      list.sort((a, b) => a[0] - b[0]);
+      const n = Math.min(list.length, p.pierce + t.bonusPierce);
+      for (let i = 0; i < n; i++) this.applyHit(list[i][1], p, t);
+      this.fx.dust.explode(5, target.x, target.y + 6);
+      this.fx.ring(target.x, target.y, r, 0xffe0b2, { dur: 220 });
+      if (t.shots % 5 === 0) this.fx.floatText(target.x, target.y - target.radius - 14, U.pick(['POW!', 'BAM!', 'WHAM!', 'OLÉ!']), '#ff5252', 18);
+      if (target.boss) this.shake(0.03);
+      MT.Audio.play(t.shots % 2 ? 'thud' : 'stomp', target.x);
     }
 
     explode(x, y, p, tower, hitSet) {
@@ -1014,6 +1374,31 @@
       } else if (p.tex === 'p_squid') {
         this.fx.splat(x, y, ex.r, 0x3b2f5c);
         MT.Audio.play('splat', x);
+      } else if (p.tex === 'p_rock' || p.tex === 'p_ironball' || p.tex === 'p_colossal') {
+        this.fx.dust.explode(ex.r > 60 ? 14 : 8, x, y);
+        this.fx.ring(x, y, ex.r, 0xd7ccc8, { disc: true, dur: 260 });
+        if (ex.r > 60) this.fx.boom(x, y, ex.r * 0.6);
+        MT.Audio.play('thud', x);
+      } else if (p.tex === 'p_melon') {
+        this.fx.splat(x, y, ex.r, 0xff5c6c);
+        this.fx.ring(x, y, ex.r * 0.8, 0x7cb342, { disc: true, dur: 220 });
+        MT.Audio.play('splat', x);
+      } else if (p.tex === 'p_potion' || p.tex === 'p_potion_gold' || p.tex === 'p_potion_big') {
+        this.fx.splat(x, y, ex.r, p.tex === 'p_potion_gold' ? 0xffd740 : 0x76ff03);
+        this.fx.gas.explode(3, x, y);
+        MT.Audio.play('glass', x);
+      } else if (p.tex === 'p_waterball') {
+        this.fx.splat(x, y, ex.r, 0x4fc3f7);
+        this.fx.water.explode(10, x, y);
+        MT.Audio.play('splash', x);
+      } else if (p.tex === 'p_flashbomb') {
+        this.fx.ring(x, y, ex.r, 0xffffff, { disc: true, dur: 320 });
+        this.fx.sparks.explode(10, x, y);
+        MT.Audio.play('flash', x);
+      } else if (p.tex === 'p_greekfire') {
+        this.fx.boom(x, y, ex.r);
+        this.fx.ring(x, y, ex.r, 0x76ff03, { disc: true, dur: 300 });
+        MT.Audio.play('boom', x);
       } else {
         this.fx.boom(x, y, ex.r);
         MT.Audio.play('boom', x);
@@ -1132,8 +1517,15 @@
 
     // a lingering gas (or fire) cloud left on the ground by a fart puff
     addZone(x, y, c, tower, kind) {
-      if (this.zones.length > 140) this.zones.shift();
-      this.zones.push({ x, y, r: c.r, t: c.dur, dmg: c.dmg, every: c.every, tick: 0.1, pierce: c.pierce, tower, kind, fxT: 0 });
+      if (this.zones.length > 140) {
+        const old = this.zones.shift();
+        if (old.sprite) old.sprite.destroy();
+      }
+      const z = { x, y, r: c.r, t: c.dur, max: c.dur, dmg: c.dmg, every: c.every, tick: 0.1, pierce: c.pierce, slow: c.slow, knock: c.knock, tower, kind, fxT: 0 };
+      // puddles of water and acid are visible on the ground
+      const tint = { water: 0x4fc3f7, acid: 0x76ff03 }[kind];
+      if (tint) z.sprite = this.add.image(x, y, 'fx_puddle').setDepth(984).setTint(tint).setAlpha(0).setRotation(Math.random() * 6.28);
+      this.zones.push(z);
     }
 
     stepZones(dt) {
@@ -1148,11 +1540,14 @@
           for (const e of this.queryEnemies(z.x, z.y, z.r + 40)) {
             if (n <= 0) break;
             if (e.dead || !this.hittable(e, null, GROUND) || U.dist2(z.x, z.y, e.x, e.y) > (z.r + e.radius * 0.5) ** 2) continue;
-            this.applyHit(e, { dmg: z.dmg, type: z.kind === 'fire' ? 'fire' : 'normal', ground: true }, z.tower);
+            this.applyHit(e, { dmg: z.dmg, type: z.kind === 'fire' || z.kind === 'greek' ? 'fire' : 'normal', ground: true, slow: z.slow, knock: z.knock }, z.tower);
             n--;
           }
         }
-        if (z.t <= 0) Z.splice(i, 1);
+        if (z.t <= 0) {
+          if (z.sprite) z.sprite.destroy();
+          Z.splice(i, 1);
+        }
       }
     }
 
@@ -1170,6 +1565,10 @@
       });
       t.trackPts = pts;
       t.trackPtsR = r;
+      // the nearest and the furthest-along third for the Close / Far trap modes
+      const k = Math.max(1, Math.ceil(pts.length / 3));
+      t.trackClose = pts.slice().sort((a, b) => U.dist2(a.x, a.y, t.x, t.y) - U.dist2(b.x, b.y, t.x, t.y)).slice(0, k);
+      t.trackFar = pts.slice().sort((a, b) => (a.path.length - a.d) - (b.path.length - b.d)).slice(0, k);
       return pts;
     }
 
@@ -1179,7 +1578,8 @@
       const pts = this.trackPoints(t);
       if (!pts.length || (!this.roundActive && !this.enemies.length)) return false;
       let spot = null;
-      if (s.smart) {
+      const mode = MT.targetName(t);
+      if (s.smart && mode === 'Smart') {
         // land right in front of the leading mutant in range
         const e = this.findTarget(t);
         if (e) {
@@ -1187,7 +1587,7 @@
           if (U.dist2(q.x, q.y, t.x, t.y) <= s.range * s.range) spot = q;
         }
       }
-      if (!spot) spot = U.pick(pts);
+      if (!spot) spot = U.pick(mode === 'Close' ? t.trackClose : mode === 'Far' ? t.trackFar : pts);
       const peel = s.peel && t.shots % s.peel.every === s.peel.every - 1;
       const p = peel
         ? Object.assign({}, s.proj, { tex: 'fx_peel', dmg: 0, pierce: s.peel.pierce, knock: s.peel.knock, stun: { dur: 0.3 }, mine: null, type: 'normal' })
@@ -1369,7 +1769,7 @@
     // ------------------------------------------------------------------ bananas
     spawnBanana(farm) {
       const s = farm.stats;
-      const value = Math.round(s.value * s.valueMul);
+      const value = Math.round(s.value * s.valueMul * this.perks.farm);
       const a = Math.random() * Math.PI * 2, d = 26 + Math.random() * 36;
       const tx = U.clamp(farm.x + Math.cos(a) * d, 16, CFG.MAP_W - 16);
       const ty = U.clamp(farm.y + 10 + Math.sin(a) * d * 0.6, 16, CFG.H - 16);
@@ -1438,7 +1838,7 @@
         this.sbT -= dt;
         while (this.sbT <= 0 && this.sbQueue.length) {
           const q = this.sbQueue.shift();
-          this.spawnEnemy(q.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: q.camo, fort: q.fort });
+          this.spawnEnemy(q.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: q.camo, fort: q.fort, regrow: q.regrow });
           this.sbT += 0.14;
         }
       }
@@ -1447,7 +1847,7 @@
         const list = this.spawnList;
         while (this.spawnIdx < list.length && list[this.spawnIdx].t <= this.roundTime) {
           const s = list[this.spawnIdx++];
-          this.spawnEnemy(s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort, hpMul: s.hpMul, speedMul: s.speedMul });
+          this.spawnEnemy(s.type, { path: this.spawnCounter++ % this.paths.length, dist: 0, camo: s.camo, fort: s.fort, regrow: s.regrow, hpMul: s.hpMul, speedMul: s.speedMul });
         }
         for (const t of this.units()) {
           if (t.bananaTimes && t.bananaTimes.length && t.bananaTimes[0] <= this.roundTime) {
@@ -1461,6 +1861,7 @@
       this.rebuildGrid();
       this.assignShields();
       for (const t of this.towers) t.update(dt);
+      if (this.mapFx) this.mapFx.step(dt);
       for (const p of this.projectiles) if (!p.dead) p.update(dt);
       this.stepZones(dt);
       this.stepTraps(dt);
@@ -1480,7 +1881,13 @@
         }
       }
       if (this.pickups.length > 40 || (this.pickups.length && this.pickups[0].done)) this.pickups = this.pickups.filter((p) => !p.done);
+      MT.Powers.step(this, dt);
       if (this.mode === 'classic' && this.roundActive && this.spawnIdx >= this.spawnList.length && this.enemies.length === 0) this.endRound();
+      // changes between rounds are saved a moment later
+      if (this.dirty && !this.roundActive) {
+        this.saveT -= dt;
+        if (this.saveT <= 0) this.autosave();
+      }
     }
 
     renderFrame(time, dt) {
@@ -1493,11 +1900,19 @@
           z.fxT = 0.22;
           const ox = U.rand(-z.r, z.r) * 0.7, oy = U.rand(-z.r, z.r) * 0.45;
           if (z.kind === 'fire') this.fx.sparkle(z.x + ox, z.y + oy, 0xff7a1a);
+          else if (z.kind === 'greek') this.fx.sparkle(z.x + ox, z.y + oy, 0x76ff03);
+          else if (z.kind === 'water') this.fx.water.explode(1, z.x + ox, z.y + oy);
+          else if (z.kind === 'acid') this.fx.sparkle(z.x + ox, z.y + oy, 0xb2ff59);
           else this.fx.gas.explode(1, z.x + ox, z.y + oy);
+        }
+        if (z.sprite) {
+          const k = Math.min(1, (z.max - z.t) * 6, z.t * 2);
+          z.sprite.setScale((k * z.r * 2.3) / 96 / S, (k * z.r * 1.5) / 96 / S).setAlpha(0.6 * k);
         }
       }
       MT.Abilities.render(this, dt, time);
       MT.Giants.render(this, dt, time);
+      if (this.mapFx) this.mapFx.render(dt, time);
       this.fx.update(dt);
       // screen shake (applied as a small camera offset)
       const cam = this.cameras.main;
@@ -1523,7 +1938,18 @@
       // range / placement preview
       const rg = this.gRange;
       rg.clear();
-      if (this.moving) {
+      if (this.powerPlacing) {
+        MT.Powers.preview(this, rg, time);
+      } else if (this.spotting) {
+        // picking a Catapult's target spot
+        const t = this.spotting;
+        const x = this.pointer.x, y = this.pointer.y;
+        if (x < CFG.MAP_W) {
+          rg.lineStyle(2, 0xff7043, 0.5);
+          rg.lineBetween(t.x, t.y - 20, x, y);
+          this.drawCrosshair(rg, x, y, time, 0xff7043);
+        }
+      } else if (this.moving) {
         const t = this.moving.t;
         const x = this.pointer.x, y = this.pointer.y;
         const ok = this.canMoveTo(t, x, y) && this.moving.fee <= this.money;
@@ -1567,7 +1993,7 @@
               rg.strokeCircle(wa.x, wa.y, wa.r - 4);
             }
           }
-          if (!this.layout.pools.length && !this.noWaterHint) {
+          if (!this.layout.pools.length && !this.mapDef.allWater && !this.noWaterHint) {
             this.noWaterHint = true;
             this.hud.toast('This map has no water for submarines!', 1800);
           }
@@ -1598,6 +2024,15 @@
           rg.lineStyle(2, 0x7fdbff, 0.5);
           rg.strokeCircle(t.x, t.y, t.stats.buffRange);
         }
+        if (t.stats.cashAura) {
+          rg.lineStyle(2, 0xffd740, 0.55);
+          rg.strokeCircle(t.x, t.y, t.stats.cashAura.r);
+        }
+        if (t.spot && MT.targetName(t) === 'Spot') {
+          rg.lineStyle(2, 0xff7043, 0.4);
+          rg.lineBetween(t.x, t.y - 20, t.spot.x, t.spot.y);
+          this.drawCrosshair(rg, t.spot.x, t.spot.y, time, 0xff7043);
+        }
         if (this.fuseHover) {
           // highlight the towers that would be fused
           const pulse = 0.55 + Math.sin(time * 0.012) * 0.35;
@@ -1614,9 +2049,23 @@
       this.hud.update(dt);
     }
 
+    // target reticle (Catapult spot, power drop point)
+    drawCrosshair(g, x, y, time, col) {
+      const r = 18 + Math.sin(time * 0.01) * 2;
+      g.lineStyle(3, 0x000000, 0.35);
+      g.strokeCircle(x, y + 1, r);
+      g.lineStyle(2.5, col, 0.95);
+      g.strokeCircle(x, y, r);
+      g.strokeCircle(x, y, 4);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + time * 0.002;
+        g.lineBetween(x + Math.cos(a) * (r - 6), y + Math.sin(a) * (r - 6), x + Math.cos(a) * (r + 7), y + Math.sin(a) * (r + 7));
+      }
+    }
+
     // ------------------------------------------------------------------ sandbox
-    sandboxSend(type, n, camo, fort) {
-      for (let i = 0; i < n; i++) this.sbQueue.push({ type, camo, fort });
+    sandboxSend(type, n, camo, fort, regrow) {
+      for (let i = 0; i < n; i++) this.sbQueue.push({ type, camo, fort, regrow });
       if (this.sbT < 0) this.sbT = 0;
     }
 

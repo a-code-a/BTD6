@@ -653,7 +653,49 @@
       fm(1568, 3.5, 2, 0.35, 0.04, { wet: 0.5 });
       fm(2093, 3.5, 2, 0.35, 0.03, { when: 0.08, wet: 0.5 });
     },
+    // ---- the newer minions
+    shuriken: (o) => noise(0.09, 0.14, 'bandpass', 2600, 5200, Object.assign({ q: 4, attack: 0.01 }, o)),
+    catapult: (o) => {
+      tone('triangle', 140, 60, 0.16, 0.18, o);
+      noise(0.22, 0.16, 'bandpass', 300, 1400, Object.assign({ q: 1.2, attack: 0.05, when: 0.04 }, o));
+    },
+    thud: (o) => {
+      playBuf(BUF.kick, ctx.currentTime, 0.6, Object.assign({ rate: 0.8 }, o));
+      noise(0.18, 0.14, 'lowpass', 700, 90, o);
+    },
+    potion: (o) => {
+      tone('sine', rnd(500, 700), 1300, 0.08, 0.07, o);
+      noise(0.08, 0.05, 'bandpass', 2400, 900, Object.assign({ q: 2 }, o));
+    },
+    glass: (o) => {
+      [3100, 4200, 5300].forEach((f, i) => fm(f * rnd(0.95, 1.05), 2.76, 2, 0.12, 0.025, Object.assign({ when: i * 0.02 }, o)));
+      noise(0.14, 0.1, 'lowpass', 1200, 200, Object.assign({ q: 2, when: 0.02 }, o));
+    },
+    spray: (o) => noise(0.12, 0.07, 'bandpass', 1800, 900, Object.assign({ q: 0.8, attack: 0.02 }, o)),
+    splash: (o) => {
+      noise(0.3, 0.18, 'lowpass', 2200, 300, Object.assign({ q: 1.5, wet: 0.2 }, o));
+      tone('sine', 420, 140, 0.14, 0.12, o);
+    },
+    bat: (o) => {
+      tone('sine', rnd(3200, 3800), 2400, 0.05, 0.035, o);
+      tone('sine', rnd(3600, 4200), 2800, 0.04, 0.03, Object.assign({ when: 0.06 }, o));
+    },
+    flash: (o) => {
+      noise(0.25, 0.2, 'highpass', 2500, 800, o);
+      tone('square', 1800, 2400, 0.15, 0.04, Object.assign({ filter: ['lowpass', 5000] }, o));
+    },
+    // the famous minion fire siren: "BEE-DO BEE-DO"
+    siren: (o) => sirenCall(o, 1, 0.05),
+    beedoo: (o) => sirenCall(o, 2, 0.1),
   };
+
+  function sirenCall(o, n, v) {
+    for (let i = 0; i < n; i++) {
+      tone('square', 880, 880, 0.17, v, Object.assign({ when: i * 0.42, filter: ['lowpass', 2600], wet: 0.2 }, o));
+      tone('square', 660, 660, 0.2, v, Object.assign({ when: i * 0.42 + 0.19, filter: ['lowpass', 2600], wet: 0.2 }, o));
+      voice([['i', 620, 0.16], ['o', 470, 0.2]], { vol: 0.2 + v, bend: 1.0, when: i * 0.42 + 0.01, pan: o && o.pan });
+    }
+  }
 
   function brass(f, when, dur, vol, slideTo, vib) {
     tone('sawtooth', f, slideTo || f, dur, vol, { when, attack: 0.025, filter: ['lowpass', f * 3, f * 6, 1.5], wet: 0.2, vib, linear: true });
@@ -676,6 +718,7 @@
     coin: 0.05, zap: 0.06, thunder: 0.09, guitar: 0.1, splat: 0.08, stomp: 0.15, emp: 0.3, blink: 0.2, warning: 1, roar: 0.5,
     chord: 0.15, nail: 0.07, sonar: 0.6, hover: 0.04, laserBig: 0.3, nuke: 0.5,
     dig: 0.12, shield: 0.3, shieldBreak: 0.15, squid: 0.1, gum: 0.1, cutin: 0.4, ready: 0.25,
+    shuriken: 0.06, catapult: 0.1, thud: 0.08, potion: 0.08, glass: 0.07, spray: 0.09, splash: 0.08, bat: 0.08, flash: 0.12, siren: 0.6, beedoo: 0.8,
   };
 
   // play(name, x?) — x is a map position, used to pan the sound left/right

@@ -616,6 +616,24 @@
           r.sprite.destroy();
           R.splice(i, 1);
         }
+      } else if (r.kind === 'charge') {
+        // one big thing charging back down the track (Dru's car, Agnes' unicorn)
+        if (r.dist < r.path.length) {
+          for (const e of game.queryEnemies(p.x, p.y, r.radius + 30)) {
+            if (e.dead || r.hit.has(e.id) || U.dist2(p.x, p.y, e.x, e.y) > (e.radius + r.radius) ** 2) continue;
+            r.hit.add(e.id);
+            const kids = e.boss ? game.damageEnemy(e, r.bossDmg, r.tower) : game.applyHit(e, { dmg: r.dmg, knock: r.knock, stun: r.stun, gold: r.gold, type: 'normal' }, r.tower);
+            if (e.boss && r.stun) e.tryStun(r.stun.dur * 0.5);
+            if (kids) kids.forEach((k) => r.hit.add(k.id));
+            if (--r.pierce <= 0) break;
+          }
+        }
+        if (r.trail && Math.random() < 0.7) game.fx.sparkle(p.x + U.rand(-14, 14), p.y + U.rand(-8, 8), U.pick(r.trail));
+        if (r.pierce <= 0 || r.dist < -60) {
+          game.fx.dust.explode(8, p.x, p.y);
+          game.tweens.add({ targets: r.sprite, alpha: 0, duration: 200, onComplete: () => r.sprite.destroy() });
+          R.splice(i, 1);
+        }
       } else if (r.kind === 'wave') {
         for (const e of game.enemies) {
           if (e.dead || e.path !== r.path || r.hit.has(e.id) || e.dist < r.dist) continue;
@@ -637,7 +655,7 @@
       if (b.flying) continue;
       if (!b.e || b.e.dead) {
         // find a new victim
-        const next = b.kind === 'piranha' ? byStrength(alive(game))[0] : null;
+        const next = b.kind === 'piranha' || b.kind === 'chicken' ? byStrength(alive(game))[0] : null;
         if (b.kind === 'kraken') {
           game.tweens.add({ targets: b.sprite, scaleY: 0, duration: 200, onComplete: () => b.sprite.destroy() });
           B.splice(i, 1);
@@ -656,6 +674,9 @@
         game.damageEnemy(b.e, b.dps * dt, b.tower);
       } else if (b.kind === 'piranha') {
         game.damageEnemy(b.e, (b.e.boss ? 350 : 60) * (b.pw || 1) * dt, b.tower);
+      } else if (b.kind === 'chicken') {
+        game.damageEnemy(b.e, (b.e.boss ? 420 : 70) * (b.pw || 1) * dt, b.tower);
+        if (Math.random() < dt * 5) game.fx.puffs.explode(1, b.e.x, b.e.y - b.e.radius * 0.5);
       } else if (b.kind === 'beam') {
         game.damageEnemy(b.e, b.dps * dt, b.tower);
         b.tick -= dt;
@@ -685,12 +706,13 @@
   function render(game, dt, time) {
     for (const r of game.runners) {
       if (r.x == null) continue;
-      if (r.kind === 'minion') {
-        r.ph += dt * 18;
+      if (r.kind === 'minion' || r.kind === 'charge') {
+        r.ph += dt * (r.kind === 'charge' ? 12 : 18);
         const a = r.path.angleAt(Math.max(0, Math.min(r.path.length, r.dist)));
-        r.sprite.setPosition(r.x, r.y - Math.abs(Math.sin(r.ph)) * 5 - 6);
+        const hop = r.kind === 'charge' ? r.bob || 0 : 5;
+        r.sprite.setPosition(r.x, r.y - Math.abs(Math.sin(r.ph)) * hop - 6);
         r.sprite.setFlipX(Math.cos(a) > 0);
-        r.sprite.setRotation(Math.sin(r.ph) * 0.15);
+        r.sprite.setRotation(Math.sin(r.ph) * (r.kind === 'charge' ? 0.05 : 0.15));
         r.sprite.setDepth(1000 + r.y);
       } else {
         const a = r.path.angleAt(Math.max(0, Math.min(r.path.length, r.dist)));
@@ -703,7 +725,7 @@
     }
     for (const b of game.biters) {
       if (!b.e || b.e.dead) continue;
-      if (b.kind === 'piranha' && !b.flying) {
+      if ((b.kind === 'piranha' || b.kind === 'chicken') && !b.flying) {
         const ch = Math.sin(time * 0.05 + b.t * 7);
         b.sprite.setPosition(b.e.x + Math.cos(time * 0.01 + b.t) * b.e.radius * 0.6, b.e.y - b.e.radius * 0.4 + ch * 3);
         b.sprite.setScale((1 + ch * 0.1) / S, (1 - ch * 0.1) / S);

@@ -27,6 +27,7 @@
       this.prev = scene.add.container(8, 8).setDepth(DEPTH - 6);
       this.prevCollapsed = false;
       if (scene.sandbox) this.buildSandbox();
+      this.buildPowers();
       // round badge frame for the ability bar
       MT.Draw.make(scene, 'hud_abframe', 60, 60, (ctx) => {
         const D = MT.Draw;
@@ -56,7 +57,7 @@
         this.cheatBtn = new MT.UI.Button(s, X0 + 224, 30, 34, 28, {
           style: 'yellow', label: '+$', size: 15,
           onClick: () => s.cheatMoney(),
-          onHover: (on) => (on ? this.tip.show(X0 - 268, 14, 'Cheat', `Get ${U.money(MT.CFG.CHEAT_MONEY)} bananas instantly.`) : this.tip.hide()),
+          onHover: (on) => (on ? this.tip.show(X0 - 268, 14, 'Cheat', `Get ${U.money(MT.CFG.CHEAT_MONEY)} bananas instantly.\nUsing it switches off Gru Coins and achievements for this game.`) : this.tip.hide()),
         }).setDepth(DEPTH + 2);
       }
       this.root.add(s.add.image(X0 + 34, 72, 'ic_coin').setScale(0.75 / S * 2 / 2 * 1.0).setDisplaySize(30, 30));
@@ -73,18 +74,20 @@
       this.shop = s.add.container(0, 0).setDepth(DEPTH + 1);
       this.cards = [];
       const ids = MT.TOWER_ORDER.concat([s.heroId]);
-      const CW = 76, CH = 97;
+      // four narrow cards per row so every minion (and the hero) fits
+      const COLS = 4, CW = 58, CH = 97;
       ids.forEach((id, i) => {
-        const col = i % 3, row = Math.floor(i / 3);
-        const x = X0 + 10 + col * 81, y = 106 + row * 101;
+        const col = i % COLS, row = Math.floor(i / COLS);
+        const x = X0 + 8 + col * 61, y = 106 + row * 101;
         const hero = MT.isHero(id);
         const def = hero ? MT.HEROES[id] : MT.TOWERS[id];
         const c = s.add.container(x + CW / 2, y + CH / 2);
         const bg = s.add.image(0, 0, MT.UI.panelKey(s, CW, CH, hero ? 'yellow' : 'card')).setScale(1 / S);
         const key = hero ? MT.TowerArt.heroKey(s, id, 1) : MT.TowerArt.key(s, id, [0, 0, 0]);
-        const icon = s.add.image(0, -9, key).setScale(hero ? 0.27 : id === 'farm' || id === 'lab' ? 0.29 : 0.31);
-        const price = MT.text(s, 0, 34, '$0', 14, { title: true });
-        const hk = MT.text(s, -29, -38, def.key, 11, { title: true, color: '#ffd166' });
+        const big = id === 'farm' || id === 'lab' || id === 'catapult';
+        const icon = s.add.image(0, -9, key).setScale(hero ? 0.25 : big ? 0.26 : 0.29);
+        const price = MT.text(s, 0, 34, '$0', 13, { title: true });
+        const hk = MT.text(s, -21, -38, def.key, 11, { title: true, color: '#ffd166' });
         c.add([bg, icon, price, hk]);
         c.setSize(CW, CH);
         c.setInteractive({ useHandCursor: true });
@@ -191,6 +194,8 @@
         const hero = MT.isHero(cd.id);
         const ok = cost <= s.money && !(hero && s.heroPlaced);
         cd.price.setText(hero && s.heroPlaced ? 'PLACED' : U.money(cost));
+        // keep long prices inside the narrow card
+        cd.price.scaleX = cd.price.width > 54 ? 54 / cd.price.width : 1;
         if (cd.ok !== ok) {
           cd.ok = ok;
           cd.price.setColor(ok ? '#ffffff' : '#ff7b7b');
@@ -247,9 +252,18 @@
       this.upgRefs = { t, rows: [] };
       let y = 84;
       if (t.stats.attack !== 'none' || t.hero) {
-        add(MT.text(s, 22, y + 14, 'Target', 13, { ox: 0, color: '#cfe3ff' }));
+        const atk = t.stats.attack;
+        const what = atk === 'plane' ? 'Flight' : atk === 'trap' ? 'Nails' : 'Target';
+        add(MT.text(s, 22, y + 14, what, 13, { ox: 0, color: '#cfe3ff' }));
         add(new MT.UI.Button(s, 96, y + 14, 30, 28, { style: 'blue', label: '<', size: 18, onClick: () => s.cycleTarget(t, -1) }));
-        add(MT.text(s, 152, y + 14, MT.TARGET_MODES[t.targetMode], 17, { title: true }));
+        const mode = MT.targetName(t);
+        const spot = mode === 'Spot';
+        const mt = add(MT.text(s, 152, y + 14, spot ? 'Spot ✎' : mode, mode.length > 7 ? 15 : 17, { title: true, color: spot ? '#ffab91' : '#ffffff' }));
+        if (mt.width > 80) mt.setScale(80 / mt.width);
+        mt.setInteractive({ useHandCursor: true });
+        mt.on('pointerover', () => this.tip.show(X0 - 268, 84, `${what}: ${mode}`, (MT.MODE_TIPS[mode] || '') + (spot ? '\nClick here to pick a new spot.' : '\nChange it with < > or Tab.')));
+        mt.on('pointerout', () => this.tip.hide());
+        mt.on('pointerdown', () => spot && s.startSpotting(t));
         add(new MT.UI.Button(s, 208, y + 14, 30, 28, { style: 'blue', label: '>', size: 18, onClick: () => s.cycleTarget(t, 1) }));
       } else {
         add(MT.text(s, 130, y + 14, this.infoLine(t), 13, { color: '#cfe3ff', wrap: 230 }));
@@ -690,9 +704,9 @@
       }
       const agg = [];
       groups.forEach((g) => {
-        const k = g.type + (g.camo ? 'c' : '') + (g.fort ? 'f' : '');
+        const k = g.type + (g.camo ? 'c' : '') + (g.fort ? 'f' : '') + (g.regrow ? 'r' : '');
         let a = agg.find((o) => o.k === k);
-        if (!a) agg.push((a = { k, type: g.type, camo: g.camo, fort: g.fort, count: 0 }));
+        if (!a) agg.push((a = { k, type: g.type, camo: g.camo, fort: g.fort, regrow: g.regrow, count: 0 }));
         a.count += g.count;
       });
       const items = agg.slice(0, 7);
@@ -723,10 +737,15 @@
           const tags = [];
           if (a.camo) tags.push('Camo');
           if (a.fort) tags.push('Fortified');
+          if (a.regrow) tags.push('Regrow: grows back if left alone');
           if (def.flying) tags.push('Flying: needs anti-air');
           if (def.burrow) tags.push('Burrows underground');
           if (def.shield) tags.push('Shields its friends');
           if (def.armored) tags.push('Armored');
+          if (def.immune) tags.push('Immune to ' + def.immune.map((d) => (d === 'cold' ? 'ice' : d)).join(' + '));
+          if (def.heal) tags.push('Heals the mutants around it');
+          if (def.rage) tags.push('Gets faster with every hit');
+          if (a.regrow) c.add(s.add.image(x + 13, y - 10, 'fx_regrow').setDisplaySize(13, 13));
           im.setInteractive({ useHandCursor: false });
           im.on('pointerover', () => this.tip.show(8, 86, `${def.name} ×${a.count}`, (tags.length ? tags.join(' · ') + '\n' : '') + def.desc));
           im.on('pointerout', () => this.tip.hide());
@@ -740,14 +759,14 @@
     buildSandbox() {
       const s = this.scene;
       const ids = MT.ENEMY_ORDER.concat(MT.BOSS_ORDER);
-      this.sb = { round: 1, idx: 0, camo: false, fort: false };
+      this.sb = { round: 1, idx: 0, camo: false, fort: false, regrow: false };
       const W0 = MT.CFG.MAP_W;
       this.sbBtn = new MT.UI.Button(s, W0 - 74, 28, 132, 40, {
         style: 'purple', label: 'SANDBOX', size: 17,
         onClick: () => this.toggleSandbox(),
       }).setDepth(DEPTH + 3);
       const c = (this.sbPanel = s.add.container(W0 - 352, 54).setDepth(DEPTH + 3).setVisible(false));
-      c.add(MT.UI.panel(s, 0, 0, 344, 316, 'denim'));
+      c.add(MT.UI.panel(s, 0, 0, 344, 352, 'denim'));
       c.add(MT.text(s, 172, 24, 'SANDBOX TOOLS', 20, { title: true, color: '#ff9cf0' }));
       const B = (x, y, w, h, label, style, fn, size = 15) => {
         const b = new MT.UI.Button(s, x, y, w, h, { style, label, size, onClick: fn });
@@ -792,19 +811,23 @@
         fortB.setStyle(this.sb.fort ? 'green' : 'gray');
         setT(this.sb.idx);
       }, 12);
-      const send = (n) => () => s.sandboxSend(ids[this.sb.idx], n, this.sb.camo, this.sb.fort);
+      const regB = B(121, 262, 198, 28, 'REGROW', 'gray', () => {
+        this.sb.regrow = !this.sb.regrow;
+        regB.setStyle(this.sb.regrow ? 'green' : 'gray');
+      }, 13);
+      const send = (n) => () => s.sandboxSend(ids[this.sb.idx], n, this.sb.camo, this.sb.fort, this.sb.regrow);
       B(258, 210, 50, 24, 'x1', 'yellow', send(1), 13);
       B(258, 238, 50, 24, 'x10', 'yellow', send(10), 13);
       B(310, 224, 46, 52, 'x50', 'orange', send(50), 13);
       setT(0);
       // utilities
-      B(62, 282, 100, 32, 'CLEAR', 'red', () => s.sandboxClear(), 14);
-      B(172, 282, 112, 32, 'COOLDOWNS', 'teal', () => {
+      B(62, 318, 100, 32, 'CLEAR', 'red', () => s.sandboxClear(), 14);
+      B(172, 318, 112, 32, 'COOLDOWNS', 'teal', () => {
         s.units().forEach((t) => (t.abilityCd = {}));
         this.toast('Ability cooldowns reset!', 1200);
       }, 13);
       // first click: level 10, every click after that: +5 ascension stars
-      B(282, 282, 100, 32, 'HERO MAX', 'blue', () => {
+      B(282, 318, 100, 32, 'HERO MAX', 'blue', () => {
         const h = s.towers.find((t) => t.hero);
         if (!h) return this.toast('Place your hero first!', 1200);
         if (h.level < MT.HERO_MAX_LEVEL) return s.gainHeroXp(h, MT.HERO_XP[9] - h.xp + 1);
@@ -818,6 +841,82 @@
       const on = !this.sbPanel.visible;
       this.sbPanel.setVisible(on);
       this.sbBtn.setLabel(on ? 'CLOSE' : 'SANDBOX');
+      if (on && this.powersOpen) this.togglePowers(false);
+    }
+
+    // ------------------------------------------------------------ powers (hotkey P)
+    buildPowers() {
+      const s = this.scene;
+      const W0 = MT.CFG.MAP_W;
+      const bx = s.sandbox ? W0 - 214 : W0 - 74;
+      this.powersOpen = false;
+      this.pwBtn = new MT.UI.Button(s, bx, 28, 132, 40, {
+        style: 'orange', icon: 'ic_power', label: 'POWERS', size: 16, iconSize: 0.6,
+        onClick: () => this.togglePowers(),
+        onHover: (on) => (on ? this.tip.show(bx - 130, 54, 'Powers  ·  hotkey P', 'One-use items: peels, sprinklers, freeze bombs, cash, boosts and lives. Buy more with Gru Coins in Gru\'s Lab.') : this.tip.hide()),
+      }).setDepth(DEPTH + 3);
+      const c = (this.pwPanel = s.add.container(bx + 66 - 250, 54).setDepth(DEPTH + 3).setVisible(false));
+      c.add(MT.UI.panel(s, 0, 0, 250, 30 + MT.POWER_ORDER.length * 54, 'denim'));
+      c.add(MT.text(s, 125, 20, s.sandbox ? 'POWERS  (free in the Sandbox)' : 'POWERS', 15, { title: true, color: '#ffb36b' }));
+      this.pwRows = MT.POWER_ORDER.map((id, i) => {
+        const P = MT.POWERS[id];
+        const y = 34 + i * 54;
+        const row = s.add.container(10, y);
+        const bg = s.add.image(0, 0, MT.UI.panelKey(s, 230, 50, 'card')).setOrigin(0).setScale(1 / S);
+        const icon = s.add.image(26, 25, P.icon).setDisplaySize(40, 40);
+        const name = MT.text(s, 52, 17, P.name, 14, { title: true, ox: 0 });
+        const sub = MT.text(s, 52, 35, P.place === 'track' ? 'drop on the track' : P.place ? 'drop anywhere' : 'instant', 10, { ox: 0, color: '#cfe3ff', strokeThickness: 2 });
+        const cnt = MT.text(s, 220, 25, '', 18, { title: true, ox: 1, color: '#ffd83a' });
+        row.add([bg, icon, name, sub, cnt]);
+        row.setSize(230, 50);
+        row.setInteractive(new Phaser.Geom.Rectangle(0, 0, 230, 50), Phaser.Geom.Rectangle.Contains);
+        row.on('pointerover', () => {
+          bg.setTint(0xfff2a8);
+          this.tip.show(X0 - 520, 54 + y, `${P.name}  ·  ${MT.Powers.count(s, id) === Infinity ? '∞' : MT.Powers.count(s, id)} left`, P.desc);
+        });
+        row.on('pointerout', () => {
+          bg.setTint(s.powerPlacing === id ? 0xffd27a : 0xffffff);
+          this.tip.hide();
+        });
+        row.on('pointerdown', () => {
+          MT.Audio.init();
+          this.tip.hide();
+          MT.Powers.use(s, id);
+          if (MT.POWERS[id].place && s.powerPlacing === id) this.togglePowers(false);
+        });
+        c.add(row);
+        return { id, row, bg, icon, cnt };
+      });
+      this.refreshPowers();
+    }
+
+    togglePowers(force) {
+      const s = this.scene;
+      if (s.over) return;
+      this.powersOpen = force != null ? force : !this.powersOpen;
+      this.pwPanel.setVisible(this.powersOpen);
+      if (this.powersOpen && this.sbPanel && this.sbPanel.visible) this.toggleSandbox();
+      this.refreshPowers();
+      MT.Audio.play('click');
+    }
+
+    refreshPowers() {
+      if (!this.pwRows) return;
+      const s = this.scene;
+      let total = 0;
+      this.pwRows.forEach((r) => {
+        const n = MT.Powers.count(s, r.id);
+        if (n !== Infinity) total += n;
+        r.cnt.setText(n === Infinity ? '∞' : '×' + n).setColor(n > 0 ? '#ffd83a' : '#ff7b7b');
+        r.icon.setAlpha(n > 0 ? 1 : 0.45);
+        r.bg.setTint(s.powerPlacing === r.id ? 0xffd27a : 0xffffff);
+      });
+      this.pwBtn.setLabel(this.powersOpen ? 'CLOSE' : s.sandbox ? 'POWERS' : `POWERS ${total}`);
+    }
+
+    // ------------------------------------------------------------ achievements
+    achievement(a) {
+      MT.Ach.banner(this.scene, a, MT.CFG.MAP_W - 186, 112, DEPTH + 60);
     }
 
     // ------------------------------------------------------------ toasts
@@ -906,7 +1005,7 @@
         } },
         { label: 'RESTART', style: 'yellow', icon: 'ic_restart', onClick: () => this.restart() },
         { label: 'MAIN MENU', style: 'red', icon: 'ic_home', onClick: () => this.home() },
-      ], s.mode === 'boss' ? `${MT.ENEMIES[s.bossId].name} · ${MT.BossFight.TIERS[s.bossTier].name} · ${s.heroDef.name}` : `${s.mapDef.name} · ${s.diff.name} · ${s.heroDef.name}`);
+      ], s.mode === 'boss' ? `${MT.BossFight.title(s)} · ${MT.BossFight.TIERS[s.bossTier].name} · ${s.heroDef.name}` : `${s.mapDef.name} · ${s.diff.name} · ${s.heroDef.name}` + (s.mode === 'classic' && !s.sandbox ? '  ·  saved every round' : ''));
     }
 
     shakeLabel() {
@@ -933,16 +1032,23 @@
       const px = 150, py = 40, pw = 980, ph = 640;
       c.add(MT.UI.panel(s, px, py, pw, ph, 'denim'));
       const boss = s.mode === 'boss';
-      const bossName = boss ? MT.ENEMIES[s.bossId].name : '';
+      const bossName = boss ? MT.BossFight.title(s) : '';
       const head = {
-        victory: boss ? ['BOSS DEFEATED!', '#7CFF6B', `You beat ${bossName} (${MT.BossFight.TIERS[s.bossTier].name}) in ${MT.BossFight.fmtTime(s.stat.time)}!`]
+        victory: boss ? [s.rush ? 'BOSS RUSH CLEARED!' : 'BOSS DEFEATED!', '#7CFF6B', s.rush ? `All ${MT.BossFight.RUSH.length} villains down (${MT.BossFight.TIERS[s.bossTier].name}) in ${MT.BossFight.fmtTime(s.stat.time)}!` : `You beat ${bossName} (${MT.BossFight.TIERS[s.bossTier].name}) in ${MT.BossFight.fmtTime(s.stat.time)}!`]
           : ['VICTORY!', '#7CFF6B', `You beat ${s.mapDef.name} on ${s.diff.name}! Medal earned.`],
-        defeat: boss ? ['DEFEAT', '#ff6b6b', s.defeatReason === 'escaped' ? `${bossName} escaped with your bananas!` : 'The mutants broke through!']
+        defeat: boss ? ['DEFEAT', '#ff6b6b', s.defeatReason === 'escaped' ? `${MT.ENEMIES[s.bossId].name} escaped with your bananas!` : 'The mutants broke through!']
           : ['DEFEAT', '#ff6b6b', `The mutants broke through on round ${s.round}.`],
         pause: ['GAME STATS', '#ffd83a', `${boss ? bossName : s.mapDef.name} · ${boss ? MT.BossFight.TIERS[s.bossTier].name : s.diff.name}`],
       }[kind];
       c.add(MT.MenuArt.title(s, 640, py + 46, head[0], 46, '#ffffff', head[1]));
       c.add(MT.text(s, 640, py + 88, head[2], 17, { color: '#e8f1ff' }));
+      // Gru Coins earned in this game (none in the sandbox or after the cheat)
+      if (!s.sandbox) {
+        const cx = px + pw - 110, cy = py + 46;
+        c.add(s.add.image(cx - 48, cy, 'ic_grucoin').setDisplaySize(36, 36));
+        c.add(MT.text(s, cx - 26, cy - 6, s.cheated ? 'CHEATED' : `+${s.coinsEarned}`, s.cheated ? 16 : 24, { title: true, ox: 0, color: s.cheated ? '#ff8a80' : '#ffd83a' }));
+        c.add(MT.text(s, cx - 26, cy + 16, s.cheated ? 'no coins this game' : 'Gru Coins', 12, { ox: 0, color: '#cfe3ff' }));
+      }
       // records: towers on the map + the ones that were sold
       const rows = s.towers.map((t) => s.towerRecord(t, false)).concat(s.stat.sold);
       // boss battles are about damage, classic games about pops
@@ -1034,7 +1140,7 @@
       const s = this.scene;
       if (this.leaving) return;
       this.leaving = true;
-      s.scene.restart(Object.assign({}, s.launchData, { map: s.mapDef.id, diff: s.diff.id, hero: s.heroId }));
+      s.scene.restart(Object.assign({}, s.launchData, { map: s.mapDef.id, diff: s.diff.id, hero: s.heroId, resume: null }));
     }
 
     home(to = 'Menu') {
@@ -1042,6 +1148,8 @@
       // a second click while the screen fades out would start the next scene twice
       if (this.leaving) return;
       this.leaving = true;
+      // changes made since the last round end are kept
+      if (s.dirty && !s.roundActive) s.autosave();
       s.cameras.main.fadeOut(250, 20, 30, 50);
       s.cameras.main.once('camerafadeoutcomplete', () => s.scene.start(to));
     }

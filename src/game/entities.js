@@ -9,11 +9,11 @@
     return 1 + (c + 1) * x * x * x + c * x * x;
   };
   // giants that walk on legs kick up dust when they stomp
-  const STOMPERS = { mega: 1, titan: 1, mecha: 1, macho: 1, vector: 1, bratt: 1 };
+  const STOMPERS = { mega: 1, titan: 1, mecha: 1, macho: 1, vector: 1, bratt: 1, elmacho: 1, maxime: 1 };
   // flying mutants hover this many px above their route
   const FLY = 24;
   // art that faces right and should turn with the direction of travel
-  const FACERS = { zeppelin: 1, mecha: 1, vector: 1, bratt: 1, scarlet: 1, jetpack: 1, glider: 1 };
+  const FACERS = { zeppelin: 1, mecha: 1, vector: 1, bratt: 1, scarlet: 1, jetpack: 1, glider: 1, maxime: 1 };
   // side-view airships that steer along the track in pseudo-3D: they pitch
   // up / down with the path, look shorter when heading towards or away from
   // the camera, and swing round (instead of snapping) when they turn back
@@ -79,6 +79,12 @@
       const sh = def.shield;
       this.bubble = sh ? { hp: sh.hp * (this.fort ? 2 : 1), max: sh.hp * (this.fort ? 2 : 1), regen: sh.regen, cd: sh.cooldown, broken: 0, r: sh.r, color: 0x6ecbff, hitT: 0 } : null;
       this.shieldSrc = null;
+      // Regrow: when left alone it grows back into the mutant it came out of.
+      // chain = the bigger mutants above it, up to the one it started as
+      this.regrow = o.regrow && MT.canRegrow(type) ? { chain: o.regrowChain || [], fort: !!(o.regrowFort || o.fort), t: MT.REGROW_TIME } : null;
+      this.healT = def.heal ? def.heal.every * (0.4 + Math.random() * 0.6) : 0; // Medic Mutant pulse
+      this.rageHits = 0; // Rage Mutant: every hit makes it faster
+      this.immFx = 0;
       this.ai = null; // boss battle brain, see MT.BossFight
       const p = this.path.atInto(this.dist, { x: 0, y: 0, dx: 1 });
       this.x = p.x;
@@ -100,12 +106,14 @@
     get remaining() {
       return this.path.length - this.dist;
     }
-    applySlow(mul, dur, soak, acid) {
+    // look: how the slow shows on the mutant (jelly by default, 'wet' water, 'bite' bat bites)
+    applySlow(mul, dur, soak, acid, look) {
       if (this.def.noSlow) return;
       if (this.slowT <= 0 || mul <= this.slowMul) {
         this.slowMul = mul;
         this.slowSoak = !!soak;
         this.slowAcid = !!acid;
+        this.slowLook = look || null;
       }
       this.slowT = Math.max(this.slowT, dur);
     }
@@ -154,7 +162,25 @@
       if (this.slowT > 0) this.slowT -= dt;
       if (this.dance > 0) this.dance -= dt;
       if (this.shredT > 0) this.shredT -= dt;
+      if (this.immFx > 0) this.immFx -= dt;
       const def = this.def;
+      // Magma Mutants melt every bit of ice straight away
+      if (this.freeze > 0 && def.immune && def.immune.includes('cold')) this.freeze = 0;
+      if (this.regrow && this.regrow.chain.length) {
+        this.regrow.t -= dt;
+        if (this.regrow.t <= 0) {
+          // replaced by the bigger mutant it grows back into
+          this.game.regrowEnemy(this);
+          return;
+        }
+      }
+      if (def.heal) {
+        this.healT -= dt;
+        if (this.healT <= 0) {
+          this.healT = def.heal.every;
+          this.game.healPulse(this);
+        }
+      }
       if (this.ai) {
         MT.BossFight.update(this.game, this, dt);
         if (this.dead) return;
@@ -228,10 +254,12 @@
       if (this.hitT > 0) this.hitT -= dt;
       if (this.hitCool > 0) this.hitCool -= dt;
       this.renderBubble(time, dt);
+      this.renderRegrow(time);
       if (this.burrowed) {
         // only a travelling mound of dirt shows where the mole is digging
         sp.setVisible(false);
         if (this.overlay) this.overlay.setVisible(false);
+        if (this.regrowSprite) this.regrowSprite.setVisible(false);
         if (!this.mound) this.mound = this.game.add.image(0, 0, 'fx_mound').setScale(0.9 / S);
         const q = Math.sin(time * 0.03 + this.wobble);
         this.mound.setVisible(true).setPosition(this.x, this.y + this.radius * 0.55 + q).setDepth(1000 + this.y).setScale((0.85 + q * 0.06) / S, (0.85 - q * 0.06) / S);
@@ -301,11 +329,13 @@
       if (FACERS[this.type] && !STEERERS[this.type]) sp.setFlipX(this.dir < 0);
       sp.setDepth(1000 + this.y + (this.flying ? 400 : 0));
       if (this.def.alwaysCamo) sp.setAlpha(0.62 + Math.sin(time * 0.004 + this.wobble) * 0.16);
+      // a furious Rage Mutant lets off steam
+      if (this.def.rage && this.enrage > 1.5 && Math.random() < dt * this.enrage * 4) this.game.fx.puffs.explode(1, this.x + U.rand(-6, 6), sp.y - this.radius * 1.4);
       // status tint
       if (this.freeze > 0) sp.setTint(0xa8dcff);
       else if (this.hitT > 0) sp.setTint(0xffd2d2);
       else if (this.shieldSrc && this.shieldSrc !== this) sp.setTint(0xcdeeff);
-      else if (this.slowT > 0) sp.setTint(this.slowAcid ? 0xd8ffb0 : 0xffc0d0);
+      else if (this.slowT > 0) sp.setTint(this.slowLook === 'wet' ? 0xc4e8ff : this.slowLook === 'bite' ? 0xe8c8ff : this.slowAcid ? 0xd8ffb0 : 0xffc0d0);
       else if (this.enrage > 1) sp.setTint(0xffb0b0);
       else if (this.shredT > 0) sp.setTint(0xffcf9e);
       else sp.clearTint();
@@ -334,6 +364,19 @@
         rot: pitch * side,
       };
     }
+    // regrow badge: a little green heart that fills up until the mutant grows back
+    renderRegrow(time) {
+      const rg = this.regrow;
+      if (!rg) return;
+      if (!this.regrowSprite) this.regrowSprite = this.game.add.image(0, 0, 'fx_regrow');
+      const ready = rg.chain.length ? 1 - Math.max(0, rg.t) / MT.REGROW_TIME : 0;
+      const pulse = 1 + (ready > 0.7 ? Math.sin(time * 0.03) * 0.15 : 0);
+      const sz = Math.max(15, Math.min(22, this.radius * 1.2)) * pulse;
+      this.regrowSprite.setVisible(true).setDisplaySize(sz, sz)
+        .setPosition(this.x + this.radius * 0.85, this.sprite.y - this.radius * 1.35)
+        .setAlpha(rg.chain.length ? 0.8 + 0.2 * ready : 0.7)
+        .setDepth(1000 + this.y + (this.flying ? 460 : 60));
+    }
     // the shield dome of a Shield Carrier (or a boss shielding itself)
     renderBubble(time, dt) {
       const bb = this.bubble;
@@ -357,7 +400,7 @@
     updateOverlay() {
       let want = null;
       if (this.freeze > 0) want = 'fx_ice';
-      else if (this.slowT > 0 && !this.boss) want = this.slowAcid ? 'fx_jelly_acid' : 'fx_jelly';
+      else if (this.slowT > 0 && !this.boss && this.slowLook !== 'bite') want = this.slowLook === 'wet' ? 'fx_wet' : this.slowAcid ? 'fx_jelly_acid' : 'fx_jelly';
       if (!want) {
         if (this.overlay) {
           this.overlay.destroy();
@@ -393,8 +436,8 @@
       this.sprite.destroy();
       if (this.overlay) this.overlay.destroy();
       this.overlay = null;
-      [this.shadow, this.mound, this.bubbleSprite].forEach((o) => o && o.destroy());
-      this.shadow = this.mound = this.bubbleSprite = null;
+      [this.shadow, this.mound, this.bubbleSprite, this.regrowSprite].forEach((o) => o && o.destroy());
+      this.shadow = this.mound = this.bubbleSprite = this.regrowSprite = null;
       if (this.ai) MT.BossFight.detach(this.game, this);
     }
   }
@@ -530,12 +573,28 @@
       if (this.dead) return;
       this.dead = true;
       this.sprite.destroy();
-      if (this.p.cloud) this.game.addZone(this.x, this.y, this.p.cloud, this.tower, this.p.tex === 'p_fire' ? 'fire' : 'gas');
+      if (this.p.cloud) this.game.addZone(this.x, this.y, this.p.cloud, this.tower, this.p.cloudKind || (this.p.tex === 'p_fire' ? 'fire' : 'gas'));
     }
   }
 
   // ===================================================================== Tower
-  const TILTERS = { proj: 1, instant: 1, chain: 1, trap: 1 };
+  const TILTERS = { proj: 1, instant: 1, chain: 1, trap: 1, lob: 1 };
+  // Where each tower's weapon sits in its (right-facing) art, relative to the
+  // sprite origin. Shots leave from there, mirrored when the tower turns left.
+  const MUZZLE = {
+    banana: [20, -14], fart: [26, 8], rocket: [32, -17], freeze: [30, 9], jelly: [26, 8], sniper: [35, -5],
+    tesla: [27, -4], rockstar: [18, 0], nails: [20, -12], sub: [30, 3], lab: [25, -31], super: [22, -12],
+    ninja: [22, -6], catapult: [8, -24], potion: [19, -17], fireman: [31, 4], vampire: [21, -4],
+  };
+  // the same for the Ultimate forms (their weapon, if they hold one)
+  const ULT_MUZZLE = {
+    banana: [0, -20], fart: [35, -75], rocket: [54, -34], jelly: [0, -24], sniper: [64, -24], rockstar: [0, -10],
+    nails: [44, -40], sub: [30, -6], lab: [71, -85], super: [0, -12],
+    ninja: [38, 0], catapult: [32, -90], potion: [0, -24], fireman: [66, -48], vampire: [0, -60],
+  };
+  // Ultimate forms with a weapon on one side turn round to face their target
+  // (the symmetric ones and the stage with its sign stay put)
+  const ULT_FLIP = { fart: 1, rocket: 1, sniper: 1, lab: 1, nails: 1, sub: 1, ninja: 1, fireman: 1 };
 
   // Strengthen a stat block by factor k (Ultimate form = 2.5, Omega part = 1.5).
   function boostStats(s, k) {
@@ -610,6 +669,11 @@
       this.disableSprite = null;
       this.cool = 0.15;
       this.targetMode = 0;
+      this.targetName = null; // the chosen targeting mode, kept by name across upgrades
+      this.spot = null; // Catapult "Spot" mode: where the boulders land
+      this.huntX = null; // centre of the Pilot's patrol (follows mutants in "Hunt" mode)
+      this.huntY = null;
+      this.cashBonus = 0; // Dru's Gold Rush: extra bananas per pop
       this.shots = 0;
       this.facing = 1;
       this.tilt = 0;
@@ -663,8 +727,9 @@
       return this.ultimate ? 2.5 : this.component ? 1.5 : 1;
     }
     get cdMul() {
-      if (this.hero) return Math.max(0.5, Math.pow(0.95, this.stars));
-      return this.ultimate ? 0.7 : this.component ? 0.8 : 1;
+      const lab = (this.game.perks && this.game.perks.cd) || 1;
+      if (this.hero) return Math.max(0.5, Math.pow(0.95, this.stars)) * lab;
+      return (this.ultimate ? 0.7 : this.component ? 0.8 : 1) * lab;
     }
     get totalPops() {
       return this.omega ? this.subs.reduce((a, s) => a + s.pops, this.pops) : this.pops;
@@ -697,6 +762,14 @@
       this.baseStats = s;
       this.applyBuffs();
       this.syncPlanes(false);
+      this.syncTarget();
+    }
+    // the list of targeting modes depends on the attack: keep the chosen one by name
+    syncTarget() {
+      const list = MT.targetModes(this);
+      const i = this.targetName ? list.indexOf(this.targetName) : -1;
+      this.targetMode = i >= 0 ? i : Math.min(this.targetMode, list.length - 1);
+      if (i < 0) this.targetName = list[this.targetMode];
     }
     applyBuffs() {
       const s = U.deepClone(this.baseStats);
@@ -711,6 +784,13 @@
         if (b.armored) this.buffArmored = true;
         this.bonusPierce = b.pierce || 0;
       }
+      // Gru's Lab research (meta progression) helps every tower a little
+      const pk = this.game.perks;
+      if (pk && s.attack !== 'none') {
+        if (pk.rate !== 1 && s.rate < 900) s.rate *= pk.rate;
+        if (pk.range !== 1 && s.range < 1000) s.range *= pk.range;
+        this.bonusPierce += pk.pierce || 0;
+      }
       if (this.giant > 0) {
         s.range *= 1.5;
         s.rate *= 0.35;
@@ -719,6 +799,14 @@
         s.range *= 1.2;
         s.rate *= 0.4;
         this.dmgMul *= 2;
+      }
+      // an Alchemist's brew: a short boost on top of everything else
+      if (this.brewT > 0 && this.brew && s.attack !== 'none') {
+        const bw = this.brew;
+        s.range *= 1 + (bw.range || 0);
+        s.rate *= 1 - (bw.rate || 0);
+        this.bonusPierce += bw.pierce || 0;
+        this.dmgMul *= 1 + (bw.dmg || 0);
       }
       // heroes and every fusion tier can shoot down flying mutants; a Lab radar grants it too
       if (this.hero || this.fused || this.omega || (b && b.air)) s.air = true;
@@ -794,7 +882,21 @@
           g.fx.ring(this.x, this.y, 70, MT.util.hexInt(this.def.color), { dur: 400 });
         }
       }
-      if (s.attack === 'plane') this.planeA += (s.planeSpeed || 1.5) * dt;
+      if (s.attack === 'plane') {
+        this.planeA += (s.planeSpeed || 1.5) * dt;
+        this.updateHunt(dt);
+      }
+      // Alchemist brews wear off; Alchemists hand out new ones; Bee-do sirens wail
+      if (this.brewT > 0) {
+        this.brewT -= dt;
+        if (this.brewT <= 0) {
+          this.brewT = 0;
+          this.brew = null;
+          this.applyBuffs();
+        }
+      }
+      if (s.brew) MT.NewTowers.brewTick(g, this, dt);
+      if (s.siren) MT.NewTowers.sirenTick(g, this, dt);
       if (s.attack === 'none') return;
       // momentum (Super Minion): heat builds up while firing, cools when idle
       if (s.momentum && this.idle > 0.4) this.heat = Math.max(0, this.heat - dt * 0.6);
@@ -856,6 +958,31 @@
         case 'plane':
           fired = this.firePlanes();
           break;
+        case 'lob': {
+          // "Spot" mode: boulders always land on the chosen spot, like a mortar
+          if (this.spot && MT.targetName(this) === 'Spot') {
+            if (g.enemiesInRange(this.spot.x, this.spot.y, 130, s.camo, !!s.air).length) {
+              MT.NewTowers.lob(g, this, MT.spotTarget(this.spot), true);
+              fired = true;
+            }
+            break;
+          }
+          const t = g.findTarget(this);
+          if (t) {
+            MT.NewTowers.lob(g, this, t);
+            fired = true;
+          }
+          break;
+        }
+        case 'melee': {
+          const t = g.findTarget(this);
+          if (t) {
+            this.aimAt(t);
+            g.meleeHit(this, t);
+            fired = true;
+          }
+          break;
+        }
         case 'aura': {
           const t = g.findTarget(this);
           if (t) {
@@ -891,11 +1018,16 @@
       this.aimTarget = e;
       this.aimHold = 0.9;
       const dx = e.x - this.x;
-      if (Math.abs(dx) > 3 && !this.landmark) this.setFacing(dx < 0 ? -1 : 1);
+      if (Math.abs(dx) > this.flipDeadzone) this.setFacing(dx < 0 ? -1 : 1);
     }
-    // the giant tiers are big structures: they don't flip or tilt
+    // the giant tiers are big structures: they don't tilt, and only the ones
+    // holding a weapon on one side turn round (with a wider dead zone)
     get landmark() {
       return this.ultimate || this.omega;
+    }
+    get flipDeadzone() {
+      if (!this.landmark) return 3;
+      return this.ultimate && ULT_FLIP[this.type] ? 30 : Infinity;
     }
     setFacing(f) {
       if (f === this.facing) return;
@@ -909,6 +1041,20 @@
     muzzle() {
       // Omega parts fire from the mech's arms / back
       if (this.component && this.ox != null) return { x: this.x + this.ox, y: this.y + this.oy };
+      const f = this.facing;
+      if (this.ultimate) {
+        const u = ULT_MUZZLE[this.type];
+        if (u) return { x: this.x + u[0] * f, y: this.y + u[1] };
+      }
+      const m = !this.hero && MUZZLE[this.type];
+      if (m) {
+        // follow the sprite: mirrored with the facing, rotated with the tilt
+        const k = this.fused && !this.ultimate ? MT.TowerArt.FUSED_BOX.FK : 1;
+        const r = f * this.tilt * 0.55;
+        const mx = m[0] * f * k, my = m[1] * k;
+        const c = Math.cos(r), sn = Math.sin(r);
+        return { x: this.x + mx * c - my * sn, y: this.y + mx * sn + my * c };
+      }
       const a = this.aimAngle();
       const reach = this.hero ? 22 : this.fused ? 20 : 16;
       return { x: this.x + Math.cos(a) * reach, y: this.y - 6 + Math.sin(a) * reach };
@@ -919,7 +1065,8 @@
       this.aimAt(t);
       // snap the tilt so the first shot already leaves from the right spot
       const dx0 = t.x - this.x;
-      this.tilt = U.clamp(Math.atan2(t.y - (this.y - 6), Math.abs(dx0) + 1), -0.75, 0.75);
+      // (the giant tiers are buildings: they turn round but never tilt)
+      if (!this.landmark) this.tilt = U.clamp(Math.atan2(t.y - (this.y - 6), Math.abs(dx0) + 1), -0.75, 0.75);
       const m = this.muzzle();
       const sx = m.x, sy = m.y;
       // lead the target a little
@@ -934,6 +1081,8 @@
       if (this.tierActive('jellyAcid')) p = Object.assign({}, p, { tex: 'p_jelly_acid' });
       // rhythm (Rock Star): every Nth note is a power chord
       const chord = s.rhythm && this.shots % s.rhythm === s.rhythm - 1;
+      // Ninja caltrops: every few throws a pile lands right in front of the target
+      if (s.caltrops && this.shots % s.caltrops.every === s.caltrops.every - 1) MT.NewTowers.caltrops(g, this, t);
       if (chord) p = Object.assign({}, p, { dmg: Math.max(1, p.dmg) * 3, pierce: p.pierce * 2, r: (p.r || 10) * 1.5, knock: (p.knock || 0) + 6, scale: (p.scale || 1) * 1.5 });
       for (let i = 0; i < s.count; i++) {
         const a = base + (s.count > 1 ? ((i - (s.count - 1) / 2) * s.spread * Math.PI) / 180 : 0);
@@ -952,21 +1101,74 @@
         MT.Audio.play('rocket');
       }
       if (this.fused || s.count >= 3) g.fx.muzzle(sx, sy, this.fused ? MT.util.hexInt(this.def.fusion.color) : 0xffffff);
-      const snd = { p_rocket: 'rocket', p_jelly: 'jelly', p_jelly_acid: 'jelly', p_laser: 'laser', p_plasma: 'laser', p_sun: 'laser', p_dart: 'laser', p_ice: 'freeze', p_freezebolt: 'freeze', p_wave: 'guitar', p_lipstick: 'laser', p_goo: 'jelly', p_squid: 'jelly' }[s.proj.tex] || 'throw';
+      const snd = {
+        p_rocket: 'rocket', p_jelly: 'jelly', p_jelly_acid: 'jelly', p_laser: 'laser', p_plasma: 'laser', p_sun: 'laser', p_dart: 'laser', p_ice: 'freeze', p_freezebolt: 'freeze', p_wave: 'guitar', p_lipstick: 'laser', p_goo: 'jelly', p_squid: 'jelly',
+        p_shuriken: 'shuriken', p_shuriken_gold: 'shuriken', p_potion: 'potion', p_potion_gold: 'potion', p_potion_big: 'potion', p_water: 'spray', p_waterball: 'splash', p_bat: 'bat', p_bat_big: 'bat',
+      }[s.proj.tex] || 'throw';
       MT.Audio.play(snd, this.x);
     }
     // ---------------------------------------------------------- planes
+    // flight patterns (the Pilot's targeting modes): circle, figure 8, a wide
+    // loop, or "Hunt", where the whole patrol follows the leading mutant
     planePos(i, out) {
       const s = this.stats;
       const n = this.planes.length || 1;
       const a = this.planeA + (i * TAU) / n;
       const R = s.orbit || 62;
-      out.gx = this.x + Math.cos(a) * R;
-      out.gy = this.y + Math.sin(a) * R * 0.7;
+      const cx = this.huntX != null ? this.huntX : this.x, cy = this.huntY != null ? this.huntY : this.y;
+      const mode = MT.targetName(this);
+      let px, py, vx, vy;
+      if (mode === 'Figure 8') {
+        px = Math.sin(a) * R * 1.5;
+        py = Math.sin(a) * Math.cos(a) * R * 1.2;
+        vx = Math.cos(a) * 1.5;
+        vy = Math.cos(2 * a) * 1.2;
+      } else if (mode === 'Wide') {
+        px = Math.cos(a) * R * 1.75;
+        py = Math.sin(a) * R * 1.1;
+        vx = -Math.sin(a) * 1.75;
+        vy = Math.cos(a) * 1.1;
+      } else {
+        px = Math.cos(a) * R;
+        py = Math.sin(a) * R * 0.7;
+        vx = -Math.sin(a);
+        vy = Math.cos(a) * 0.7;
+      }
+      out.gx = cx + px;
+      out.gy = cy + py;
       out.x = out.gx;
       out.y = out.gy - 34;
       out.a = a;
+      out.head = Math.atan2(vy, vx);
       return out;
+    }
+    // "Hunt": the patrol centre glides after the leading mutant, otherwise back home
+    updateHunt(dt) {
+      const g = this.game;
+      let gx = this.x, gy = this.y;
+      if (MT.targetName(this) === 'Hunt') {
+        this.huntRe = (this.huntRe || 0) - dt;
+        if (this.huntRe <= 0 || !this.huntTarget || this.huntTarget.dead) {
+          this.huntRe = 0.4;
+          this.huntTarget = g.findTargetFrom(this, this.x, this.y, 5000);
+        }
+        if (this.huntTarget && !this.huntTarget.dead) {
+          gx = U.clamp(this.huntTarget.x, 30, MT.CFG.MAP_W - 30);
+          gy = U.clamp(this.huntTarget.y, 50, MT.CFG.H - 30);
+        }
+      }
+      if (this.huntX == null) {
+        this.huntX = this.x;
+        this.huntY = this.y;
+      }
+      const d = U.dist(this.huntX, this.huntY, gx, gy), step = 190 * dt;
+      if (d <= step) {
+        this.huntX = gx;
+        this.huntY = gy;
+      } else {
+        this.huntX += ((gx - this.huntX) / d) * step;
+        this.huntY += ((gy - this.huntY) / d) * step;
+      }
     }
     syncPlanes(retex) {
       const want = this.stats && this.stats.attack === 'plane' ? this.stats.planes || 1 : 0;
@@ -1001,6 +1203,9 @@
           const a = base + (s.count > 1 ? ((k - (s.count - 1) / 2) * s.spread * Math.PI) / 180 : 0);
           g.addProjectile(new Projectile(g, this, pos.x, pos.y, a, s.proj, { range: s.range + 40, bonusPierce: this.bonusPierce, target: t }));
         }
+        // the plane banks round to point its guns at the target
+        pl.aim = base;
+        pl.aimT = 0.45;
         if (altNow) g.addProjectile(new Projectile(g, this, pos.x, pos.y, base, s.alt.proj, { range: s.range + 60, target: t }));
       });
       if (fired) MT.Audio.play(altNow ? 'rocket' : 'laser');
@@ -1014,7 +1219,7 @@
     render(dt, time) {
       if (this.component) {
         // hidden part of an Omega Tower: only its planes are visible
-        this.renderPlanes(time);
+        this.renderPlanes(time, dt);
         return;
       }
       const sp = this.sprite;
@@ -1026,7 +1231,7 @@
       if (tg && !tg.dead && this.aimHold > 0) {
         const dx = tg.x - this.x, dy = tg.y - (this.y - 6);
         if (canTilt) want = U.clamp(Math.atan2(dy, Math.abs(dx) + 1), -0.75, 0.75);
-        if (Math.abs(dx) > 6 && !this.landmark) this.setFacing(dx < 0 ? -1 : 1);
+        if (Math.abs(dx) > Math.max(6, this.flipDeadzone)) this.setFacing(dx < 0 ? -1 : 1);
       } else this.aimTarget = null;
       if (this.landmark) MT.Giants.renderTower(this.game, this, dt, time);
       this.aimHold -= dt;
@@ -1065,6 +1270,8 @@
         const kind = this.disableKind;
         if (kind === 'ink') sp.setTint(0x77779c);
         else if (kind === 'gum') sp.setTint(0xffc6e6);
+        else if (kind === 'roach') sp.setTint(0xa1887f);
+        else if (kind === 'peck') sp.setTint(0xffe0b2);
         else if (kind === 'lava') {
           sp.setTint(Math.floor(time / 120) % 2 ? 0xff9c6b : 0xffc9a8);
           if (Math.random() < dt * 10) this.game.fx.sparkle(px + U.rand(-14, 14), py - U.rand(0, 30), 0xff7a1a);
@@ -1121,16 +1328,22 @@
         });
       }
       if (this.subs) this.subs.forEach((u) => u.render(dt, time));
-      this.renderPlanes(time);
+      this.renderPlanes(time, dt);
+      if (this.brewT > 0 && Math.random() < dt * 6) this.game.fx.sparkle(px + U.rand(-12, 12), py - U.rand(0, 34), 0xff5252);
     }
-    renderPlanes(time) {
+    renderPlanes(time, dt = 0.016) {
       if (!this.planes.length) return;
       this.planes.forEach((pl, i) => {
         const pos = this.planePos(i, pl.pos);
-        const heading = Math.atan2(Math.cos(pos.a) * 0.7, -Math.sin(pos.a));
+        const heading = pos.head;
+        // fly along the patrol circle, but swing the nose towards the target while shooting
+        pl.aimT = Math.max(0, (pl.aimT || 0) - dt);
+        const want = pl.aimT > 0 ? pl.aim : heading;
+        if (pl.cur == null) pl.cur = heading;
+        pl.cur = Phaser.Math.Angle.Wrap(pl.cur + Phaser.Math.Angle.Wrap(want - pl.cur) * Math.min(1, dt * 12));
         pl.sprite.setPosition(pos.x, pos.y + Math.sin(time * 0.005 + i) * 2);
-        pl.sprite.rotation = heading;
-        pl.sprite.setFlipY(Math.cos(heading) < 0);
+        pl.sprite.rotation = pl.cur;
+        pl.sprite.setFlipY(Math.cos(pl.cur) < 0);
         pl.sprite.setDepth(5500 + pos.y * 0.01);
         pl.shadow.setPosition(pos.gx, pos.gy + 4);
       });
@@ -1199,16 +1412,18 @@
       this.x = x;
       this.y = y;
       this.trackPts = null;
+      this.huntX = this.huntY = null;
       if (this.subs) {
         this.subs.forEach((u) => {
           u.x = x;
           u.y = y;
           u.trackPts = null;
+          u.huntX = u.huntY = null;
         });
       }
     }
     sellValue() {
-      return Math.floor(this.spent * MT.CFG.SELL_RATE);
+      return Math.floor(this.spent * (this.game.sellRate || MT.CFG.SELL_RATE));
     }
     destroy() {
       this.dead = true;

@@ -189,6 +189,7 @@
       finishTransform(game, t);
       boomAt(game, t, col, 'SUPER FUSION!', t.def.fusion.name, false);
       checkGiantHints(game);
+      MT.Progress.onFusion(game, 'fusion');
     });
   }
 
@@ -225,6 +226,7 @@
       t.size = t.def.size + 8;
       finishTransform(game, t);
       boomAt(game, t, col, 'ULTIMATE!', t.def.fusion.ultimate.name, true);
+      MT.Progress.onFusion(game, 'ultimate');
     });
   }
 
@@ -252,7 +254,8 @@
         u.pops = p.pops;
         u.dmg = p.dmg;
         u.earned = p.earned;
-        u.targetMode = t.targetMode;
+        u.targetName = MT.targetName(t);
+        u.syncTarget();
         Object.assign(u, MT.TowerArt.OMEGA_SLOTS[i]);
         return u;
       });
@@ -268,6 +271,7 @@
       game.select(omega);
       game.hud.onTowersChanged();
       boomAt(game, omega, 0xffffff, 'OMEGA MECH!', parts.map((p) => p.def.fusion.name).join('  +  '), true);
+      MT.Progress.onFusion(game, 'omega');
     });
   }
 

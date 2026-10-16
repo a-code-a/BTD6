@@ -86,9 +86,12 @@
       const e = strongest(near(g, t, t.stats.range * 1.4));
       if (!e) return retry(t, 'arty', 0.3);
       const p = { tex: 'p_rocket', type: 'explosive', shred: 3, explode: { r: 56, dmg: 14, pierce: 40 }, moabDmg: 90 };
+      // the tank swings round and fires from its launcher
+      t.aimAt(e);
+      const m = t.muzzle();
       for (let i = 0; i < 8; i++) {
         const lead = e.path.at(e.dist + e.speedNow() * 0.8 + U.rand(-50, 50));
-        spawn(g, { kind: 'shell', sx: t.x + U.rand(-20, 20), sy: t.y - 40, tx: lead.x + U.rand(-14, 14), ty: lead.y + U.rand(-10, 10), age: 0, dur: 0.75, delay: i * 0.07, arc: 150, p, tower: t, tex: 'p_missile', scale: 0.6 });
+        spawn(g, { kind: 'shell', sx: m.x + U.rand(-8, 8), sy: m.y + U.rand(-6, 6), tx: lead.x + U.rand(-14, 14), ty: lead.y + U.rand(-10, 10), age: 0, dur: 0.75, delay: i * 0.07, arc: 150, p, tower: t, tex: 'p_missile', scale: 0.6 });
       }
       MT.Audio.play('rocket');
     },
@@ -115,7 +118,10 @@
       if (!every(t, 'rail', 0.9, dt)) return;
       const e = g.strongestBoss() || leader(g.enemies.filter((x) => !x.dead));
       if (!e) return retry(t, 'rail', 0.2);
-      const sx = t.x + 64, sy = t.y - 24; // the railgun muzzle
+      // the fortress turns its railgun towards the target first
+      t.aimAt(e);
+      const m = t.muzzle();
+      const sx = m.x, sy = m.y;
       const a = Math.atan2(e.y - sy, e.x - sx);
       const hits = enemiesOnLine(g, sx, sy, a, 1500, 18).slice(0, 60);
       hits.forEach((h) => g.applyHit(h, { dmg: 50, moabDmg: 260, shred: 3, type: 'energy' }, t));
@@ -307,6 +313,7 @@
       if (o.arcs && Math.random() < 0.4) g.fx.lightning(h.x, h.y, h.x + U.rand(-40, 40), h.y + U.rand(-40, 40), 0xd1b3ff, 2, 0.2);
     });
     if (o.cash) g.money += o.cash * hits.length;
+    if (o.heal && hits.length) g.healLives(Math.min(10, Math.ceil(hits.length / 8)), t.x, t.y - 90);
     const far = Math.min(len, 900);
     const along = (d) => ({ x: cx + Math.cos(a) * d, y: cy + Math.sin(a) * d });
     if (o.blasts) for (let d = 120; d < far; d += 120) {
@@ -396,6 +403,8 @@
       o.age += dt;
       if (o.age >= o.dur) {
         g.explode(o.tx, o.ty, o.p, o.tower);
+        // lobbed fire pots / potions leave a burning (or acid / water) patch behind
+        if (o.p.cloud) g.addZone(o.tx, o.ty, o.p.cloud, o.tower, o.p.cloudKind || 'fire');
         return false;
       }
       return true;
@@ -421,7 +430,7 @@
         for (const e of g.queryEnemies(o.x, o.y, o.r + 40)) {
           if (n >= 25) break;
           if (e.dead || U.dist2(o.x, o.y, e.x, e.y) > (o.r + e.radius * 0.4) ** 2) continue;
-          g.applyHit(e, { dmg: 4, moabDmg: 25, slow: { mul: 0.35, dur: 1.2, moab: true }, type: 'normal' }, o.tower);
+          g.applyHit(e, { dmg: 4, moabDmg: 25, slow: { mul: 0.35, dur: 1.2, moab: true, look: o.slowLook }, type: 'normal' }, o.tower);
           n++;
         }
       }
@@ -455,6 +464,9 @@
     },
   };
 
+  // per-frame visuals of objects added by other modules (see game/newtowers.js)
+  const RENDER = {};
+
   // per-frame visuals of the objects
   function render(g, dt, time) {
     for (const o of g.giantObjs) {
@@ -483,9 +495,12 @@
           if (!o.sprite) o.sprite = g.add.image(o.sx, o.sy, o.tex).setScale((o.scale || 1) / S).setDepth(6400);
           const k = Math.min(1, o.age / o.dur);
           const x = U.lerp(o.sx, o.tx, k), y = U.lerp(o.sy, o.ty, k) - Math.sin(k * Math.PI) * o.arc;
-          if (o.arc) o.sprite.rotation = Math.atan2(y - o.sprite.y, x - o.sprite.x);
+          if (o.spin) o.sprite.rotation += o.spin * dt;
+          else if (o.arc) o.sprite.rotation = Math.atan2(y - o.sprite.y, x - o.sprite.x);
           o.sprite.setPosition(x, y);
-          if (o.arc && Math.random() < 0.5) g.fx.trail.explode(1, x, y);
+          if (o.trail != null) {
+            if (Math.random() < 0.7) g.fx.glowTrail(x, y, o.trail);
+          } else if (o.arc && !o.noSmoke && Math.random() < 0.5) g.fx.trail.explode(1, x, y);
           break;
         }
         case 'icicle': {
@@ -495,10 +510,10 @@
           break;
         }
         case 'puddle': {
-          if (!o.sprite) o.sprite = g.add.image(o.x, o.y, 'fx_puddle').setDepth(985).setRotation(o.rot).setTint(0xff6fa0);
+          if (!o.sprite) o.sprite = g.add.image(o.x, o.y, 'fx_puddle').setDepth(985).setRotation(o.rot).setTint(o.tint || 0xff6fa0);
           const k = Math.min(1, (o.max - o.life) * 5, o.life);
           o.sprite.setScale((k * o.r * 2.2) / 96 / S, (k * o.r * 1.5) / 96 / S).setAlpha(0.85 * k);
-          if (Math.random() < dt * 4) g.fx.goo.explode(1, o.x + U.rand(-o.r, o.r) * 0.7, o.y + U.rand(-o.r, o.r) * 0.4);
+          if (Math.random() < dt * 4) (o.fx ? g.fx[o.fx] : g.fx.goo).explode(1, o.x + U.rand(-o.r, o.r) * 0.7, o.y + U.rand(-o.r, o.r) * 0.4);
           break;
         }
         case 'tentacle': {
@@ -518,6 +533,9 @@
           o.sprite.setPosition(o.x, o.y - Math.abs(Math.sin(o.ph)) * 5 - 6).setFlipX(Math.cos(a) > 0).setDepth(1000 + o.y);
           break;
         }
+        default:
+          // objects added by the newer towers draw themselves
+          if (RENDER[o.kind]) RENDER[o.kind](g, o, dt, time);
       }
     }
   }
@@ -559,5 +577,5 @@
     return extra;
   }
 
-  MT.Giants = { update, omegaUpdate, step, render, renderTower, cleanup, roundEnd, ULT, ELEMENT };
+  MT.Giants = { update, omegaUpdate, step, render, renderTower, cleanup, roundEnd, ULT, ELEMENT, STEP, RENDER, spawn, every, retry, near, strongest, leader, addTrap, enemiesOnLine };
 })();

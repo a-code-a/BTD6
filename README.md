@@ -5,7 +5,7 @@
 purple minions.
 
 Every graphic in the game is drawn procedurally in code with the Canvas 2D API: the minions, Gru,
-the purple mutants, the villains, all ten maps, the menus, projectiles, effects, icons and UI. The game
+the purple mutants, the villains, all fourteen maps, the menus, projectiles, effects, icons and UI. The game
 uses no image files. Sound effects, the minion voices and all ten songs are synthesized live with the
 Web Audio API.
 
@@ -46,22 +46,62 @@ Phaser and the fonts (Luckiest Guy and Fredoka) are vendored in `lib/` and `font
 10. The panel in the top-left corner previews the **next round** (click it to fold it away), so you
     can get Camo detection or anti-air ready in time. Hover an icon for details.
 11. After a game (or any time from the pause menu, **STATS**) you get a report: rounds, time, pops,
-    lives lost, and a table of your towers with pops, damage dealt, cost and bananas earned, plus the MVP.
+    lives lost, the Gru Coins you earned, and a table of your towers with pops, damage dealt, cost and
+    bananas earned, plus the MVP.
+12. **Saved games:** a classic game is saved after every round. **CONTINUE** in the main menu picks up
+    the newest one, and the difficulty picker shows a CONTINUE button for every saved map + difficulty.
+    Leaving in the middle of a round takes you back to the start of that round. A won or lost game is
+    removed (FREEPLAY saves it again after its first round).
+13. **Targeting:** most towers cycle First, Last, Close and Strong. Some have their own modes:
+    - Laser Sniper: also **Camo** (Camo mutants first) and **Giants** (biggest giant first).
+    - Minion Pilot: flight patterns **Circle**, **Figure 8**, **Wide** and **Hunt** (the whole patrol
+      follows the leading mutant across the map).
+    - Catapult Minion: also **Spot**: click the map and every boulder lands there, like a mortar.
+    - Nail Minion: **Spread**, **Close** (near the tower) and **Far** (far end of the range); Smart
+      Spikes add **Smart** (right in front of the leading mutant).
+14. **Powers** (button top right, hotkey `P`): one-use items you buy with Gru Coins, see below.
 
 ### Game modes
 
-- **Classic**: 10 maps × 3 difficulties = 30 medals.
-- **Boss Battles** (main menu): fight one of three villains in their own arena. You start with a big
+- **Classic**: 14 maps × 3 difficulties = 42 medals.
+- **Boss Battles** (main menu): fight one of five villains in their own arena. You start with a big
   budget, then summon the boss with PLAY. Escort waves keep coming every few seconds (each pays out like a
   round) until you defeat the boss, or it reaches the end of the track. Each boss has three phases and its
   own attacks against your towers. **Normal** and **Elite** difficulty; your best time is saved.
-- **Sandbox**: unlimited bananas and lives, no medals. The sandbox panel lets you play any round, send
-  any mutant (also Camo / Fortified and the bosses), clear the map, reset ability cooldowns and max out
-  your hero. Perfect for testing fusion, Ultimate and Omega combos.
+- **Boss Rush**: all five villains one after another in Villain-Con City, with bonus bananas after
+  each one. Normal and Elite, best time saved.
+- **Sandbox**: unlimited bananas, lives and powers, no medals, coins or achievements. The sandbox panel
+  lets you play any round, send any mutant (also Camo / Fortified / Regrow and the bosses), clear the
+  map, reset ability cooldowns and max out your hero. Perfect for testing fusion, Ultimate and Omega combos.
 
-The main menu also has a **Heroes** gallery (level perks and abilities), the **Almanac** (every tower,
-upgrade path, fusion, anti-air source and mutant) and **Settings** (music / sound volume, screen shake,
-auto-start, reset progress).
+### Gru's Lab: Gru Coins, research, powers and achievements
+
+Every game pays **Gru Coins**: 2 / 3 / 4 per round survived on Easy / Medium / Hard (4 in freeplay),
+40 / 70 / 110 for a win (double the first time you win a medal), 1-2 per Boss Battle wave, 60 / 120 for
+a beaten villain (250 / 500 for the Boss Rush, also double the first time), plus the reward of every
+achievement. New players (and existing saves) start with 200 coins, plus 30 for every medal and 50 for
+every beaten boss tier that was already won. Using the **+$** cheat switches coins and achievements
+off for that game.
+
+Spend them in **GRU'S LAB** (main menu):
+
+- **Research**: 14 permanent upgrades with 1-3 levels each (36 in total): starting bananas, round
+  bonus, farm value, sell price, cheaper towers, attack speed, range, +1 pierce, damage against giants,
+  extra lives, a life back every round, heroes arriving at a higher level, more hero XP, shorter cooldowns.
+- **Powers**: Banana Peels (pile on the track, 40 pierce), Camo Sprinkler (washes the Camo off the next
+  300 mutants), Freeze Bomb, Cash Drop ($1,000), Minion Boost (every tower 2x faster for 15s) and Healthy
+  Bananas (+25 lives). Buy 1, or 5 for the price of 4. Traps on the track stay until they are used up
+  (and are part of the saved game).
+- **Heroes**: Dru (200), Agnes (300) and El Macho (400) are unlocked with coins in HEROES or right in
+  the hero picker.
+
+**TROPHIES** (main menu) lists 32 achievements with their progress: pop counts, medals, fusions, hero
+stars, boss wins, freeplay rounds, Flawless / Minimalist / no-hero wins, farm income, powers, research,
+heroes and more. Each pays Gru Coins when it pops up.
+
+The main menu also has a **Heroes** gallery (level perks, abilities, unlocking), the **Almanac** (every
+tower, upgrade path, fusion, anti-air source and mutant) and **Settings** (music / sound volume, screen
+shake, auto-start, reset progress).
 
 Every tower has a signature mechanic (★ in its panel, full text on hover), towers turn to face what they
 shoot at, and screen shake is gentle by default (ON, LOW or OFF in the pause menu). The game renders at
@@ -71,16 +111,17 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 
 | Key | Action |
 | --- | --- |
-| `Q W E R T Y A S D G J U I O` | Select a tower to place |
+| `Q W E R T Y A S D G J Z X C V B U I O` | Select a tower to place |
 | `H` | Place your hero |
 | `Space` | Start round / toggle 3x speed |
 | `,` `.` `/` | Buy upgrade on path 1 / 2 / 3 of the selected tower |
 | `F` | Super Fusion for the selected tower |
 | `M` | Move the selected tower |
-| `Tab` | Cycle targeting (First, Last, Close, Strong) |
+| `Tab` | Cycle the targeting mode of the selected tower |
+| `P` | Open / close the powers panel |
 | `Backspace` / `Delete` | Sell selected tower |
 | `1` – `9` | Use the abilities in the ability bar |
-| `Esc` | Cancel placement, deselect, or pause |
+| `Esc` | Cancel placement, spot picking or a power, deselect, or pause |
 | Hold `Shift` while placing | Place several of the same tower |
 
 ## Towers
@@ -98,6 +139,11 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 | Rock Star Minion | Rhythm: every 4th note is a power chord | Heavy Metal → Rock God, Minion Band buff, Disco Ball stuns, Papoy Song ability |
 | Nail Minion | Nail traps on the track, hit Camo too | Spike Mines, Smart Spikes, Banana Peels, Spike Storm ability |
 | Submarine Minion | Water only, homing torpedoes, sonar strips Camo | Ballistic Missile, Torpedo Barrage, Nuclear Launch & Kraken abilities |
+| Ninja Minion | Sees Camo from the start, seeking shurikens | Banana-jitsu, Smoke Puff, Flash Bomb, Caltrops, Shadow Strike ability |
+| Catapult Minion | Siege: boulders crush whole groups, armor too (no anti-air) | Watermelon Bombs, Iron Wrecking Ball, Greek Fire, Meteor Shower ability |
+| Alchemist Minion | Acid splash that keeps eating mutants | Acid Pools, Berserker Brew buffs, Lead to Gold, Golden Touch ability |
+| Fireman Minion | Water jet pushes mutants back | Water Cannon, Tsunami Cannon, Bee-Do Siren, Flood |
+| Vampire Minion | Life drain: bats heal lives | Bat Colony, Count Dracula, Fear, Creature of Darkness, Blood Moon ability |
 | Banana Farm | Income | Plantations, Golden Bananas, Banana Bank, auto-collect |
 | Gru's Lab | Support buffs | Range/speed/pierce buffs, camo & armor detection, discounts, Lab Turret |
 | Super Minion | Momentum: fires up to 2x faster the longer it shoots | Laser → Plasma → Sun Minion, Robo Minion, Dark Legend |
@@ -130,6 +176,11 @@ flashes when an ability is ready again.
 | Nail Minions | Nailinator | Iron Rain |
 | Submarine Minions | Leviathan | Leviathan Strike |
 | Super Minions | Banana Galaxy God | Supernova |
+| Ninja Minions | Shadow Shogun | Thousand Cuts |
+| Catapult Minions | Royal Trebuchet | Meteor Storm |
+| Alchemist Minions | Grand Alchemist | Potion Rain |
+| Fireman Minions | Bee-Do Brigade | Mega Siren |
+| Vampire Minions | Count Minionula | Eternal Night |
 
 ### Ultimate forms
 
@@ -149,6 +200,11 @@ flashes when an ability is ready again.
 | Banana Republics | Banana Planet | Orbiting Banana Moons + 3% interest per round |
 | Doomsday Labs | Nefario's Moon Base | Clone Troopers charging down the track |
 | Banana Galaxy Gods | Banana Multiverse | Portal Strikes anywhere on the map |
+| Shadow Shoguns | Shadow Dojo | Shuriken Storm rolling back down the track |
+| Royal Trebuchets | Banana Castle | Boulder Barrage of 6 flaming boulders |
+| Grand Alchemists | Great Cauldron | Acid Geysers under the mutants |
+| Bee-Do Brigades | Bee-Do HQ | Flood Waves that wash everything back |
+| Count Minionulas | Dracula's Castle | Bat Cloud that bites and heals you |
 
 ### Heroes
 
@@ -159,6 +215,9 @@ flashes when an ability is ready again.
 | **Dr. Nefario** | Goo bombs that splash and slow | Fart Gun, Antidote Serum |
 | **Kevin** | Banana blaster, buffs nearby towers | Minion Stampede, GIANT KEVIN |
 | **Vector** | Sticky squid launcher | Piranha Frenzy, Pyramid Heist |
+| **Dru** (200 coins) | Economy: golden coins, bananas every round, +15-25% bananas per pop and cheaper towers nearby | Family Fortune, Golden Supercar |
+| **Agnes** (300 coins) | Support: homing rainbow stars, range / speed / pierce / Camo buffs, heals lives every round | It's So Fluffy!, Unicorn Parade |
+| **El Macho** (400 coins) | Tank: short-range punches that hit crowds, slows mutants nearby, immune to boss attacks from level 7 | Pollito!, Shark Rocket |
 
 ## Enemies
 
@@ -194,6 +253,14 @@ Tactical mutants that need a plan:
   pings drag it back to the surface, dazed.
 - **Shield Carrier**: projects a bubble that soaks up every hit on the mutants around it. The bubble
   doesn't protect the carrier itself, so pop it first (Snipers, "Strong" targeting).
+- **Rubber Mutant**: energy (lasers, plasma, lightning) bounces off.
+- **Magma Mutant**: fire and ice do nothing, and it can never be frozen.
+- **Medic Mutant**: every few seconds it heals the giants, Barrel Brutes and shield bubbles around it.
+- **Rage Mutant**: every hit makes it faster, up to 2.6x speed, so a few big hits beat many small ones.
+- **Regrow** (any non-giant mutant, shown by a green heart): left alone for 2.5 seconds it grows back
+  into the mutant it popped out of, but never past the one it started as. Steady damage stops it.
+
+Super towers (every fusion tier) break through the immunities.
 
 ## Boss Battles
 
@@ -202,8 +269,11 @@ Tactical mutants that need a plan:
 | **Mutant Vector** | Pyramid Desert | Squid launcher inks towers for a few seconds; phase 2: double squids and a shield bubble; phase 3: rocket-boot dashes |
 | **Balthazar Bratt** | Banana Beach | Bubblegum bombs trap clusters of towers; phase 2: gum shield and keytar solos that stun nearby towers; phase 3: faster, calls jetpacks and brutes |
 | **Scarlet Overkill** | Villain-Con City | Flies (anti-air only!); lava-lamp bombs melt towers; calls Gliders, Shield Carriers and Moles; phase 3: rocket-dress dashes |
+| **Mutant El Macho** | Volcano Lair | Throws Pollito, who pecks towers out; phase 2: shield and ground slams that stun towers nearby; phase 3: rage, calls Mega Mutants and brutes |
+| **Maxime Le Mal** | Minion Factory | Roach Ray turns towers into cockroaches; phase 2: shield and roach eggs that hit groups; phase 3: dashes, calls Rubber and Magma Mutants (also an enemy hero in freeplay) |
+| **Boss Rush** | Villain-Con City | All five in a row, each at 75% health, bonus bananas after every villain |
 
-All three summon escorts, and stunning or freezing a boss slows its attacks down. A tower that just
+All of them summon escorts, and stunning or freezing a boss slows its attacks down. A tower that just
 recovered from an attack is immune for a few seconds, so it can't be locked down forever.
 
 ## Maps
@@ -212,6 +282,13 @@ recovered from an attack is immune for a few seconds, so it can't be locked down
 - **Banana Jungle**, **The Moon** and **Pyramid Desert** (Intermediate)
 - **Gru's Secret Lab** (two lanes), **Arctic Base** (two lanes) and **Villain-Con City** (Advanced)
 - **Volcano Lair** and **Minion Factory** (Expert)
+
+Interactive maps, with things to click on:
+
+- **Super Silly Fun Land** (Beginner): a rollercoaster that runs mutants over
+- **Vector's Fortress** (Intermediate): a drawbridge lever that switches the route, and a shark to feed
+- **AVL Undersea Base** (Advanced): all water, a recall tube and bubble vents
+- **Bank of Evil** (Expert): laser security gates and a loan desk
 
 ## Music
 
@@ -236,16 +313,18 @@ is muffled while the game is paused.
 index.html            entry page (loads scripts in order)
 lib/phaser.min.js     Phaser 3.90 (MIT)
 fonts/                Luckiest Guy (Apache 2.0), Fredoka (OFL)
-src/core/             config, save data, Web Audio synth, the songs
+src/core/             config, save data (progress, meta progression, saved games), Web Audio synth, the songs
 src/art/              procedural painters: minions, towers, heroes, enemies, villains, maps, menu, effects/icons
 src/data/             towers & upgrades & fusions, heroes, enemies, rounds, maps
 src/game/             path, entities (enemy/projectile/tower), effects layer, abilities, giants, bosses,
-                      boss battles, fusion
+                      boss battles, fusion, progress (coins, research, achievements), powers, saved games
 src/ui/               widgets (buttons/sliders/panels) and the in-game HUD
-src/scenes/           boot, main menu, map select, heroes, almanac, settings, boss select, game
+src/scenes/           boot, main menu, map select, heroes, almanac, settings, boss select, Gru's Lab,
+                      achievements, game
 ```
 
-Progress (medals, boss best times, stats, settings) is stored in the browser's `localStorage`.
+Progress (medals, boss best times, stats, settings, Gru Coins, research, powers, unlocked heroes,
+achievements) and the saved games are stored in the browser's `localStorage`.
 
 ---
 

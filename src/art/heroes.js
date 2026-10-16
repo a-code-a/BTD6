@@ -730,6 +730,9 @@
     vector,
   };
   MT.HeroArt.paint = paintHero;
+  // shared with art/heroes2.js (Dru, Agnes, El Macho)
+  MT.HeroArt.LOOK = LOOK;
+  MT.HeroArt.parts = { face, eye, boots, SKIN };
   // top of the head relative to the sprite origin (y = 64 in the texture)
   MT.HeroArt.headY = (id) => (LOOK[id] ? LOOK[id].head[1] : 10) - 64;
 

@@ -1,13 +1,15 @@
 // Round composition. Each group: [type, count, spacing(s), startDelay(s), flags]
-// flags: 'c' = camo, 'f' = fortified. Codes: p=pip g=grumble c=chomper
+// flags: 'c' = camo, 'f' = fortified, 'r' = regrow. Codes: p=pip g=grumble c=chomper
 // d=dasher z=zoomer r=rascal j=jailbird h=hulk b=brute t=tincan M=mega T=titan Z=zeppelin
 // P=phantom X=mecha G=goo E=El Macho (final boss)
 // a=glider (flying) J=jetpack (flying) m=mole (burrows) s=shield carrier
-// enemy heroes (the Boss Battle villains): V=Vector K=Bratt S=Scarlet (flying)
+// u=rubber (energy immune) l=magma (fire + ice immune) N=medic (heals) R=rage (speeds up)
+// enemy heroes (the Boss Battle villains): V=Vector K=Bratt S=Scarlet (flying) L=Maxime
 (function () {
-  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin', P: 'phantom', X: 'mecha', G: 'goo', E: 'macho', a: 'glider', J: 'jetpack', m: 'mole', s: 'shield', V: 'vector', K: 'bratt', S: 'scarlet' };
+  const CODES = { p: 'pip', g: 'grumble', c: 'chomper', d: 'dasher', z: 'zoomer', r: 'rascal', j: 'jailbird', h: 'hulk', b: 'brute', t: 'tincan', M: 'mega', T: 'titan', Z: 'zeppelin', P: 'phantom', X: 'mecha', G: 'goo', E: 'macho', a: 'glider', J: 'jetpack', m: 'mole', s: 'shield', V: 'vector', K: 'bratt', S: 'scarlet', L: 'maxime', u: 'rubber', l: 'magma', N: 'healer', R: 'rage' };
 
   // compact notation: "c30@.55+4cf" => 30 chompers, 0.55s apart, start at 4s, camo+fortified
+  // (an "r" at the end makes them regrow)
   const R = [
     null,
     'p20@.75',
@@ -26,67 +28,67 @@
     'p49@.25 g15@.4+6 c10@.5+10 d9@.6+14',
     'p20@.4 c15@.5+4 d12@.6+9 z5@1+15 a6@.9+17',
     'c20@.4 d8@.6+6',
-    'd12@.5',
+    'd12@.5 g10@.4+6r',
     'c80@.18 a12@.5+8',
     'c10@.5 d4@.6+3 z7@.6+6 d5@.5+11',
     'r6@1.4',
     'd40@.3 z14@.5+6 m4@1.4+10',
     'r16@.7',
     'r7@.9 r7@.9+3 z10@.5+6',
-    'c20@.4 c2@1+9c',
+    'c20@.4 c2@1+9c z6@.6+4r',
     'd31@.35 z10@.6+6',
     'j23@.8 z4@1+10 m8@.9+6',
     'p100@.1 g60@.12+3 c45@.15+7 d45@.2+12',
     't6@1.5 s2@3+3',
-    'd65@.2 z20@.3+8',
+    'd65@.2 z20@.3+8 u6@.8+10',
     't9@1 a20@.3+4',
     'j8@1 r10@.8+4 J3@2+8',
-    'r25@.4 r28@.4+6 z8@.6+12',
-    'd20@.4c p13@.4+5 m10@.6+8',
+    'r25@.4 r28@.4+6 z8@.6+12 r8@.6+6r',
+    'd20@.4c p13@.4+5 m10@.6+8 u10@.6+3',
     'd160@.08 j6@1+10',
     'z35@.25 r30@.35+4 h5@1.5+12 s4@2+6',
-    'z140@.1',
+    'z140@.1 l4@1.2+4',
     'r25@.35 j25@.4+6 r15@.5+12c J6@1.2+10',
-    'h17@.6 b10@.9+6 t4@1+14',
-    'r10@.5 j10@.5+3 h20@.5+7 b18@.6+13 s6@1.2+8 m12@.5+4',
+    'h17@.6 b10@.9+6 t4@1+14 N3@2+5',
+    'r10@.5 j10@.5+3 h20@.5+7 b18@.6+13 s6@1.2+8 m12@.5+4 R3@2+9',
     'M1@1 b4@1.5+3',
-    'r60@.2 b7@1+8',
+    'r60@.2r b7@1+8 l6@.8+4',
     'h10@.6 M2@6+4 J10@.8+6',
-    'h28@.4 b15@.6+8',
+    'h28@.4 b15@.6+8 R6@1+5',
     'j50@.2 b10@.8+6 s8@1+10',
     'z120@.08 b20@.6+8 t10@.8+14c V1@1+4',
     'M1@1 b16@.6+3c m20@.4+6',
-    'z70@.1c b12@.8+6',
+    'z70@.1c b12@.8+6 u30@.15+3c',
     'z120@.08 h50@.2+8 J16@.6+4 a40@.15+8',
-    'c343@.03 h41@.2+6 b29@.4+12',
+    'c343@.03 h41@.2+6 b29@.4+12 N6@1.5+8',
     'b30@.3 M10@2+6 T1@1+20',
     'h15@.4c b10@.6+4f',
     'M10@2 b25@.4+5 s12@.8+4f S1@1+6',
-    'z80@.08c M3@3+5',
+    'z80@.08c M3@3+5 l20@.4+3r',
     'b35@.3 M6@2.5+6',
-    'M10@1.8 b45@.3+4 J24@.4+6 T2@5+12',
+    'M10@1.8 b45@.3+4 J24@.4+6 T2@5+12 R12@.6+5f',
     'h40@.2c M8@2+4 P1@2+12',
     'b40@.3 M12@1.6+6 P1@1+14',
-    'b50@.25f M13@1.6+6 m30@.3+8f',
+    'b50@.25f M13@1.6+6 m30@.3+8f h40@.2+2r',
     'b80@.15 M6@2+8 T2@4+10',
     'T2@3 M8@1.5+6 X1@1+14 K1@1+20',
     'b25@.3c M16@1.1+4',
     'h120@.1 M18@1+6 s20@.5+6 J20@.5+10',
-    'b120@.1 t75@.1+6 X1@1+12',
+    'b120@.1 t75@.1+6 X1@1+12 N10@.9+6f',
     'M9@1.5f b30@.3+3 X1@1+10',
     'T3@4 M20@1+6',
-    'M22@1 b30@.3+6f G1@1+12 J30@.3+4f V1@1+16',
+    'M22@1 b30@.3+6f G1@1+12 J30@.3+4f V1@1+16 u60@.1+4 l40@.15+8',
     'b50@.2f M15@1+6',
     'T4@3 M10@1.2+6 P2@4+12',
     't150@.06cf b40@.2+10 T3@3+12f',
-    'h200@.04 M12@1+8 X2@5+10 s30@.3+8f',
+    'h200@.04 M12@1+8 X2@5+10 s30@.3+8f R30@.3+6f',
     'T6@2.5 b60@.15+4',
     'M40@.6 G2@5+12 S1@1+8 K1@1+20',
     'b100@.1cf T4@3+8',
-    'T8@2 M20@.8+6 P4@3+10 m60@.15+4f J30@.3+8f',
+    'T8@2 M20@.8+6 P4@3+10 m60@.15+4f J30@.3+8f N20@.5+4f',
     'T10@1.6 M30@.6+4 Z1@1+20',
     'b200@.06c T6@2+10 X3@4+14',
-    'T12@1.4 M30@.5+4 G2@6+12',
+    'T12@1.4 M30@.5+4 G2@6+12 l60@.1+6fr',
     'Z1@1 T6@2+8 P4@2+10 a120@.05+2 J40@.25+8f V1@1+14',
     'T20@1 M40@.4+6f X2@4+10 G2@6+14',
     'Z2@8 T10@1.5+10 E1@1+22',
@@ -94,9 +96,9 @@
 
   function parse(str) {
     return str.split(/\s+/).filter(Boolean).map((tok) => {
-      const m = tok.match(/^([a-zA-Z])(\d+)@([\d.]+)(?:\+([\d.]+))?([cf]*)$/);
+      const m = tok.match(/^([a-zA-Z])(\d+)@([\d.]+)(?:\+([\d.]+))?([cfr]*)$/);
       if (!m) throw new Error('bad round token ' + tok);
-      return { type: CODES[m[1]], count: +m[2], spacing: +m[3], delay: +(m[4] || 0), camo: m[5].includes('c'), fort: m[5].includes('f') };
+      return { type: CODES[m[1]], count: +m[2], spacing: +m[3], delay: +(m[4] || 0), camo: m[5].includes('c'), fort: m[5].includes('f'), regrow: m[5].includes('r') };
     });
   }
 
@@ -118,18 +120,22 @@
     groups.push({ type: 'jetpack', count: 20 + k * 3, spacing: 0.2, delay: 4, camo: k % 5 === 0, fort: k > 4 });
     groups.push({ type: 'shield', count: 10 + k * 2, spacing: 0.3, delay: 1, camo: false, fort: k > 2 });
     if (k % 2 === 1) groups.push({ type: 'mole', count: 40 + k * 4, spacing: 0.1, delay: 2, camo: k % 3 === 1, fort: true });
+    // immune, healing and raging mutants, some of them regrowing
+    groups.push({ type: k % 2 ? 'rubber' : 'magma', count: 50 + k * 5, spacing: 0.06, delay: 3, camo: k % 4 === 2, fort: k > 5, regrow: k % 3 === 2 });
+    groups.push({ type: 'rage', count: 12 + k * 2, spacing: 0.25, delay: 5, camo: false, fort: true });
+    if (k % 2 === 0) groups.push({ type: 'healer', count: 8 + k, spacing: 0.5, delay: 7, camo: false, fort: k > 3 });
     if (k % 10 === 0) groups.push({ type: 'macho', count: Math.max(1, Math.floor(k / 10)), spacing: 18, delay: 16, camo: false, fort: k >= 30 });
     // the enemy heroes keep coming back, more of them the longer you survive
     if (k % 3 === 0) {
       const n = 1 + Math.floor(k / 15);
-      for (let i = 0; i < n; i++) groups.push({ type: VILLAINS[(k / 3 + i) % 3], count: 1, spacing: 1, delay: 6 + i * 8, camo: false, fort: false });
+      for (let i = 0; i < n; i++) groups.push({ type: VILLAINS[(k / 3 + i) % VILLAINS.length], count: 1, spacing: 1, delay: 6 + i * 8, camo: false, fort: false });
     }
     return groups;
   }
 
   // enemy heroes: the Boss Battle villains also invade classic games
-  const VILLAINS = ['vector', 'bratt', 'scarlet'];
-  const HERO_TIP = { vector: 'His squids ink your towers!', bratt: 'His gum bombs trap your towers!', scarlet: 'She flies: only anti-air can hurt her!' };
+  const VILLAINS = ['vector', 'bratt', 'scarlet', 'maxime'];
+  const HERO_TIP = { vector: 'His squids ink your towers!', bratt: 'His gum bombs trap your towers!', scarlet: 'She flies: only anti-air can hurt her!', maxime: 'His Roach Ray turns towers into cockroaches!' };
 
   MT.Rounds = {
     get(n) {
@@ -148,7 +154,7 @@
     flatten(groups) {
       const list = [];
       groups.forEach((g) => {
-        for (let i = 0; i < g.count; i++) list.push({ t: g.delay + i * g.spacing, type: g.type, camo: g.camo, fort: g.fort, hpMul: g.hpMul, speedMul: g.speedMul });
+        for (let i = 0; i < g.count; i++) list.push({ t: g.delay + i * g.spacing, type: g.type, camo: g.camo, fort: g.fort, regrow: g.regrow, hpMul: g.hpMul, speedMul: g.speedMul });
       });
       list.sort((a, b) => a.t - b.t);
       return list;
@@ -203,6 +209,11 @@
       if (types.includes('mole') && n <= 26) return 'MOLE MUTANTS dig under the track! Sonar pings drag them up.';
       if (types.includes('shield') && n <= 35) return 'SHIELD CARRIERS protect their friends. Pop the carrier first!';
       if (types.includes('jetpack') && n <= 37) return 'JETPACK MUTANTS! Big flyers full of Gliders.';
+      if (types.includes('rubber') && n <= 33) return 'RUBBER MUTANTS! Lasers and lightning bounce right off.';
+      if (types.includes('magma') && n <= 41) return 'MAGMA MUTANTS! Fire and ice do nothing to them.';
+      if (types.includes('healer') && n <= 49) return 'MEDIC MUTANTS heal the giants and brutes around them. Pop them first!';
+      if (types.includes('rage') && n <= 43) return 'RAGE MUTANTS get faster with every hit. Hit them hard!';
+      if (g.some((x) => x.regrow) && n <= 24) return 'REGROW MUTANTS grow back if you leave them alone!';
       if (g.some((x) => x.camo) && n <= 40) return 'CAMO MUTANTS! You need detection.';
       if (types.includes('tincan') && n <= 30) return 'ARMORED TIN CANS! Bananas bounce off.';
       if (types.includes('brute') && n <= 38) return 'BARREL BRUTES!';

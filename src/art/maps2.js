@@ -193,20 +193,35 @@
         ctx.stroke();
       }
     },
-    // trodden snow trail with sled tracks
+    // a trench dug through the snow: packed blue-grey ice between two snowbanks,
+    // with sled tracks (dark enough to read clearly against the white ground)
     path(ctx, paths, pw, rnd) {
-      shadowPass(ctx, paths, pw + 14, 'rgba(70,100,150,0.18)', 3);
-      shadowPass(ctx, paths, pw + 6, '#aabfd2');
-      shadowPass(ctx, paths, pw, '#e1ebf3');
-      shadowPass(ctx, paths, pw * 0.5, 'rgba(255,255,255,0.55)');
+      shadowPass(ctx, paths, pw + 20, 'rgba(40,70,120,0.22)', 4);
+      // lumpy snowbanks piled up along both edges (under the trench, so where
+      // two trails meet the banks don't cover the other trail)
       paths.forEach((p) => {
-        [-1, 1].forEach((s) => strokePoly(ctx, offsetPts(p.pts, s * pw * 0.22), 2.4, 'rgba(110,140,175,0.45)'));
+        [-1, 1].forEach((s) => {
+          walk(offsetPts(p.pts, s * (pw / 2 + 6)), 9, (x, y) => {
+            const r = 5 + rnd() * 3;
+            D.circlePath(ctx, x, y + 1.5, r);
+            D.fs(ctx, 'rgba(90,120,165,0.35)');
+            D.circlePath(ctx, x, y, r);
+            D.fs(ctx, '#ffffff');
+          });
+        });
+      });
+      shadowPass(ctx, paths, pw + 10, '#7f9ab5');
+      shadowPass(ctx, paths, pw + 4, '#a9bfd4');
+      shadowPass(ctx, paths, pw, '#c3d4e4');
+      shadowPass(ctx, paths, pw * 0.55, 'rgba(232,240,248,0.6)');
+      paths.forEach((p) => {
+        [-1, 1].forEach((s) => strokePoly(ctx, offsetPts(p.pts, s * pw * 0.22), 3, 'rgba(70,100,140,0.55)'));
         let side = 1;
         walk(p.pts, 11, (x, y, a) => {
           side = -side;
           const o = side * 5 + (rnd() - 0.5) * 3;
           D.ellipsePath(ctx, x + Math.cos(a + Math.PI / 2) * o, y + Math.sin(a + Math.PI / 2) * o, 3, 1.8, a);
-          D.fs(ctx, 'rgba(130,160,200,0.4)');
+          D.fs(ctx, 'rgba(80,110,155,0.45)');
         });
       });
     },

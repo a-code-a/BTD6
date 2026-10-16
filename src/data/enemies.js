@@ -24,10 +24,17 @@
     jetpack: { name: 'Jetpack Mutant', hp: 10, speed: 1.4, children: ['glider', 'glider', 'glider'], radius: 16, flying: true, fortifiable: true, desc: 'Rockets straight across the map. Pops into three Gliders. Needs anti-air.' },
     mole: { name: 'Mole Mutant', hp: 6, speed: 1.5, children: ['chomper', 'chomper'], radius: 14, fortifiable: true, burrow: { up: 150, down: 210, speed: 1.7 }, desc: 'Digs under the track for long stretches. Nothing can hit it underground, but sonar pings drag it back up.' },
     shield: { name: 'Shield Carrier', hp: 14, speed: 1.1, children: ['rascal', 'rascal'], radius: 16, fortifiable: true, shield: { r: 88, hp: 30, regen: 5, cooldown: 4 }, desc: 'Projects a bubble that soaks up every hit on the mutants around it. Pop the carrier first!' },
+    // ---- mutants that ignore some kinds of damage, and ones that help the others
+    rubber: { name: 'Rubber Mutant', hp: 1, speed: 2.4, children: ['zoomer', 'zoomer'], radius: 13, immune: ['energy'], desc: 'Wrapped in thick rubber: lasers, plasma and lightning bounce right off. Bananas, bombs and gas still work.' },
+    magma: { name: 'Magma Mutant', hp: 3, speed: 1.6, children: ['rascal', 'rascal'], radius: 15, fortifiable: true, immune: ['fire', 'cold'], desc: 'Glowing hot: fire and ice do nothing and it can never be frozen. Use bananas, lasers or explosives.' },
+    healer: { name: 'Medic Mutant', hp: 10, speed: 1.15, children: ['rascal', 'rascal'], radius: 15, fortifiable: true, heal: { every: 3, r: 95, pct: 0.12, boss: 0.025 }, desc: 'Every few seconds it heals the mutants around it: giants, Barrel Brutes and shields get their health back. Pop the medic first!' },
+    rage: { name: 'Rage Mutant', hp: 12, speed: 1.0, children: ['jailbird', 'jailbird'], radius: 16, fortifiable: true, rage: { step: 0.12, max: 2.6 }, desc: 'Every hit makes it angrier and faster, up to 2.6x speed. A few big hits beat lots of small ones.' },
     // ---- boss battle villains (Boss Battles, and enemy heroes in late classic rounds and freeplay)
     vector: { name: 'Mutant Vector', hp: 5500, speed: 0.14, children: [], radius: 40, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'vector', desc: 'Vector took a sip of PX-41. Fires squids that ink your towers, hides behind shields and dashes on rocket boots.' },
     bratt: { name: 'Balthazar Bratt', hp: 7000, speed: 0.13, children: [], radius: 42, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'bratt', desc: 'The 80s child star turned villain. Bubblegum bombs trap your towers, and he calls in moles and jetpacks.' },
     scarlet: { name: 'Scarlet Overkill', hp: 4500, speed: 0.15, children: [], radius: 38, boss: true, bossFight: true, flying: true, damageStates: 5, phases: [0.66, 0.33], ai: 'scarlet', desc: 'Flies in her rocket dress, so only anti-air towers can hurt her. Lava-lamp bombs melt your towers.' },
+    elmacho: { name: 'Mutant El Macho', hp: 9000, speed: 0.12, children: [], radius: 60, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'elmacho', desc: 'The final boss in his own volcano. His chicken Pollito pecks your towers, his ground slams stun them, and he only gets angrier.' },
+    maxime: { name: 'Maxime Le Mal', hp: 6500, speed: 0.15, children: [], radius: 40, boss: true, bossFight: true, damageStates: 5, phases: [0.66, 0.33], ai: 'maxime', desc: 'The cockroach villain. His Roach Ray turns your towers into cockroaches for a while, and roach swarms follow him everywhere.' },
   };
 
   // Red-bloon-equivalent: total hits needed to clear it completely
@@ -48,6 +55,11 @@
 
   MT.ENEMIES = E;
   MT.enemyRbe = rbe;
-  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'glider', 'jetpack', 'mole', 'shield', 'mega', 'titan', 'zeppelin', 'phantom', 'mecha', 'goo', 'macho'];
-  MT.BOSS_ORDER = ['vector', 'bratt', 'scarlet'];
+  MT.ENEMY_ORDER = ['pip', 'grumble', 'chomper', 'dasher', 'zoomer', 'rascal', 'jailbird', 'hulk', 'brute', 'tincan', 'glider', 'jetpack', 'mole', 'shield', 'rubber', 'magma', 'healer', 'rage', 'mega', 'titan', 'zeppelin', 'phantom', 'mecha', 'goo', 'macho'];
+  MT.BOSS_ORDER = ['vector', 'bratt', 'scarlet', 'elmacho', 'maxime'];
+
+  // Regrow: a regrow mutant that is left alone for a moment grows back into
+  // the mutant it was popped out of (never past the one it started as)
+  MT.REGROW_TIME = 2.5;
+  MT.canRegrow = (type) => !E[type].boss;
 })();

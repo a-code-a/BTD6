@@ -57,9 +57,18 @@
       setup(this, 'HEROES');
       const cur = MT.Save.settings().hero;
       this.view = MT.HEROES[cur] ? cur : 'gru';
+      this.coins = MT.coinBadge(this, W - 120, 48);
       this.cards = MT.HERO_ORDER.map((id, i) => {
-        const c = gridCard(this, W / 2 + (i - (MT.HERO_ORDER.length - 1) / 2) * 124, 132, 104, MT.TowerArt.heroKey(this, id, 10), () => this.show(id, true), 84);
+        const c = gridCard(this, W / 2 + (i - (MT.HERO_ORDER.length - 1) / 2) * 116, 132, 100, MT.TowerArt.heroKey(this, id, 10), () => this.show(id, true), 80);
         c.id = id;
+        c.lock = this.add.image(34, -34, 'ic_lock').setDisplaySize(24, 24);
+        c.add(c.lock);
+        c.refresh = () => {
+          const locked = !MT.Save.heroUnlocked(id);
+          c.lock.setVisible(locked);
+          c.im.setTint(locked ? 0x6a6a7a : 0xffffff);
+        };
+        c.refresh();
         return c;
       });
       MT.UI.panel(this, 70, 196, 1140, 506, 'denim');
@@ -99,17 +108,43 @@
       p.add(MT.text(this, 250, 236, def.name.toUpperCase(), 34, { title: true, color: def.color }));
       p.add(MT.text(this, 250, 270, def.title, 17, { color: '#e8f1ff' }));
       const selected = MT.Save.settings().hero === id;
-      p.add(new MT.UI.Button(this, 250, 652, 230, 52, {
-        style: selected ? 'gray' : 'green', label: selected ? 'SELECTED' : 'SELECT  ' + money(def.cost), size: 22,
-        onClick: () => {
-          MT.Save.setSetting('hero', id);
-          this.show(id, true);
-        },
-      }));
+      if (!MT.Save.heroUnlocked(id)) {
+        // new heroes are unlocked with Gru Coins
+        const cost = MT.HERO_UNLOCK[id];
+        const ok = MT.Save.coins() >= cost;
+        im.setTint(0x8a8a9a);
+        p.add(MT.text(this, 250, 300, 'LOCKED', 22, { title: true, color: '#ffb36b' }));
+        p.add(new MT.UI.Button(this, 250, 652, 250, 52, {
+          style: ok ? 'orange' : 'gray', icon: 'ic_grucoin', label: `UNLOCK  ${cost}`, size: 21, iconSize: 0.62,
+          onClick: () => {
+            if (!MT.Progress.unlockHero(id)) return;
+            MT.Save.setSetting('hero', id);
+            MT.Audio.play('fusionBoom');
+            this.coins.bump();
+            this.cards.forEach((c) => c.refresh());
+            MT.Ach.check(null);
+            MT.Ach.flush(this, W - 190, 120);
+            this.show(id, true);
+          },
+          onDisabledClick: () => {
+            const t = MT.text(this, 250, 600, `You need ${(cost - MT.Save.coins()).toLocaleString('en-US')} more Gru Coins`, 15, { title: true, color: '#ff8a80' }).setDepth(50);
+            this.tweens.add({ targets: t, alpha: 0, y: 580, delay: 1000, duration: 400, onComplete: () => t.destroy() });
+          },
+        }).setEnabled(ok));
+      } else {
+        p.add(new MT.UI.Button(this, 250, 652, 230, 52, {
+          style: selected ? 'gray' : 'green', label: selected ? 'SELECTED' : 'SELECT  ' + money(def.cost), size: 22,
+          onClick: () => {
+            MT.Save.setSetting('hero', id);
+            this.show(id, true);
+          },
+        }));
+      }
       // ---- middle: level perks
       p.add(MT.text(this, 452, 232, 'LEVEL PERKS', 22, { title: true, ox: 0, color: '#ffd83a' }));
-      p.add(MT.text(this, 452, 258, def.desc, 13, { ox: 0, oy: 0, align: 'left', wrap: 380, color: '#cfe0ff' }));
-      let y = 304;
+      const descT = MT.text(this, 452, 258, def.desc, 13, { ox: 0, oy: 0, align: 'left', wrap: 380, color: '#cfe0ff' });
+      p.add(descT);
+      let y = Math.max(304, 258 + descT.height + 12);
       def.levels.forEach((lv, i) => {
         if (!lv) return;
         const ab = /ability/i.test(lv.desc);
@@ -183,7 +218,8 @@
         });
         this.showTower(MT.TOWER_ORDER[0]);
       } else {
-        this.grid = MT.ENEMY_ORDER.concat(MT.BOSS_ORDER).map((t, i) => {
+        // (the Boss Battle El Macho is the same monster as the final boss)
+        this.grid = MT.ENEMY_ORDER.concat(MT.BOSS_ORDER.filter((b) => b !== 'elmacho')).map((t, i) => {
           const c = gridCard(this, 64 + (i % 5) * 86, 190 + Math.floor(i / 5) * 86, 80, MT.EnemyArt.key(this, t, false, false, 0), () => this.showMutant(t), 64);
           c.id = t;
           return c;
@@ -298,6 +334,10 @@
       if (E.flying) tags.push(['FLYING', 0x29b6f6]);
       if (E.burrow) tags.push(['TUNNELS', 0x8d6e63]);
       if (E.shield) tags.push(['SHIELDS', 0x26c6da]);
+      if (E.immune) tags.push(['IMMUNE: ' + E.immune.map((d) => (d === 'cold' ? 'ICE' : d.toUpperCase())).join(' + '), 0xd84315]);
+      if (E.heal) tags.push(['HEALS OTHERS', 0x43a047]);
+      if (E.rage) tags.push(['RAGES', 0xc2185b]);
+      if (MT.canRegrow(id) && !E.bossFight) tags.push(['CAN REGROW', 0x64dd17]);
       if (E.bossFight) tags.push(['BOSS BATTLE', 0xff5a4a], ['ENEMY HERO', 0xff8a3a]);
       let cx = 740;
       tags.forEach(([s, col]) => {
@@ -311,19 +351,24 @@
         jetpack: 'Tip: flyers cut corners, so put anti-air near the end of their shortcut.',
         mole: 'Tip: Submarine sonar pings drag moles back up, dazed. Place fast towers where they surface.',
         shield: 'Tip: the bubble only protects others. Snipers or "Strong" targeting take out the carrier first.',
+        rubber: 'Tip: Laser Snipers, Tesla and the Super Minion can\'t touch it. Bananas, bombs, gas and nails can. Super towers break through.',
+        magma: 'Tip: Fart flames, fire pots and Freeze Rays do nothing. Bananas, lasers and rockets do. Super towers break through.',
+        healer: 'Tip: one medic keeps a whole group of giants and brutes alive. "Strong" targeting or snipers pick it off.',
+        rage: 'Tip: every hit makes it faster. Slow, heavy hitters (Sniper, Rockets, Catapult) are better than fast weak ones.',
       }[id];
       if (tip) p.add(MT.text(this, 516, 452, tip, 14, { ox: 0, oy: 0, align: 'left', wrap: 700, color: '#ffe28a' }));
       // variants
       if (!E.boss) {
         p.add(MT.text(this, 516, 500, 'VARIANTS', 20, { title: true, ox: 0, color: '#ffd83a' }));
-        [['NORMAL', false, false], ['CAMO', true, false], ['FORTIFIED', false, true]].forEach(([label, camo, fort], k) => {
-          const x = 600 + k * 190;
+        [['NORMAL', false, false], ['CAMO', true, false], ['FORTIFIED', false, true], ['REGROW', false, false, true]].forEach(([label, camo, fort, regrow], k) => {
+          const x = 580 + k * 150;
           const v = this.add.image(x, 590, MT.EnemyArt.key(this, id, camo, fort, 0));
-          MA().fit(v, 90, 90);
+          MA().fit(v, 84, 84);
           p.add(v);
+          if (regrow) p.add(this.add.image(x + 30, 566, 'fx_regrow').setDisplaySize(28, 28));
           p.add(MT.text(this, x, 660, label, 15, { title: true }));
         });
-        p.add(MT.text(this, 1100, 590, 'Camo: only towers\nwith detection see it.\nFortified: double health.', 13, { color: '#cfe0ff' }));
+        p.add(MT.text(this, 1150, 590, 'Camo: needs detection.\nFortified: double health.\nRegrow: grows back\nwhen left alone.', 12, { color: '#cfe0ff' }));
       } else {
         p.add(MT.text(this, 516, 520, 'TIPS', 20, { title: true, ox: 0, color: '#ffd83a' }));
         const tips = {
@@ -337,7 +382,9 @@
           vector: 'Boss battle, and an enemy hero from round 45: his squids ink a tower for a few seconds. Stun or freeze him to slow his attacks down.',
           bratt: 'Boss battle, and an enemy hero from round 60: gum bombs trap whole clusters of towers, so spread out. His keytar stuns towers close to him.',
           scarlet: 'Boss battle, and an enemy hero from round 52: she flies, so only anti-air hurts her. Lava lamps melt towers for a few seconds.',
+          maxime: 'Boss battle, and an enemy hero in freeplay: his Roach Ray turns a tower into a cockroach for a few seconds, and roach eggs hit whole groups. Spread out!',
         };
+        if (id === 'macho') tips.macho += ' He also has his own Boss Battle in the Volcano Lair, where Pollito pecks your towers.';
         p.add(MT.text(this, 516, 552, tips[id] || 'Big, tough and full of smaller mutants.', 16, { ox: 0, oy: 0, align: 'left', wrap: 700, color: '#ffe28a' }));
       }
     }
@@ -369,41 +416,57 @@
     create() {
       setup(this, 'BOSS BATTLES');
       MT.text(this, W / 2, 96, 'Pick a villain, build your defense, then survive the escort waves until the boss goes down!', 16, { color: '#e8f1ff' });
-      MT.BOSS_ORDER.forEach((id, i) => this.card(id, W / 2 + (i - 1) * 404, 412, i));
+      // five villains and the Boss Rush, in a 3 x 2 grid
+      const ids = MT.BOSS_ORDER.concat(['rush']);
+      ids.forEach((id, i) => this.card(id, W / 2 + ((i % 3) - 1) * 410, 252 + Math.floor(i / 3) * 290, i));
       const hero = MT.HEROES[MT.Save.settings().hero] || MT.HEROES.gru;
-      MT.text(this, W / 2, 700, `Your hero: ${hero.name}  (change it in HEROES)`, 14, { color: '#cfe0ff' });
+      MT.text(this, W / 2, 704, `Your hero: ${hero.name}  (change it in HEROES)`, 14, { color: '#cfe0ff' });
     }
     card(id, x, y, i) {
-      const E = MT.ENEMIES[id];
-      const B = MT.BossFight.BOSSES[id];
+      const rush = id === 'rush';
+      const E = rush ? null : MT.ENEMIES[id];
+      const B = rush ? { map: MT.BossFight.RUSH_MAP, color: '#ffd83a', tint: 0xffd83a, tag: `All ${MT.BossFight.RUSH.length} villains, one after another. Bonus bananas after every one!` } : MT.BossFight.BOSSES[id];
       const c = this.add.container(x, y);
-      c.add(MT.UI.panel(this, -188, -280, 376, 560, 'denim'));
-      const glow = this.add.image(0, -120, 'menu_glow').setTint(B.tint).setScale(2.4).setAlpha(0.5);
+      c.add(MT.UI.panel(this, -198, -136, 396, 272, rush ? 'yellow' : 'denim'));
+      // portrait on the left
+      const glow = this.add.image(-112, -10, 'menu_glow').setTint(B.tint).setScale(1.6).setAlpha(0.5);
       this.tweens.add({ targets: glow, alpha: 0.25, duration: 1200, yoyo: true, repeat: -1 });
-      const im = this.add.image(0, -112, MT.EnemyArt.key(this, id, false, false, 0));
-      MA().fit(im, 230, 240);
-      this.tweens.add({ targets: im, y: im.y - 8, duration: 1400 + i * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      c.add([glow, im]);
-      c.add(MA().title(this, 0, 36, E.name.toUpperCase(), 28, '#ffffff', B.color));
-      c.add(MT.text(this, 0, 76, B.tag, 14, { wrap: 330, color: '#e8f1ff' }));
+      c.add(glow);
+      if (rush) {
+        // the whole line-up, small
+        MT.BossFight.RUSH.forEach((b, k) => {
+          const im = this.add.image(-150 + (k % 3) * 40 + (k >= 3 ? 20 : 0), -56 + Math.floor(k / 3) * 76, MT.EnemyArt.key(this, b, false, false, 0));
+          MA().fit(im, 62, 74);
+          c.add(im);
+        });
+      } else {
+        const im = this.add.image(-112, -6, MT.EnemyArt.key(this, id, false, false, 0));
+        MA().fit(im, 160, 200);
+        this.tweens.add({ targets: im, y: im.y - 6, duration: 1400 + i * 200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        c.add(im);
+      }
+      const nm = MA().title(this, 82, -104, rush ? 'BOSS RUSH' : E.name.toUpperCase(), 22, '#ffffff', B.color);
+      if (nm.width > 210) nm.setScale(210 / nm.width);
+      c.add(nm);
+      c.add(MT.text(this, 82, -60, B.tag, 12, { wrap: 206, color: rush ? '#4e342e' : '#e8f1ff', stroke: rush ? false : undefined }));
       const map = MT.MAPS.find((m) => m.id === B.map);
-      c.add(MT.text(this, 0, 112, `Arena: ${map.name}${E.flying ? '   ·   FLYING' : ''}`, 13, { title: true, color: '#9fd0ff' }));
+      c.add(MT.text(this, 82, -18, `Arena: ${map.name}${E && E.flying ? '  ·  FLYING' : ''}`, 11, { title: true, color: rush ? '#6d4c41' : '#9fd0ff', stroke: rush ? false : undefined }));
       const best = MT.Save.bossBest(id);
       ['normal', 'elite'].forEach((tier, k) => {
         const T = MT.BossFight.TIERS[tier];
-        const bx = k ? 86 : -86;
-        c.add(new MT.UI.Button(this, bx, 172, 160, 58, {
-          style: k ? 'red' : 'green', label: T.name.toUpperCase(), size: 22,
-          sub: `HP ${Math.round(E.hp * T.hp).toLocaleString('en-US')}`, subSize: 12,
+        const by = 26 + k * 58;
+        const hp = rush ? `${MT.BossFight.RUSH.length} villains` : `HP ${Math.round(E.hp * T.hp).toLocaleString('en-US')}`;
+        c.add(new MT.UI.Button(this, 36, by, 128, 48, {
+          style: k ? 'red' : 'green', label: T.name.toUpperCase(), size: 19, sub: hp, subSize: 10,
           onClick: () => MA().go(this, 'Game', { map: B.map, diff: 'medium', hero: MT.Save.settings().hero, boss: id, tier }),
         }));
         const won = best[tier];
-        c.add(MT.text(this, bx, 222, won ? `★ best ${MT.BossFight.fmtTime(won)}` : 'not beaten yet', 13, { title: !!won, color: won ? '#ffd83a' : '#9fb3d1' }));
+        c.add(MT.text(this, 108, by, won ? `★ best\n${MT.BossFight.fmtTime(won)}` : 'not beaten\nyet', 12, { title: !!won, ox: 0, color: won ? (rush ? '#c62828' : '#ffd83a') : rush ? '#6d4c41' : '#9fb3d1', stroke: rush && !won ? false : undefined }));
       });
-      c.add(MT.text(this, 0, 252, `Start with ${money(MT.BossFight.TIERS.normal.cash)} (Elite ${money(MT.BossFight.TIERS.elite.cash)})`, 12, { color: '#cfe0ff' }));
+      c.add(MT.text(this, 0, 118, `Start with ${money(MT.BossFight.TIERS.normal.cash + (rush ? 6000 : 0))} (Elite ${money(MT.BossFight.TIERS.elite.cash + (rush ? 6000 : 0))})`, 11, { color: rush ? '#4e342e' : '#cfe0ff', stroke: rush ? false : undefined }));
       c.setAlpha(0);
       c.y += 30;
-      this.tweens.add({ targets: c, alpha: 1, y, duration: 380, delay: 100 + i * 90, ease: 'Back.easeOut' });
+      this.tweens.add({ targets: c, alpha: 1, y, duration: 380, delay: 100 + i * 70, ease: 'Back.easeOut' });
     }
   }
 
@@ -485,14 +548,14 @@
         const md = MT.Save.medals(m.id);
         medals += ['easy', 'medium', 'hard'].filter((d) => md[d]).length;
       });
-      this.progress.setText(`${medals}/${MT.MAPS.length * 3} medals  ·  ${st.games} games  ·  ${st.wins} wins  ·  ${st.pops.toLocaleString('en-US')} mutants popped`);
+      this.progress.setText(`${medals}/${MT.MAPS.length * 3} medals  ·  ${st.games} games  ·  ${st.wins} wins  ·  ${st.pops.toLocaleString('en-US')} mutants popped\n${MT.Save.achievedCount()}/${MT.Ach.LIST.length} achievements  ·  ${MT.Save.coins().toLocaleString('en-US')} Gru Coins  ·  ${MT.Progress.researchLevels()} research levels`);
     }
     confirmReset() {
       const c = this.add.container(0, 0).setDepth(100);
       c.add(this.add.rectangle(0, 0, W, H, 0x0a0620, 0.75).setOrigin(0).setInteractive());
       c.add(MT.UI.panel(this, 400, 250, 480, 230, 'denim'));
       c.add(MA().title(this, W / 2, 294, 'RESET PROGRESS?', 32, '#ffb4a8', '#ff5a4a'));
-      c.add(MT.text(this, W / 2, 344, 'All medals and stats will be lost.\nSettings stay as they are.', 16, { color: '#e8f1ff' }));
+      c.add(MT.text(this, W / 2, 344, 'Medals, stats, Gru Coins, research, powers,\nheroes, achievements and saved games will be lost.\nSettings stay as they are.', 15, { color: '#e8f1ff' }));
       c.add(new MT.UI.Button(this, W / 2 - 100, 424, 170, 54, {
         style: 'red', label: 'RESET', size: 22,
         onClick: () => {

@@ -1632,5 +1632,5 @@
     if (!scene.textures.exists(key)) D.make(scene, key, OW, OH, (ctx) => drawOmegaMech(ctx, types));
     return key;
   };
-  MT.GiantArt = { generate, ULT, MODS, drawOmegaMech };
+  MT.GiantArt = { generate, ULT, MODS, drawOmegaMech, box: { UW, UH, CX, CY, GY }, helpers: { blob, zig, tentacle, stars, miniMinion, steel } };
 })();

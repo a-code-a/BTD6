@@ -368,134 +368,539 @@
     }
   };
 
+  // ---------- Rocket Minion: bazooka on the shoulder, face free ----------
+  // The launcher rests on the right shoulder and runs behind the head, so the
+  // goggles stay visible; it points up and to the right, at the target.
+  const ROCKET_TUBE = { x: 12, y: 55, a: -0.36, len: 58 };
+
+  function rocketTube(ctx, dy, thick, len, col, band, o = {}) {
+    ctx.save();
+    ctx.translate(ROCKET_TUBE.x, ROCKET_TUBE.y + dy);
+    ctx.rotate(ROCKET_TUBE.a);
+    const h = thick / 2;
+    // flared blast cone at the back
+    ctx.beginPath();
+    ctx.moveTo(4, -h);
+    ctx.lineTo(-5, -h - 3.5);
+    ctx.lineTo(-5, h + 3.5);
+    ctx.lineTo(4, h);
+    ctx.closePath();
+    D.fs(ctx, D.shade(col, -0.35), OL, 1.2);
+    // the tube
+    D.rrPath(ctx, 2, -h, len, thick, h * 0.5);
+    ctx.fillStyle = D.lin(ctx, 0, -h, 0, h, [[0, D.shade(col, 0.45)], [0.35, col], [1, D.shade(col, -0.45)]]);
+    ctx.fill();
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.fillRect(6, -h + 1.4, len - 8, 1.6);
+    // metal rings + muzzle
+    [10, len - 6].forEach((x) => {
+      D.rrPath(ctx, x, -h - 1, 4, thick + 2, 1.2);
+      D.fs(ctx, band || '#8d9440', OL, 0.9);
+    });
+    if (o.stripes) {
+      ctx.save();
+      D.rrPath(ctx, len * 0.74, -h, 12, thick, 1);
+      ctx.clip();
+      for (let i = -4; i < 6; i++) {
+        ctx.fillStyle = i % 2 ? '#263238' : '#ffca28';
+        ctx.beginPath();
+        ctx.moveTo(len * 0.74 + i * 4, -h);
+        ctx.lineTo(len * 0.74 + i * 4 + 4, -h);
+        ctx.lineTo(len * 0.74 + i * 4 - 2, h);
+        ctx.lineTo(len * 0.74 + i * 4 - 6, h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+    // the warhead poking out of the front
+    if (o.tip) {
+      const tl = o.tipLen || thick * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(len + 2, -h * 0.72);
+      ctx.quadraticCurveTo(len + 2 + tl, -h * 0.4, len + 2 + tl * 1.15, 0);
+      ctx.quadraticCurveTo(len + 2 + tl, h * 0.4, len + 2, h * 0.72);
+      ctx.closePath();
+      ctx.fillStyle = D.lin(ctx, 0, -h, 0, h, [[0, D.shade(o.tip, 0.45)], [0.5, o.tip], [1, D.shade(o.tip, -0.35)]]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      if (o.tipBand) {
+        ctx.fillStyle = o.tipBand;
+        ctx.fillRect(len + 3, -h * 0.66, 2.4, h * 1.32);
+      }
+    }
+    ctx.restore();
+  }
+
+  // point along the launcher (u: distance along it, v: sideways offset)
+  function tubePoint(u, v) {
+    const c = Math.cos(ROCKET_TUBE.a), s = Math.sin(ROCKET_TUBE.a);
+    return [ROCKET_TUBE.x + u * c - v * s, ROCKET_TUBE.y + u * s + v * c];
+  }
+
   P.rocket = function (ctx, t) {
     const [a, b, c] = t;
-    if (a >= 4) glowRing(ctx, B.cx, B.cy, 40, '#ff5722', 0.45);
-    if (c >= 4) glowRing(ctx, B.cx, B.cy, 40, '#29b6f6', 0.45);
+    const tech = c >= 3;
+    if (a >= 4) glowRing(ctx, B.cx, B.cy - 6, 44, '#ff6d00', 0.5);
+    else if (c >= 4) glowRing(ctx, B.cx, B.cy - 6, 44, '#29b6f6', 0.5);
+    else if (b >= 4) glowRing(ctx, B.cx, B.cy - 6, 44, '#ffd740', 0.45);
+    // launcher colours per upgrade path
+    const col = a >= 4 ? '#283593' : tech ? '#eceff1' : a >= 3 ? '#4e5b31' : '#6b7a3a';
+    const band = a >= 4 ? '#ffc400' : tech ? '#29b6f6' : '#a1a85a';
+    const tip = a >= 4 ? '#ffc400' : c >= 4 ? '#40c4ff' : a >= 2 ? '#e53935' : '#d84315';
+    const thick = a >= 3 ? 14 : a >= 1 ? 11 : 10;
+    const tipLen = a >= 3 ? 11 : 8;
+    const L = ROCKET_TUBE.len;
+    if (b >= 1) {
+      // ammo crate with spare rockets by the feet
+      const cx = 12, cy = FOOT - 9;
+      D.rrPath(ctx, cx - 9, cy - 4, 18, 12, 2);
+      D.fs(ctx, '#8d6e63', OL, 1.1);
+      ctx.strokeStyle = 'rgba(62,39,35,0.6)';
+      ctx.lineWidth = 0.9;
+      ctx.strokeRect(cx - 8, cy - 1, 16, 1);
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(cx - 6 + i * 6, cy - 4);
+        ctx.lineTo(cx - 4.5 + i * 6, cy - 12);
+        ctx.lineTo(cx - 3 + i * 6, cy - 4);
+        ctx.closePath();
+        D.fs(ctx, tip, OL, 0.8);
+      }
+    }
+    // the launcher sits behind the head
+    if (b >= 4) {
+      // rocket pod: a box with six rockets ready to go
+      ctx.save();
+      ctx.translate(ROCKET_TUBE.x, ROCKET_TUBE.y - 6);
+      ctx.rotate(ROCKET_TUBE.a);
+      D.rrPath(ctx, 6, -13, L - 6, 26, 4);
+      ctx.fillStyle = D.lin(ctx, 0, -13, 0, 13, [[0, D.shade(col, 0.4)], [0.5, col], [1, D.shade(col, -0.45)]]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      // three rows of rocket noses peeking out of the front
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.moveTo(L, -11 + k * 8);
+        ctx.quadraticCurveTo(L + 7, -9.5 + k * 8, L + 8, -7.5 + k * 8);
+        ctx.quadraticCurveTo(L + 7, -5.5 + k * 8, L, -4 + k * 8);
+        ctx.closePath();
+        D.fs(ctx, tip, OL, 0.9);
+      }
+      ctx.fillStyle = '#ffca28';
+      ctx.fillRect(18, -13, 4, 26);
+      ctx.restore();
+    } else if (b >= 3) {
+      rocketTube(ctx, -9, 8, L - 4, col, band, { tip, tipLen: 7 });
+      rocketTube(ctx, 0, 8, L, col, band, { tip, tipLen: 7 });
+      rocketTube(ctx, 9, 8, L - 4, col, band, { tip, tipLen: 7 });
+    } else {
+      rocketTube(ctx, 0, thick, L, col, band, { tip, tipLen, stripes: a >= 1, tipBand: a >= 3 ? '#ffffff' : null });
+    }
+    if (b >= 2 && b < 4) {
+      // auto-loader drum under the back of the launcher
+      const [dx, dy] = tubePoint(6, 9);
+      D.circlePath(ctx, dx, dy, 6);
+      ctx.fillStyle = D.rad(ctx, dx - 2, dy - 2, 0, dx, dy, 6, [[0, '#cfd8dc'], [1, '#455a64']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.1;
+      ctx.stroke();
+      D.circlePath(ctx, dx, dy, 2);
+      D.fs(ctx, '#263238');
+    }
     const o = {
-      eyes: 2, hair: 'bald', mouth: 'grin', seed: 31, lookX: 0.7,
-      arms: [
-        { x0: B.cx - 13, y0: B.cy + 2, x1: B.cx - 6, y1: B.cy - 9, bend: [B.cx - 18, B.cy] },
-        { x0: B.cx + 13, y0: B.cy + 2, x1: B.cx + 8, y1: B.cy - 8, bend: [B.cx + 18, B.cy + 2] },
-      ],
+      eyes: 2, hair: 'bald', mouth: a >= 3 ? 'teeth' : 'grin', seed: 31, lookX: 0.8, lid: 0.12, lidDepth: 0.68,
+      rim: tech ? '#80d8ff' : null,
+      arms: [],
+      outfit: (c2, cx, cy, w, h) => {
+        // bandolier with a row of shells across the chest
+        c2.strokeStyle = '#5d4037';
+        c2.lineWidth = 3.6;
+        c2.beginPath();
+        c2.moveTo(cx - w * 0.5, cy - h * 0.02);
+        c2.lineTo(cx + w * 0.5, cy + h * 0.3);
+        c2.stroke();
+        for (let i = 0; i < 4; i++) {
+          const x = cx - w * 0.33 + i * w * 0.2, y = cy + h * 0.03 + i * h * 0.065;
+          D.rrPath(c2, x - 1.4, y - 3.2, 2.8, 4, 1);
+          D.fs(c2, '#ffca28', OL, 0.5);
+        }
+      },
     };
-    // launcher behind arms but over body => draw body, launcher, then arms via after
-    const arms = o.arms;
-    o.arms = [];
-    o.after = (ctx2) => {
-      launcher(ctx2);
-      arms.forEach((ar) => D.limb(ctx2, ar.x0, ar.y0, ar.x1, ar.y1, B.w * 0.14, '#ffd83a', { bend: ar.bend, lw: 1.5 }));
+    // hands: right one on the grip, left one steadying the back of the tube
+    const grip = tubePoint(50, 6), rear = tubePoint(8, 4);
+    o.after = (c2) => {
+      D.limb(c2, B.cx - 13, B.cy + 2, rear[0] + 3, rear[1] + 2, B.w * 0.14, '#ffd83a', { bend: [B.cx - 20, B.cy + 2], lw: 1.5 });
+      // grip handle
+      c2.save();
+      c2.translate(grip[0], grip[1]);
+      c2.rotate(ROCKET_TUBE.a + 0.25);
+      D.rrPath(c2, -2, -1, 4, 9, 1.5);
+      D.fs(c2, '#3e2723', OL, 0.9);
+      c2.restore();
+      D.limb(c2, B.cx + 13, B.cy + 2, grip[0] + 1, grip[1] + 7, B.w * 0.14, '#ffd83a', { bend: [B.cx + 20, B.cy + 6], lw: 1.5 });
     };
-    function tube(ctx2, y, len, thick, col, tip) {
-      D.rrPath(ctx2, B.cx - 26, y - thick / 2, len, thick, thick * 0.35);
-      ctx2.fillStyle = D.lin(ctx2, 0, y - thick / 2, 0, y + thick / 2, [[0, D.shade(col, 0.35)], [0.5, col], [1, D.shade(col, -0.4)]]);
-      ctx2.fill();
-      ctx2.strokeStyle = OL;
-      ctx2.lineWidth = 1.3;
-      ctx2.stroke();
-      // rocket tip poking out
-      ctx2.beginPath();
-      ctx2.moveTo(B.cx - 26 + len, y - thick * 0.32);
-      ctx2.lineTo(B.cx - 26 + len + thick * 0.8, y);
-      ctx2.lineTo(B.cx - 26 + len, y + thick * 0.32);
-      ctx2.closePath();
-      D.fs(ctx2, tip, OL, 1.1);
-      ctx2.fillStyle = 'rgba(0,0,0,0.25)';
-      ctx2.fillRect(B.cx - 20, y - thick / 2, 3, thick);
-      ctx2.fillRect(B.cx + 6, y - thick / 2, 3, thick);
-    }
-    function launcher(ctx2) {
-      const col = c >= 3 ? '#e8eef3' : a >= 3 ? '#4e5b31' : '#6b7a3a';
-      const tip = a >= 4 ? '#ffca28' : a >= 2 ? '#e53935' : '#d84315';
-      const thick = a >= 3 ? 11 : 9;
-      if (b >= 3) {
-        tube(ctx2, B.cy - 18, 52, 7, col, tip);
-        tube(ctx2, B.cy - 10, 54, 7, col, tip);
-        if (b >= 4) tube(ctx2, B.cy - 26, 50, 7, col, tip);
-      } else {
-        tube(ctx2, B.cy - 13, 54, thick, col, tip);
-      }
-      if (c >= 2) {
-        // targeting scope
-        D.rrPath(ctx2, B.cx - 2, B.cy - (b >= 3 ? 31 : 24), 12, 5, 2);
-        D.fs(ctx2, '#37474f', OL, 1);
-        D.circlePath(ctx2, B.cx + 10, B.cy - (b >= 3 ? 28.5 : 21.5), 2.4);
-        D.fs(ctx2, '#ff1744', OL, 0.8);
-      }
-    }
     baseMinion(ctx, o);
-    helmet(ctx, B.cx, B.cy - 31, B.w, c >= 3 ? '#cfd8dc' : '#5d6b32', { star: a >= 4 ? '#ffd54f' : null });
+    // helmet sits high enough that the goggles stay visible
+    helmet(ctx, B.cx, B.cy - 34, B.w, tech ? '#cfd8dc' : a >= 4 ? '#3949ab' : '#5d6b32', { camo: !tech && a < 4, star: a >= 4 ? '#ffd54f' : null });
+    // chin strap
+    ctx.strokeStyle = '#3e2723';
+    ctx.lineWidth = 1.2;
+    [-1, 1].forEach((s) => {
+      ctx.beginPath();
+      ctx.moveTo(B.cx + s * 14.8, B.cy - 17);
+      ctx.quadraticCurveTo(B.cx + s * 14, B.cy - 7, B.cx + s * 10.5, B.cy - 4);
+      ctx.stroke();
+    });
+    if (c >= 2) {
+      // radar antenna for homing rockets
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(B.cx - 9, B.cy - 30);
+      ctx.lineTo(B.cx - 13, B.cy - 41);
+      ctx.stroke();
+      D.circlePath(ctx, B.cx - 13, B.cy - 42, 2.2);
+      D.fs(ctx, '#ff1744', OL, 0.8);
+      glowRing(ctx, B.cx - 13, B.cy - 42, 5, '#ff1744', 0.6);
+    }
+    if (c >= 3) {
+      // targeting visor (see-through, the goggles still show)
+      D.rrPath(ctx, B.cx - 15, B.cy - 13.5, 30, 9, 4);
+      D.fs(ctx, 'rgba(0,229,255,0.35)', 'rgba(1,87,155,0.9)', 1.1);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(B.cx + 2, B.cy - 9);
+      ctx.lineTo(B.cx + 12, B.cy - 9);
+      ctx.moveTo(B.cx + 7, B.cy - 12.5);
+      ctx.lineTo(B.cx + 7, B.cy - 5.5);
+      ctx.stroke();
+    }
+    if (c >= 1) {
+      // laser sight on top of the launcher, with its red dot line
+      const [sx, sy] = tubePoint(L - 4, -thick / 2 - 3);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(ROCKET_TUBE.a);
+      D.rrPath(ctx, -6, -2.6, 13, 5.2, 2);
+      D.fs(ctx, '#37474f', OL, 0.9);
+      D.circlePath(ctx, 7, 0, 1.8);
+      D.fs(ctx, '#ff1744');
+      ctx.strokeStyle = 'rgba(255,23,68,0.75)';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(30, 0);
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (a >= 4) {
+      // Moon Buster emblem on the tube
+      const [mx, my] = tubePoint(50, 0);
+      D.circlePath(ctx, mx, my, 4.4);
+      D.fs(ctx, '#fff59d', OL, 0.8);
+      D.circlePath(ctx, mx + 1.8, my - 1, 3.6);
+      D.fs(ctx, col);
+    }
   };
+
+  // ---------- Freeze Ray Minion: winter gear and a Gru-style freeze ray ----------
+  function freezeRay(ctx, x, y, o) {
+    const big = o.big;
+    ctx.save();
+    ctx.translate(x, y);
+    // body of the ray
+    const L = o.cannon ? 22 : big ? 27 : 24;
+    D.rrPath(ctx, -8, -6, L, 12, 5);
+    ctx.fillStyle = D.lin(ctx, 0, -6, 0, 6, [[0, '#ffffff'], [0.5, '#cfd8dc'], [1, '#78909c']]);
+    ctx.fill();
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+    // blue stripes / coils
+    for (let i = 0; i < 3; i++) {
+      D.rrPath(ctx, -4 + i * 5.5, -6.5, 2.6, 13, 1);
+      D.fs(ctx, o.coils ? '#00e5ff' : '#29b6f6', OL, 0.6);
+      if (o.coils) glowRing(ctx, -2.7 + i * 5.5, 0, 6, '#80deea', 0.45);
+    }
+    // glass tank of glowing freeze liquid on top
+    const tr = big ? 7.5 : 6;
+    D.rrPath(ctx, 0, -6 - tr * 1.6, tr * 2, tr * 1.7, tr * 0.6);
+    ctx.fillStyle = 'rgba(225,245,255,0.9)';
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = D.lin(ctx, 0, -6 - tr, 0, -6, [[0, '#b3f5ff'], [1, '#0288d1']]);
+    ctx.fillRect(0, -6 - tr * 1.05, tr * 2, tr * 1.2);
+    D.circlePath(ctx, tr * 0.6, -6 - tr * 0.5, 1.2);
+    D.fs(ctx, 'rgba(255,255,255,0.9)');
+    D.circlePath(ctx, tr * 1.3, -6 - tr * 0.8, 0.9);
+    D.fs(ctx, 'rgba(255,255,255,0.9)');
+    ctx.restore();
+    D.rrPath(ctx, 0, -6 - tr * 1.6, tr * 2, tr * 1.7, tr * 0.6);
+    ctx.strokeStyle = OL;
+    ctx.lineWidth = 1.1;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(2, -6 - tr * 1.3);
+    ctx.lineTo(2, -6 - tr * 0.5);
+    ctx.stroke();
+    // trigger grip
+    D.rrPath(ctx, 2, 4, 5, 8, 2);
+    D.fs(ctx, '#37474f', OL, 1);
+    if (o.cannon) {
+      // cryo cannon: a wide barrel with an ice ball (or a giant icicle) loaded
+      D.rrPath(ctx, L - 10, -9, 14, 18, 4);
+      ctx.fillStyle = D.lin(ctx, 0, -9, 0, 9, [[0, '#e1f5fe'], [0.5, '#4fc3f7'], [1, '#01579b']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+      if (o.icicle) {
+        ctx.beginPath();
+        ctx.moveTo(L + 2, -6);
+        ctx.lineTo(L + 13, 0);
+        ctx.lineTo(L + 2, 6);
+        ctx.closePath();
+        ctx.fillStyle = D.lin(ctx, L, -6, L, 6, [[0, '#ffffff'], [0.5, '#b3e5fc'], [1, '#0288d1']]);
+        ctx.fill();
+        ctx.strokeStyle = '#01579b';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      } else {
+        D.circlePath(ctx, L + 6, 0, 6.4);
+        ctx.fillStyle = D.rad(ctx, L + 4, -2, 0.5, L + 6, 0, 6.4, [[0, '#ffffff'], [0.5, '#b3e5fc'], [1, '#29b6f6']]);
+        ctx.fill();
+        ctx.strokeStyle = '#01579b';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      }
+    } else {
+      // flared emitter dish with a glowing core
+      const r = o.wide ? 11 : 9;
+      ctx.beginPath();
+      ctx.moveTo(L - 9, -4);
+      ctx.lineTo(L - 1, -r);
+      ctx.quadraticCurveTo(L + 3, 0, L - 1, r);
+      ctx.lineTo(L - 9, 4);
+      ctx.closePath();
+      ctx.fillStyle = D.lin(ctx, 0, -r, 0, r, [[0, '#e1f5fe'], [0.5, '#81d4fa'], [1, '#0277bd']]);
+      ctx.fill();
+      ctx.strokeStyle = OL;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      glowRing(ctx, L + 1, 0, r, '#80d8ff', 0.75);
+      D.ellipsePath(ctx, L, 0, 2.6, r * 0.75);
+      ctx.fillStyle = D.rad(ctx, L, 0, 0.5, L, 0, r, [[0, '#ffffff'], [1, '#00b0ff']]);
+      ctx.fill();
+    }
+    if (o.crystals) {
+      // brittle ice crystals growing on the barrel
+      [[4, -7, -0.5], [12, -7, -0.2], [9, 7, 2.8]].forEach(([cx, cy, r]) => {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(r);
+        ctx.beginPath();
+        ctx.moveTo(-2, 0);
+        ctx.lineTo(0, -7);
+        ctx.lineTo(2, 0);
+        ctx.closePath();
+        D.fs(ctx, '#e1f5fe', '#0288d1', 0.8);
+        ctx.restore();
+      });
+    }
+    ctx.restore();
+  }
+
+  function snowflakeIcon(ctx, x, y, r, col) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(0.8, r * 0.22);
+    ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      ctx.rotate(Math.PI / 3);
+      ctx.beginPath();
+      ctx.moveTo(-r, 0);
+      ctx.lineTo(r, 0);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   P.freeze = function (ctx, t) {
     const [a, b, c] = t;
-    if (a >= 3) glowRing(ctx, B.cx, B.cy, 42, '#b3ecff', 0.6);
-    const o = {
-      eyes: 2, hair: 'bald', mouth: 'o', seed: 41, lookX: 0.5,
-      arms: [
-        { x0: B.cx - 13, y0: B.cy + 2, x1: B.cx + 1, y1: B.cy + 9, bend: [B.cx - 12, B.cy + 14] },
-        { x0: B.cx + 13, y0: B.cy + 2, x1: B.cx + 16, y1: B.cy + 5 },
-      ],
-    };
-    if (b >= 3) {
-      o.armsBack = [];
+    if (a >= 4) glowRing(ctx, B.cx, B.cy - 4, 46, '#b3ecff', 0.7);
+    else if (c >= 4) glowRing(ctx, B.cx, B.cy, 44, '#00e5ff', 0.5);
+    else if (b >= 4) glowRing(ctx, B.cx, B.cy, 44, '#4fc3f7', 0.5);
+    else if (a >= 3) glowRing(ctx, B.cx, B.cy, 42, '#b3ecff', 0.55);
+    // frozen ground under the feet
+    const fr = a >= 2 ? 30 : a >= 1 ? 26 : 20;
+    D.ellipsePath(ctx, B.cx, FOOT, fr, fr * 0.26);
+    ctx.fillStyle = D.rad(ctx, B.cx - 6, FOOT - 2, 1, B.cx, FOOT, fr, [[0, 'rgba(255,255,255,0.95)'], [0.6, 'rgba(179,229,252,0.85)'], [1, 'rgba(129,212,250,0.25)']]);
+    ctx.fill();
+    if (a >= 1) {
+      // little ice spikes poking out of the frost
+      [[-24, 0], [-16, 3], [19, 2], [26, -1]].forEach(([dx, dy], i) => {
+        const x = B.cx + dx * (fr / 30), y = FOOT + dy;
+        ctx.beginPath();
+        ctx.moveTo(x - 2.6, y);
+        ctx.lineTo(x, y - 7 - (i % 2) * 3);
+        ctx.lineTo(x + 2.6, y);
+        ctx.closePath();
+        D.fs(ctx, '#e1f5fe', '#0288d1', 0.8);
+      });
     }
+    if (a >= 3) {
+      // swirling arctic wind
+      ctx.strokeStyle = 'rgba(225,245,254,0.9)';
+      ctx.lineWidth = 1.6;
+      [[-1, 18], [1, 8]].forEach(([s, yy]) => {
+        ctx.beginPath();
+        ctx.arc(B.cx, B.cy + yy, 30, s > 0 ? -0.6 : Math.PI - 0.2, s > 0 ? 0.4 : Math.PI + 0.9);
+        ctx.stroke();
+      });
+    }
+    if (b >= 4) {
+      // ice armour on the shoulders
+      [-1, 1].forEach((s) => {
+        D.blobPath(ctx, B.cx + s * 15, B.cy - 2, 8, 6, 0.25, D.rng(s + 5));
+        ctx.fillStyle = D.lin(ctx, B.cx + s * 15 - 8, B.cy - 10, B.cx + s * 15 + 8, B.cy + 6, [[0, '#ffffff'], [1, '#4fc3f7']]);
+        ctx.fill();
+        ctx.strokeStyle = '#0277bd';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+      });
+    }
+    const hatCol = a >= 3 ? '#1565c0' : c >= 3 ? '#00838f' : '#c62828';
+    const scarf = a >= 3 ? '#e3f2fd' : '#e53935';
+    // scarf tail fluttering behind
+    ctx.beginPath();
+    ctx.moveTo(B.cx - 12, B.cy - 1);
+    ctx.quadraticCurveTo(B.cx - 24, B.cy - 6, B.cx - 32, B.cy + 2);
+    ctx.lineTo(B.cx - 30, B.cy + 8);
+    ctx.quadraticCurveTo(B.cx - 22, B.cy + 3, B.cx - 12, B.cy + 5);
+    ctx.closePath();
+    D.fs(ctx, scarf, OL, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillRect(B.cx - 31, B.cy + 2, 4, 3);
+    const o = {
+      eyes: 2, hair: 'bald', mouth: 'o', seed: 41, lookX: 0.7, glove: '#4fc3f7',
+      rim: c >= 1 ? '#80deea' : null,
+      denim: a >= 3 ? { base: '#1976d2', light: '#64b5f6', dark: '#0d47a1', stitch: '#e3f2fd' } : null,
+      arms: [
+        { x0: B.cx - 13, y0: B.cy + 2, x1: B.cx + 1, y1: B.cy + 10, bend: [B.cx - 12, B.cy + 15] },
+        { x0: B.cx + 13, y0: B.cy + 2, x1: B.cx + 14, y1: B.cy + 8, bend: [B.cx + 17, B.cy + 4] },
+      ],
+      face: (c2, cx, cy, w, h) => {
+        // rosy cold cheeks
+        [-1, 1].forEach((s) => {
+          D.ellipsePath(c2, cx + s * w * 0.3, cy + h * 0.02, 2.8, 1.6);
+          D.fs(c2, 'rgba(255,110,110,0.45)');
+        });
+      },
+    };
+    if (c >= 2) {
+      o.outfit = (c2, cx, cy, w, h) => {
+        // belt of cryo canisters
+        c2.fillStyle = '#455a64';
+        c2.fillRect(cx - w, cy + h * 0.24, w * 2, h * 0.06);
+        for (let i = 0; i < 3; i++) {
+          D.rrPath(c2, cx - w * 0.36 + i * w * 0.28, cy + h * 0.2, w * 0.12, h * 0.13, 1.5);
+          D.fs(c2, '#4fc3f7', OL, 0.6);
+        }
+      };
+    }
+    // the ray is drawn between the body and the arms
+    const arms = o.arms;
+    o.arms = [];
+    o.after = (c2) => {
+      // thick scarf wrapped round the neck
+      c2.save();
+      D.capsulePath(c2, B.cx, B.cy, B.w, B.h);
+      c2.clip();
+      c2.fillStyle = scarf;
+      c2.fillRect(B.cx - 20, B.cy - 2, 40, 6);
+      c2.fillStyle = 'rgba(255,255,255,0.8)';
+      for (let i = 0; i < 5; i++) c2.fillRect(B.cx - 14 + i * 7, B.cy - 2, 2.4, 6);
+      c2.restore();
+      c2.strokeStyle = OL;
+      c2.lineWidth = 1;
+      c2.strokeRect(B.cx - 15, B.cy - 2, 30, 6);
+      freezeRay(c2, B.cx + 2, B.cy + 9, {
+        big: c >= 3 || a >= 2, coils: b >= 1, wide: b >= 2, crystals: b >= 3, cannon: c >= 3, icicle: c >= 4,
+      });
+      arms.forEach((ar) => D.limb(c2, ar.x0, ar.y0, ar.x1, ar.y1, B.w * 0.14, '#ffd83a', { bend: ar.bend, lw: 1.5, gloveColor: '#4fc3f7' }));
+    };
     baseMinion(ctx, o);
     if (a >= 3) {
-      // parka hood
+      // parka hood with a fur trim round the face
       ctx.save();
       ctx.beginPath();
-      ctx.arc(B.cx, B.cy - 9, 18, Math.PI * 1.05, Math.PI * 1.95);
-      ctx.lineWidth = 6;
+      ctx.arc(B.cx, B.cy - 6, 19, Math.PI * 1.02, Math.PI * 1.98);
+      ctx.lineCap = 'round';
+      ctx.lineWidth = 7;
       ctx.strokeStyle = '#f5f5f5';
       ctx.stroke();
       ctx.lineWidth = 1;
       ctx.strokeStyle = OL;
       ctx.stroke();
       ctx.restore();
-      beanie(ctx, B.cx, B.cy - 25, B.w, '#1e88e5');
-    } else {
-      beanie(ctx, B.cx, B.cy - 25, B.w, '#e53935');
+      const rnd = D.rng(6);
+      for (let i = 0; i < 10; i++) {
+        const an = Math.PI * (1.05 + i * 0.09);
+        D.circlePath(ctx, B.cx + Math.cos(an) * 19, B.cy - 6 + Math.sin(an) * 19, 2.6 + rnd());
+        D.fs(ctx, '#ffffff');
+      }
     }
-    // scarf
-    ctx.save();
-    D.capsulePath(ctx, B.cx, B.cy, B.w, B.h);
-    ctx.clip();
-    ctx.fillStyle = '#e53935';
-    ctx.fillRect(B.cx - 20, B.cy + 0, 40, 4);
-    ctx.restore();
-    // freeze ray
-    const gx = B.cx + 6, gy = B.cy + 7;
-    const big = c >= 3;
-    ctx.save();
-    ctx.translate(gx, gy);
-    if (b >= 3) {
-      D.rrPath(ctx, -30, -9, 10, 18, 4);
-      D.fs(ctx, '#b3e5fc', OL, 1.2);
-    }
-    D.rrPath(ctx, -8, -5, big ? 26 : 20, 10, 4);
-    ctx.fillStyle = D.lin(ctx, 0, -5, 0, 5, [[0, '#ffffff'], [1, '#90a4ae']]);
+    // trapper hat: knitted crown, fluffy brim and ear flaps
+    const top = B.cy - 23;
+    [-1, 1].forEach((s) => {
+      D.rrPath(ctx, B.cx + s * 15.5 - 3.5, top + 4, 7, 15, 3.5);
+      D.fs(ctx, '#fafafa', OL, 1);
+    });
+    ctx.beginPath();
+    ctx.arc(B.cx, top + 4, 15.5, Math.PI, 0);
+    ctx.closePath();
+    ctx.fillStyle = D.lin(ctx, B.cx - 16, 0, B.cx + 16, 0, [[0, D.shade(hatCol, 0.3)], [0.5, hatCol], [1, D.shade(hatCol, -0.35)]]);
     ctx.fill();
     ctx.strokeStyle = OL;
     ctx.lineWidth = 1.3;
     ctx.stroke();
-    for (let i = 0; i < 3; i++) {
-      ctx.fillStyle = '#29b6f6';
-      ctx.fillRect(-4 + i * 4, -5, 2, 10);
-    }
-    const ex = big ? 18 : 12;
-    D.ellipsePath(ctx, ex + 3, 0, 4, big ? 10 : 8);
-    ctx.fillStyle = D.rad(ctx, ex + 3, 0, 1, ex + 3, 0, 9, [[0, '#ffffff'], [0.5, '#7fdbff'], [1, '#0288d1']]);
-    ctx.fill();
-    ctx.strokeStyle = OL;
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    ctx.save();
+    ctx.clip();
+    snowflakeIcon(ctx, B.cx - 6, top - 3, 3, 'rgba(255,255,255,0.9)');
+    snowflakeIcon(ctx, B.cx + 6, top - 4, 3, 'rgba(255,255,255,0.9)');
     ctx.restore();
-    if (c >= 4) {
-      for (let i = 0; i < 3; i++) {
-        D.starPath(ctx, B.cx - 26 + i * 4, B.cy - 30 + i * 9, 6, 3.2, 1.2);
-        D.fs(ctx, '#e1f5fe', '#4fc3f7', 0.6);
+    D.rrPath(ctx, B.cx - 16.5, top + 1, 33, 7, 3.5);
+    D.fs(ctx, '#fafafa', OL, 1.1);
+    D.circlePath(ctx, B.cx, top - 12, 4.6);
+    D.fs(ctx, '#ffffff', OL, 1.1);
+    // cold breath
+    const rnd = D.rng(4);
+    for (let i = 0; i < 3; i++) {
+      D.blobPath(ctx, B.cx + 15 + i * 4, B.cy - 2 - i * 3, 2.6 - i * 0.4, 6, 0.3, rnd);
+      D.fs(ctx, 'rgba(255,255,255,0.85)', 'rgba(120,144,156,0.6)', 0.6);
+    }
+    if (a >= 4) {
+      // a little snow cloud follows it around
+      const crnd = D.rng(12);
+      for (let i = 0; i < 4; i++) {
+        D.blobPath(ctx, B.cx - 12 + i * 8, 8 + (i % 2) * 2, 6, 7, 0.25, crnd);
+        D.fs(ctx, '#eceff1', OL, 0.9);
       }
+      [[B.cx - 10, 20], [B.cx + 2, 23], [B.cx + 13, 19]].forEach(([x, y]) => snowflakeIcon(ctx, x, y, 2.4, '#ffffff'));
     }
   };
 

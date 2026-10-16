@@ -48,7 +48,35 @@
       onPhase: [null, (g, e) => summon(g, e, 'shield', 2, { ahead: true }), (g, e) => (e.enrage = 1.45)],
       quotes: ['Bow before the queen!', 'Lava lamps, darling!', 'Overkill? Never heard of it.', 'Mine. All mine!'],
     },
+    elmacho: {
+      map: 'volcano', color: '#ff4a3a', tint: 0xff4a3a, shield: 0xffab91,
+      tag: 'Pollito pecks your towers, ground slams stun them, and he only gets angrier.',
+      phaseNames: ['GROUND SLAM!', 'MACHO RAGE!'],
+      moves: [
+        [['chicken', 5.5, 1], ['summon', 15, [['brute', 2], ['rage', 1]]]],
+        [['chicken', 5, 2], ['slam', 9, 210], ['summon', 14, [['rage', 2], ['healer', 1]]]],
+        [['chicken', 4, 3], ['slam', 7, 240], ['summon', 12, [['mega', 1], ['brute', 3]]]],
+      ],
+      onPhase: [null, (g, e) => selfShield(g, e, 0.08), (g, e) => (e.enrage = 1.5)],
+      quotes: ['I am EL MACHO!', 'Pollito, ATTACK!', 'Nobody stops the Macho!', 'Olé!'],
+    },
+    maxime: {
+      map: 'factory', color: '#9ccc65', tint: 0x9ccc65, shield: 0xc5e1a5,
+      tag: 'His Roach Ray turns towers into cockroaches. Roach swarms follow him!',
+      phaseNames: ['ROACH EGGS!', 'LE GRAND FINALE!'],
+      moves: [
+        [['roach', 5, 1], ['summon', 13, [['zoomer', 6]]]],
+        [['roach', 4.5, 2], ['roachEgg', 8, 1], ['summon', 12, [['zoomer', 8], ['rubber', 2]]]],
+        [['roach', 3.8, 3], ['roachEgg', 7, 2], ['dash', 11, 110], ['summon', 11, [['rubber', 3], ['magma', 2]]]],
+      ],
+      onPhase: [null, (g, e) => selfShield(g, e, 0.1), (g, e) => (e.enrage = 1.45)],
+      quotes: ['Le Mal is here!', 'Become cockroaches, all of you!', 'Magnifique!', 'Valentina, are you watching?'],
+    },
   };
+  // Boss Rush: every villain in a row, in Villain-Con City
+  const RUSH = ['vector', 'bratt', 'maxime', 'scarlet', 'elmacho'];
+  const RUSH_HP = 0.75;
+  const RUSH_MAP = 'city';
 
   const tierOf = (game) => TIERS[game.bossTier] || TIERS.normal;
 
@@ -198,6 +226,60 @@
     dash(game, e, d) {
       dash(game, e, d);
     },
+    // El Macho throws Pollito at towers: the chicken pecks them out for a while
+    chicken(game, e, n) {
+      const tg = pickTargets(game, e, n, 320);
+      if (!tg.length) return;
+      windUp(game, e);
+      tg.forEach((t, i) => game.time.delayedCall(i * 150, () => lob(game, e, t, 'fx_chicken', 1, (x, y) => {
+        game.fx.puffs.explode(8, x, y - 14);
+        knockOut(game, t, 2.4, 'peck');
+        MT.Audio.play('squid', x);
+      })));
+    },
+    // a ground pound: towers close to El Macho are stunned
+    slam(game, e, r) {
+      game.fx.shockwave(e.x, e.y, r, e.ai.B.tint, 600);
+      game.fx.ring(e.x, e.y, r, 0xffab91, { disc: true, dur: 450, force: true });
+      game.fx.dust.explode(18, e.x, e.y + e.radius * 0.6);
+      let n = 0;
+      game.towers.forEach((t) => {
+        if (t.dead || U.dist(t.x, t.y, e.x, e.y) > r) return;
+        if (knockOut(game, t, 1.4, 'stun')) n++;
+      });
+      if (n) game.fx.floatText(e.x, e.y - e.radius * 2, 'GROUND SLAM!', '#ff8a65', 22);
+      game.shake(0.2);
+      MT.Audio.play('stomp', e.x);
+    },
+    // Maxime's Roach Ray: a green beam turns a tower into a cockroach for a while
+    roach(game, e, n) {
+      const tg = pickTargets(game, e, n, 330);
+      if (!tg.length) return;
+      windUp(game, e);
+      tg.forEach((t, i) => game.time.delayedCall(i * 170, () => {
+        if (t.dead || game.over) return;
+        const sx = e.x + e.dir * e.radius * 0.6, sy = e.y - e.radius * 0.9;
+        game.fx.beam(sx, sy, t.x, t.y - 20, 0x9ccc65, 6, 0.35);
+        game.fx.beam(sx, sy, t.x, t.y - 20, 0xffffff, 2, 0.3);
+        game.fx.ring(t.x, t.y, 36, 0x9ccc65, { dur: 420, force: true });
+        knockOut(game, t, 2.6, 'roach');
+        MT.Audio.play('laser', t.x);
+      }));
+    },
+    // a roach egg bursts on a group of towers
+    roachEgg(game, e, n) {
+      const tg = pickTargets(game, e, n, 320);
+      if (!tg.length) return;
+      windUp(game, e);
+      tg.forEach((t, i) => game.time.delayedCall(i * 160, () => lob(game, e, t, 'fx_roachegg', 1, (x, y) => {
+        game.towers.forEach((o) => {
+          if (U.dist(o.x, o.y, x, y) <= 58) knockOut(game, o, 2.4, 'roach');
+        });
+        game.fx.ring(x, y, 58, 0x9ccc65, { disc: true, dur: 380, force: true });
+        game.fx.debris.explode(8, x, y - 8);
+        MT.Audio.play('splat', x);
+      })));
+    },
     summon(game, e, list) {
       list.forEach(([type, n]) => summon(game, e, type, n));
       game.fx.floatText(e.x, e.y - e.radius * 2, 'MINIONS, ATTACK!', e.ai.B.color, 18);
@@ -271,6 +353,23 @@
 
   function onDeath(game, e) {
     if (game.mode !== 'boss' || e.type !== game.bossId || game.bossDown) return;
+    // Boss Rush: the next villain shows up after a short breather
+    if (game.rush && game.rushQueue.length) {
+      const next = game.rushQueue.shift();
+      game.rushDone = (game.rushDone || 0) + 1;
+      game.bossId = next;
+      game.boss = null;
+      const bonus = 2500 + game.rushDone * 500;
+      game.money += bonus;
+      game.fx.bigText(`${e.def.name.toUpperCase()} DEFEATED!`, '#ffd83a', 46, `+${U.money(bonus)}  ·  Next up: ${MT.ENEMIES[next].name}`);
+      game.time.delayedCall(4500, () => {
+        if (game.over || game.bossId !== next) return;
+        game.boss = game.spawnEnemy(next, { path: 0, dist: 0, hpMul: tierOf(game).hp * RUSH_HP });
+        game.hud.refreshPreview();
+      });
+      game.markDirty();
+      return;
+    }
     game.bossDown = true;
     game.roundActive = false;
     game.slowmo = 1;
@@ -286,12 +385,18 @@
 
   // ---------------------------------------------------------------- game mode
   function startCash(game) {
-    return tierOf(game).cash;
+    return tierOf(game).cash + (game.rush ? 6000 : 0);
   }
 
   function prepare(game) {
     const def = MT.ENEMIES[game.bossId];
-    game.hud.toast(`BOSS BATTLE: ${def.name}! Build your defense, then press PLAY.`, 3600, true);
+    if (game.rush) game.hud.toast(`BOSS RUSH: ${RUSH.length} villains in a row! Build your defense, then press PLAY.`, 3600, true);
+    else game.hud.toast(`BOSS BATTLE: ${def.name}! Build your defense, then press PLAY.`, 3600, true);
+  }
+
+  // name for menus and reports ("Boss Rush" or the villain)
+  function title(game) {
+    return game.rush ? 'Boss Rush' : MT.ENEMIES[game.bossId].name;
   }
 
   function startFight(game) {
@@ -303,7 +408,7 @@
     game.round = 0;
     game.waveT = 6;
     game.bossDown = false;
-    game.boss = game.spawnEnemy(game.bossId, { path: 0, dist: 0, hpMul: T.hp });
+    game.boss = game.spawnEnemy(game.bossId, { path: 0, dist: 0, hpMul: T.hp * (game.rush ? RUSH_HP : 1) });
     MT.Audio.play('roundStart');
     game.hud.onRoundState();
     game.hud.refreshPreview();
@@ -325,10 +430,11 @@
     game.collectAllPickups();
     game.growBananas(game.roundTime, T.wave);
     const hero = game.towers.find((t) => t.hero);
-    if (hero) game.gainHeroXp(hero, 40 + game.round * 14);
-    game.hud.toast(`Wave ${game.round}  ·  +${U.money(income)}`, 1500);
+    if (hero) game.roundHeroXp(hero, 40 + game.round * 14);
+    const coins = MT.Progress.bossWave(game);
+    game.hud.toast(`Wave ${game.round}  ·  +${U.money(income)}` + (coins ? `  ·  +${coins} Gru Coin${coins > 1 ? 's' : ''}` : ''), 1500);
     game.hud.refreshPreview();
   }
 
-  MT.BossFight = { TIERS, BOSSES, attach, detach, update, phase, onDeath, startCash, prepare, startFight, step, fmtTime };
+  MT.BossFight = { TIERS, BOSSES, RUSH, RUSH_MAP, attach, detach, update, phase, onDeath, startCash, prepare, startFight, step, fmtTime, title };
 })();

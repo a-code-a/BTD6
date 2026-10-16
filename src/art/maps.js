@@ -10,6 +10,8 @@
   const SCATTER_R = { tree: 34, bush: 16, rock: 13, flowers: 14, bananatree: 28, palm: 26, fern: 14, labcrate: 18, pxbarrel: 14, crater: 30, moonrock: 13, bigrock: 26 };
 
   function waterDist(wa, x, y) {
+    // a ring of water (Vector's moat)
+    if (wa.type === 'moat') return Math.abs(Math.hypot(wa.x - x, wa.y - y) - wa.r) - wa.width / 2;
     if (wa.type === 'river' || wa.type === 'sea') {
       if (!wa._pts) wa._pts = MT.Path.smooth(wa.pts, 6);
       let best = Infinity;
@@ -1109,6 +1111,14 @@
         const { c, ctx } = D.canvas(W, H, scale);
         paint(ctx, map, paths);
         layout(map, paths).decor.filter((d) => d.top).forEach((d) => DEC[d.type](ctx, d, D.rng(9)));
+        // interactive maps: show their rides / gadgets in the preview too
+        if (map.features && MT.MapArt.fxTextures) {
+          MT.MapArt.fxTextures(scene);
+          map.features.filter((f) => f.type === 'spinner').forEach((f) => {
+            const im = scene.textures.get(f.key).getSourceImage();
+            ctx.drawImage(im, f.x - im.width / 4, f.y - im.height / 4, im.width / 2, im.height / 2);
+          });
+        }
         scene.textures.addCanvas(key, c);
       }
       return key;

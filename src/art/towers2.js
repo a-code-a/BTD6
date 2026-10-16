@@ -1292,6 +1292,11 @@
     if (!scene.textures.exists(key)) D.make(scene, key, 60, 40, (ctx) => drawPlane(ctx, t, fused));
     return key;
   };
+  // newer towers register their own fused looks and decorations here
+  TA.FUSED_LOOK = FUSED_LOOK;
+  TA.FUSED_BACK = BACK;
+  TA.FUSED_FRONT = FRONT;
+  TA.FUSED_BOX = { FW, FH, FCX, FCY, FK };
   TA.props.energyBall = energyBall;
   TA.props.boltIcon = bolt;
   TA.props.guitar = guitar;
