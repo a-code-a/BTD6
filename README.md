@@ -41,6 +41,11 @@ Phaser and the fonts (Luckiest Guy and Fredoka) are vendored in `lib/` and `font
    - **OMEGA** with three super towers of *different* kinds: a giant **Omega Mech** built from them.
      The selected tower becomes its back, the other two its arm weapons, and every combination
      looks different. Its core fires the **Omega Beam**, which mixes the powers of all three parts.
+
+   Giants keep growing: select an Ultimate or Omega Mech and press **POWER** (or `,`) to buy up to
+   ★10 power stars. Every star adds +35% damage and +4% attack speed to all of its attacks (and +20%
+   income for the Banana Planet and the Moon Base). A star costs a share of that giant's own Ultimate
+   price, so in the late game every kind of minion can grow as strong as the Banana Multiverse.
 8. Click **MOVE** (or press `M`) to pick up any placed tower and put it somewhere else for a small fee.
 9. Beat the final round to earn a medal for that map and difficulty, then keep going in freeplay.
 10. The panel in the top-left corner previews the **next round** (click it to fold it away), so you
@@ -114,7 +119,7 @@ your screen's real pixel density, so text stays sharp, and it re-adapts when you
 | `Q W E R T Y A S D G J Z X C V B U I O` | Select a tower to place |
 | `H` | Place your hero |
 | `Space` | Start round / toggle 3x speed |
-| `,` `.` `/` | Buy upgrade on path 1 / 2 / 3 of the selected tower |
+| `,` `.` `/` | Buy upgrade on path 1 / 2 / 3 of the selected tower (`,` buys the next POWER UP star of an Ultimate or Omega Mech) |
 | `F` | Super Fusion for the selected tower |
 | `M` | Move the selected tower |
 | `Tab` | Cycle the targeting mode of the selected tower |
@@ -208,16 +213,19 @@ flashes when an ability is ready again.
 
 ### Heroes
 
-| Hero | Style | Abilities |
-| --- | --- | --- |
-| **Gru** | Freeze ray that slows | Shrink Ray, Moon Heist |
-| **Lucy Wilde** | Fast lipstick-taser shots that stun | Lipstick Taser, AVL Airstrike |
-| **Dr. Nefario** | Goo bombs that splash and slow | Fart Gun, Antidote Serum |
-| **Kevin** | Banana blaster, buffs nearby towers | Minion Stampede, GIANT KEVIN |
-| **Vector** | Sticky squid launcher | Piranha Frenzy, Pyramid Heist |
-| **Dru** (200 coins) | Economy: golden coins, bananas every round, +15-25% bananas per pop and cheaper towers nearby | Family Fortune, Golden Supercar |
-| **Agnes** (300 coins) | Support: homing rainbow stars, range / speed / pierce / Camo buffs, heals lives every round | It's So Fluffy!, Unicorn Parade |
-| **El Macho** (400 coins) | Tank: short-range punches that hit crowds, slows mutants nearby, immune to boss attacks from level 7 | Pollito!, Shark Rocket |
+Every hero has a **signature trait** from level 1 that asks for a decision, and its level perks make
+that trait stronger. Hover the ★ name in the hero's upgrade panel for the rules and the current numbers.
+
+| Hero | Signature trait | Style | Abilities |
+| --- | --- | --- | --- |
+| **Gru** | **Master Plan**: pick one plan for the whole map with the PLAN button: HEIST (more bananas per pop), ASSAULT (every tower faster), later LOCKDOWN (every mutant slower) and MOON SHOT (abilities recharge faster). Free to change between rounds, 20 s cooldown during one | Freeze ray that slows | Shrink Ray, Moon Heist |
+| **Lucy Wilde** | **Agent Mark**: everything she hits takes +20-35% damage from every source for a few seconds (from level 5 the mark washes off Camo). Her MOVE is a free **Grapple** with a cooldown | Fast lipstick-taser shots that stun | Lipstick Taser, AVL Airstrike |
+| **Dr. Nefario** | **Gadgets**: GADGET button, then click the track: goo traps that slow everything walking through (1-3 traps, later they burn and wash off Camo) | Goo bombs that splash and slow | Fart Gun, Antidote Serum |
+| **Kevin** | **Teamwork**: he and the towers in his ring attack 2-4% faster for every DIFFERENT tower kind in it (up to 8), +1 pierce with 4+ kinds | Banana blaster | Minion Stampede, GIANT KEVIN |
+| **Vector** | **Reverse!**: every 4th (later 3rd) squid shoves its target and the mutants around it back along the track, at most 3 times per mutant (giants from level 9) | Sticky squid launcher | Piranha Frenzy, Pyramid Heist |
+| **Dru** (200 coins) | **Investor**: 2-5% interest on the bananas you saved at the end of every round (capped) | Economy: golden coins, +15-25% bananas per pop and cheaper towers nearby | Family Fortune, Golden Supercar |
+| **Agnes** (300 coins) | **Best Friend**: FRIEND button, then click a tower: it attacks faster and earns a heart every round it stays her friend (up to 3, later 5) | Support: homing rainbow stars, heals lives every round | It's So Fluffy!, Unicorn Parade |
+| **El Macho** (400 coins) | **Roadblock**: holds the first 3-8 small mutants in his reach in place while his Guard bar lasts, wrestles giants from level 8 | Tank: short-range punches that hit crowds, immune to boss attacks from level 7 | Pollito!, Shark Rocket |
 
 ## Enemies
 

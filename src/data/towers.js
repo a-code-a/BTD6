@@ -398,13 +398,13 @@
       name: 'Banana Overlord', cost: 9000, color: '#ffc400',
       desc: 'A golden god of bananas. Hurls 5 giant golden balls at once that smash armor, barrels and giants.',
       base: { range: 210, rate: 0.16, attack: 'proj', count: 5, spread: 10, camo: true, ability: 'bananaApocalypse',
-        proj: P({ tex: 'p_jugg', speed: 520, dmg: 4, pierce: 60, r: 16, spin: 10, armored: true, bruteDmg: 6, moabDmg: 8, life: 1.5, scale: 1.15, trail: 0xffc400, boomerang: true }) },
+        proj: P({ tex: 'p_jugg', speed: 520, dmg: 4, pierce: 60, r: 16, spin: 10, armored: true, bruteDmg: 6, moabDmg: 14, life: 1.5, scale: 1.15, trail: 0xffc400, boomerang: true }) },
     },
     fart: {
       name: 'Fartnado', cost: 16000, color: '#76d13a',
-      desc: 'A roaring tornado of toxic gas. Shreds and poisons everything around it and blows mutants back.',
-      base: { range: 150, rate: 0.14, attack: 'ring', ring: 'nado', camo: true, ability: 'nuclearToot',
-        proj: P({ dmg: 4, pierce: 400, type: 'normal', knock: 3, dot: { dmg: 2, every: 0.5, dur: 4 }, moabDmg: 6 }) },
+      desc: 'A roaring tornado of toxic gas. Shreds and poisons everything around it, melts giants and blows mutants back.',
+      base: { range: 170, rate: 0.14, attack: 'ring', ring: 'nado', camo: true, ability: 'nuclearToot',
+        proj: P({ dmg: 6, pierce: 400, type: 'normal', knock: 3, dot: { dmg: 4, every: 0.5, dur: 4 }, moabDmg: 45 }) },
     },
     rocket: {
       name: 'Doomsday Launcher', cost: 22000, color: '#ff5722',
@@ -416,15 +416,15 @@
     freeze: {
       name: 'Absolute Zero', cost: 16000, color: '#4fc3f7',
       desc: 'Pure cold. A huge aura that freezes everything, even giants, and shatters armor. Ability: Ice Age.',
-      base: { range: 220, rate: 0.9, attack: 'aura', camo: true, ability: 'iceAge', slowAura: { mul: 0.35, moabMul: 0.55 },
-        proj: P({ dmg: 8, pierce: 600, type: 'cold', armored: true, brittle: true, freeze: { dur: 2.2, moab: 0.7 }, moabDmg: 40 }) },
+      base: { range: 220, rate: 0.7, attack: 'aura', camo: true, ability: 'iceAge', slowAura: { mul: 0.35, moabMul: 0.55 },
+        proj: P({ dmg: 10, pierce: 600, type: 'cold', armored: true, brittle: true, freeze: { dur: 2.2, moab: 0.7 }, moabDmg: 120 }) },
     },
     jelly: {
       name: 'Jelly Kraken', cost: 16000, color: '#ec407a',
       desc: 'A many-armed jelly monster. 4 homing acid blobs that slow giants and dissolve anything.',
       base: { range: 210, rate: 0.16, attack: 'proj', count: 4, spread: 18, camo: true, ability: 'jellyTsunami',
         proj: P({ tex: 'p_jelly_acid', scale: 1.4, speed: 520, dmg: 2, pierce: 3, type: 'normal', r: 9, homing: true, armored: true,
-          slow: { mul: 0.3, dur: 8, soak: true, moab: true }, dot: { dmg: 8, every: 0.3, dur: 6 }, explode: { r: 55, dmg: 3, pierce: 20 }, moabDmg: 10 }) },
+          slow: { mul: 0.3, dur: 8, soak: true, moab: true }, dot: { dmg: 12, every: 0.3, dur: 6 }, explode: { r: 55, dmg: 5, pierce: 20 }, moabDmg: 35 }) },
     },
     sniper: {
       name: 'Orbital Laser', cost: 24000, color: '#40c4ff',
@@ -436,21 +436,21 @@
       name: 'Thunder God', cost: 20000, color: '#b388ff',
       desc: 'Commands the storm: three massive lightning chains that jump to 10 mutants each. Ability: Wrath of Zeus.',
       base: { range: 200, rate: 0.12, attack: 'chain', count: 3, camo: true, ability: 'wrathOfZeus',
-        proj: P({ dmg: 8, pierce: 1, type: 'energy', moabDmg: 30, bruteDmg: 10, chain: { jumps: 10, range: 120 }, stun: { dur: 0.25 } }) },
+        proj: P({ dmg: 10, pierce: 1, type: 'energy', moabDmg: 30, bruteDmg: 10, chain: { jumps: 12, range: 120 }, stun: { dur: 0.25 } }) },
     },
     pilot: {
       name: 'Minion Air Force', cost: 22000, color: '#ffd83a',
       desc: 'Three golden jets with homing darts and missiles circle the battlefield. Ability: Carpet Bomb.',
-      base: { range: 150, rate: 0.12, attack: 'plane', planes: 3, orbit: 95, planeSpeed: 2.2, camo: true, count: 2, spread: 6, ability: 'carpetBomb',
-        proj: P({ tex: 'p_dart', speed: 900, dmg: 4, pierce: 4, r: 5, armored: true, homing: true, moabDmg: 6 }),
-        alt: { every: 4, proj: P({ tex: 'p_rocket', speed: 600, dmg: 0, pierce: 1, type: 'explosive', r: 8, homing: true, explode: { r: 60, dmg: 6, pierce: 30 }, moabDmg: 40 }) } },
+      base: { range: 150, rate: 0.1, attack: 'plane', planes: 3, orbit: 95, planeSpeed: 2.2, camo: true, count: 2, spread: 6, ability: 'carpetBomb',
+        proj: P({ tex: 'p_dart', speed: 900, dmg: 6, pierce: 6, r: 5, armored: true, homing: true, moabDmg: 35 }),
+        alt: { every: 3, proj: P({ tex: 'p_rocket', speed: 600, dmg: 0, pierce: 1, type: 'explosive', r: 8, homing: true, explode: { r: 60, dmg: 10, pierce: 30 }, moabDmg: 100 }) } },
     },
     rockstar: {
       name: 'Rock Legend', cost: 18000, color: '#ff4081',
       desc: 'A stadium-sized concert. Five giant sound waves, stuns, knockback, and the whole band buffs nearby towers.',
       base: { range: 200, rate: 0.18, attack: 'proj', count: 5, spread: 18, camo: true, ability: 'encore', rhythm: 4,
         buff: { range: 0.1, rate: 0.15, pierce: 1, camo: false, armored: false, discount: 0 }, buffRange: 200,
-        proj: P({ tex: 'p_wave', speed: 460, dmg: 6, pierce: 40, type: 'normal', r: 18, life: 1.1, knock: 4, stun: { dur: 0.4 }, moabDmg: 10, bruteDmg: 6 }) },
+        proj: P({ tex: 'p_wave', speed: 460, dmg: 8, pierce: 40, type: 'normal', r: 18, life: 1.1, knock: 4, stun: { dur: 0.4 }, moabDmg: 50, bruteDmg: 6 }) },
     },
     farm: {
       name: 'Banana Republic', cost: 45000, color: '#ffca28',
@@ -460,9 +460,9 @@
     lab: {
       name: "Nefario's Doomsday Lab", cost: 50000, color: '#e040fb',
       desc: 'Massive buffs (+20% range, 30% faster, +2 pierce, camo, armor) in a huge radius, 25% discounts and a doom-laser turret.',
-      base: { range: 280, rate: 0.07, attack: 'instant', camo: true, ability: 'labOverload', flat: 1000,
+      base: { range: 280, rate: 0.06, attack: 'instant', camo: true, ability: 'labOverload', flat: 1000,
         buff: { range: 0.2, rate: 0.3, pierce: 2, camo: true, armored: true, discount: 0.25 },
-        proj: P({ dmg: 20, pierce: 1, type: 'energy', moabDmg: 30, bounce: 2 }) },
+        proj: P({ dmg: 40, pierce: 1, type: 'energy', moabDmg: 80, bounce: 2 }) },
     },
     super: {
       name: 'Banana Galaxy God', cost: 120000, color: '#fff176',
@@ -474,15 +474,15 @@
       name: 'Nailinator', cost: 18000, color: '#b0bec5',
       desc: 'An iron nail factory. Huge spike piles land right in front of the mutants, glue them, and explode when used up.',
       base: { range: 160, rate: 0.12, attack: 'trap', maxTraps: 80, smart: true, ability: 'ironRain',
-        proj: P({ tex: 'fx_nails_big', dmg: 6, pierce: 40, type: 'sharp', armored: true, r: 14, life: 25, moabDmg: 30, bruteDmg: 10,
-          mine: { r: 60, dmg: 8, pierce: 40 }, slow: { mul: 0.5, dur: 2, moab: true } }) },
+        proj: P({ tex: 'fx_nails_big', dmg: 6, pierce: 40, type: 'sharp', armored: true, r: 14, life: 25, moabDmg: 60, bruteDmg: 10,
+          mine: { r: 60, dmg: 12, pierce: 40 }, slow: { mul: 0.5, dur: 2, moab: true } }) },
     },
     sub: {
       name: 'Leviathan', cost: 20000, color: '#26c6da',
       desc: 'A war-sub the size of a whale. Four giant homing torpedoes that shred armor, plus sonar that strips Camo everywhere nearby.',
-      base: { range: 240, rate: 0.2, attack: 'proj', count: 4, spread: 18, camo: true, sonar: 1, ability: 'leviathan',
+      base: { range: 240, rate: 0.16, attack: 'proj', count: 4, spread: 18, camo: true, sonar: 1, ability: 'leviathan',
         proj: P({ tex: 'p_torpedo', scale: 1.5, speed: 520, dmg: 0, pierce: 1, type: 'explosive', r: 10, homing: true, shred: 4, trail: 0x80deea,
-          explode: { r: 70, dmg: 10, pierce: 50 }, moabDmg: 60, bruteDmg: 10 }) },
+          explode: { r: 70, dmg: 12, pierce: 50 }, moabDmg: 100, bruteDmg: 10 }) },
     },
   };
   // The Ultimate form (three fused towers of the same kind): a completely new
@@ -520,6 +520,19 @@
     banana: 'extra damage', fart: 'poison', rocket: 'armor shred + blasts', freeze: 'freezes', jelly: 'heavy slow',
     sniper: 'double damage to giants', tesla: 'stuns', pilot: 'bombs along the beam', rockstar: 'knockback',
     nails: 'leaves nail piles', sub: 'strips Camo', farm: 'bananas per hit', lab: 'overdrives nearby towers', super: 'wider, stronger beam',
+  };
+
+  // POWER UP: an Ultimate or Omega Mech keeps growing with bananas, up to ★10.
+  // Every star adds damage and attack speed to all of the tower's attacks. A
+  // star's price follows the tower's own Ultimate price, so every kind of giant
+  // grows just as fast for what it costs.
+  MT.POWER = {
+    max: 10,
+    dmg: 0.35, // +35% damage per star
+    speed: 0.04, // +4% attack speed per star (the giant attacks too)
+    income: 0.2, // +20% income per star (Banana Planet, Moon Base)
+    // star n costs (0.9 + 0.19 (n - 1)) times the Ultimate's price: ★10 in total about 17.5x
+    cost: (base, n) => base * (0.9 + 0.19 * (n - 1)),
   };
 
   // ---------------------------------------------------------------- abilities

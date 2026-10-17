@@ -275,8 +275,69 @@
     });
   }
 
+  // ---------------------------------------------------------------- POWER UP
+  // Ultimates and Omega Mechs keep growing: every ★ costs a share of the
+  // tower's Ultimate price and adds damage and attack speed (see MT.POWER).
+  // An Omega Mech pays the average Ultimate price of its three parts.
+  const canPower = (t) => !!t && (t.ultimate || t.omega) && !t.fusing;
+  function powerBase(t) {
+    if (t.omega) return t.subs.reduce((a, u) => a + u.def.fusion.ultimate.cost, 0) / t.subs.length;
+    return t.def.fusion.ultimate.cost;
+  }
+  function powerCost(game, t) {
+    return game.price(MT.POWER.cost(powerBase(t), t.powerLv + 1));
+  }
+
+  function powerStatus(game, t) {
+    if (!canPower(t)) return { can: false, reason: '' };
+    if (t.powerLv >= MT.POWER.max) return { can: false, max: true, reason: 'Fully powered up!' };
+    const cost = powerCost(game, t);
+    if (cost > game.money) return { can: false, cost, reason: 'Not enough bananas!' };
+    return { can: true, cost, reason: '' };
+  }
+
+  // set the stars (also used when a saved game is loaded)
+  function setPower(t, n) {
+    t.powerLv = Math.max(0, Math.min(MT.POWER.max, n | 0));
+    if (t.subs) t.subs.forEach((u) => (u.powerLv = t.powerLv));
+    t.applyBuffs();
+    t.makeFusedVisuals();
+  }
+
+  function powerUp(game, t) {
+    const st = powerStatus(game, t);
+    if (!st.can) {
+      MT.Audio.play('error');
+      if (st.reason) game.hud.toast(st.reason, 1600);
+      return;
+    }
+    game.money -= st.cost;
+    t.spent += st.cost;
+    setPower(t, t.powerLv + 1);
+    game.recalcBuffs();
+    game.markDirty();
+    t.bump = 1;
+    const n = t.powerLv;
+    const col = t.omega ? 0xffffff : U.hexInt(t.def.fusion.color);
+    game.fx.ring(t.x, t.y, 110 + n * 8, col, { dur: 650, force: true });
+    game.fx.ring(t.x, t.y, 60, 0xffe082, { dur: 420, force: true });
+    game.fx.glow.particleTint = 0xffe082;
+    game.fx.glow.explode(14 + n * 2, t.x, t.y - 30);
+    if (n >= MT.POWER.max) {
+      game.fx.screenFlash(col, 0.3, 500);
+      game.fx.bigText('MAX POWER!', '#ffd54f', 54, t.name + ' ★' + n);
+      game.shake(0.2);
+      MT.Audio.play('fusionBoom');
+    } else {
+      game.fx.floatText(t.x, t.y - 100, 'POWER ★' + n, '#ffe082', 24);
+      MT.Audio.play('upgrade');
+    }
+    game.hud.showTower(t);
+  }
+
   MT.Fusion = {
     NEEDED, candidates, status, fuse, checkHint, maxedOfType,
     ultimateCandidates, ultimateStatus, fuseUltimate, omegaCandidates, omegaStatus, fuseOmega, isPlainFused,
+    powerStatus, powerUp, setPower,
   };
 })();

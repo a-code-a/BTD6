@@ -119,7 +119,12 @@
       this.maxLives = this.diff.lives + this.perks.lives;
       this.lives = this.maxLives;
       // numbers for the end-of-game report
-      this.stat = { time: 0, livesLost: 0, abilities: 0, built: 0, sold: [] };
+      this.stat = {
+        time: 0, livesLost: 0, abilities: 0, built: 0, sold: [],
+        peak: 0, healed: 0, cheat: 0, giants: 0, villains: 0, leaks: 0,
+        rounds: [], // one entry per finished round: { r, pops, cash, lost, t }
+      };
+      this.roundSnap = null;
       // the +$ cheat switches Gru Coins and achievements off for this game
       this.cheated = false;
       this.coinsEarned = 0;
@@ -128,6 +133,9 @@
       this.heroUsed = false;
       this.spotting = null; // a Catapult waiting for its target spot to be clicked
       this.powerPlacing = null; // a power waiting to be dropped on the track
+      this.heroPick = null; // Nefario's gadget spot / Agnes' Best Friend waiting for a click
+      this.traitHero = null; // the hero on the map (see MT.HeroTraits)
+      this.plan = { heist: 0, assault: 0, lockdown: 0, moonshot: 0 }; // Gru's Master Plan
       this.powerCd = {};
       this.dirty = false; // something changed between rounds: save the game soon
       this.saveT = 0;
@@ -294,17 +302,19 @@
       if (this.sandbox || this.over || this.lives >= this.maxLives) return 0;
       const got = Math.min(n, this.maxLives - this.lives);
       this.lives += got;
+      this.stat.healed += got;
       if (x != null) this.fx.floatText(x, y, '+' + got + ' ♥', '#ff5c7a', 16);
       return got;
     }
 
-    cheatMoney() {
-      if (this.over) return;
-      this.money += CFG.CHEAT_MONEY;
+    cheatMoney(amount) {
+      if (this.over || !(amount > 0)) return;
+      this.money += amount;
+      this.stat.cheat += amount;
       MT.Audio.play('coin');
       const first = !this.cheated;
       this.cheated = true;
-      this.hud.toast(`CHEAT: +${U.money(CFG.CHEAT_MONEY)} bananas!` + (first ? '\nNo Gru Coins or achievements in this game.' : ''), first ? 2600 : 1600);
+      this.hud.toast(`CHEAT: +${U.money(amount)} bananas!` + (first ? '\nNo Gru Coins or achievements in this game.' : ''), first ? 2600 : 1600);
       this.hud.flashMoney();
       this.markDirty();
     }
@@ -362,7 +372,7 @@
         this.pointer.y = p.worldY;
         if (this.over || this.paused) return;
         if (p.rightButtonDown()) {
-          if (this.spotting || this.powerPlacing) {
+          if (this.spotting || this.powerPlacing || this.heroPick) {
             this.cancelSpecial();
             return;
           }
@@ -377,6 +387,10 @@
         if (over.length) return;
         const x = p.worldX, y = p.worldY;
         if (x >= CFG.MAP_W) return;
+        if (this.heroPick) {
+          MT.HeroTraits.pick(this, x, y);
+          return;
+        }
         if (this.powerPlacing) {
           MT.Powers.drop(this, x, y);
           return;
@@ -402,8 +416,9 @@
         if (this.over) return;
         const k = ev.key;
         if (k === 'Escape') {
-          if (this.spotting || this.powerPlacing) this.cancelSpecial();
+          if (this.spotting || this.powerPlacing || this.heroPick) this.cancelSpecial();
           else if (this.hud.powersOpen) this.hud.togglePowers(false);
+          else if (this.hud.cheatOpen) this.hud.toggleCheat(false);
           else if (this.moving) this.cancelMove();
           else if (this.placing) this.cancelPlacing();
           else if (this.selected) this.select(null);
@@ -423,6 +438,8 @@
         if (up === this.heroDef.key) return this.startPlacing(this.heroId);
         for (const id of MT.TOWER_ORDER) if (MT.TOWERS[id].key === up) return this.startPlacing(id);
         if (this.selected) {
+          // the giant tiers have no paths: "," buys their next POWER UP star instead
+          if (k === ',' && (this.selected.ultimate || this.selected.omega)) MT.Fusion.powerUp(this, this.selected);
           if (k === ',') this.buyUpgrade(this.selected, 0);
           if (k === '.') this.buyUpgrade(this.selected, 1);
           if (k === '/') this.buyUpgrade(this.selected, 2);
@@ -512,11 +529,18 @@
 
     // ------------------------------------------------------------------ moving towers
     moveFee(t) {
+      // Lucy's Grapple: she moves for free (with a cooldown instead)
+      if (t.stats.grapple) return 0;
       return U.round5(Math.min(5000, Math.max(50, t.spent * 0.05)));
     }
 
     startMove(t) {
       if (!t || this.over || t.fusing) return;
+      if (t.grappleCd > 0) {
+        MT.Audio.play('error');
+        this.hud.toast(`Grapple ready in ${Math.ceil(t.grappleCd)}s`, 1200);
+        return;
+      }
       const fee = this.moveFee(t);
       if (fee > this.money) {
         MT.Audio.play('error');
@@ -557,6 +581,10 @@
       }
       this.money -= m.fee;
       this.fx.dust.explode(10, t.x, t.y + 14);
+      if (t.stats.grapple) {
+        t.grappleCd = t.stats.grapple;
+        this.fx.lightning(t.x, t.y - 30, x, y - 30, 0xff4fa3, 2, 0.25);
+      }
       t.moveTo(x, y);
       this.fx.dust.explode(12, x, y + 14);
       this.fx.ring(x, y, 46, 0xffffff, { dur: 350 });
@@ -698,15 +726,40 @@
     // one row of the end-of-game report
     towerRecord(t, sold) {
       const subs = t.subs || [];
+      // upgrade summary under the name: hero level, "4-0-2" paths, or the fusion tier
+      const info = t.hero ? `Level ${t.level}` + (t.stars ? `  ★${t.stars}` : '')
+        : t.omega ? 'Omega fusion' : t.ultimate ? 'Ultimate fusion' : t.tiers.join('-') + (t.fused ? '  fused' : '');
       return {
-        name: t.name, type: t.type, key: t.texKey(), hero: t.hero, omega: t.omega, ultimate: t.ultimate, fused: t.fused, sold: !!sold,
+        name: t.name + (t.powerLv ? ' ★' + t.powerLv : ''), type: t.type, key: t.texKey(), hero: t.hero, omega: t.omega, ultimate: t.ultimate, fused: t.fused, sold: !!sold, info,
         pops: Math.floor(t.totalPops), dmg: Math.round(subs.reduce((a, u) => a + u.dmg, t.dmg)),
         spent: t.spent, earned: Math.round(subs.reduce((a, u) => a + u.earned, t.earned)),
       };
     }
 
+    // ------------------------------------------------------------------ round history (stats screen)
+    earnedSoFar() {
+      const own = (t) => (t.subs || []).reduce((a, u) => a + u.earned, t.earned);
+      return this.towers.reduce((a, t) => a + own(t), 0) + this.stat.sold.reduce((a, r) => a + r.earned, 0);
+    }
+
+    beginRoundStat() {
+      this.roundSnap = { r: this.round, pops: this.totalPops, lost: this.stat.livesLost, cash: this.earnedSoFar(), t: this.stat.time };
+    }
+
+    // a lost game also records the round it was lost in
+    endRoundStat() {
+      const a = this.roundSnap;
+      if (!a) return;
+      this.roundSnap = null;
+      this.stat.rounds.push({
+        r: a.r, pops: this.totalPops - a.pops, lost: this.stat.livesLost - a.lost,
+        cash: Math.max(0, Math.round(this.earnedSoFar() - a.cash)), t: Math.round(this.stat.time - a.t),
+      });
+    }
+
     sell(t) {
       this.stat.sold.push(this.towerRecord(t, true));
+      if (t.hero) MT.HeroTraits.onRemove(this, t);
       const v = t.sellValue();
       this.money += v;
       t.destroy();
@@ -766,6 +819,7 @@
         if (this.selected === t) this.hud.showTower(t);
       }
       this.spotting = null;
+      this.heroPick = null;
       if (this.powerPlacing) {
         this.powerPlacing = null;
         this.hud.refreshPowers();
@@ -779,6 +833,8 @@
     }
 
     recalcBuffs() {
+      // hero traits first: Gru's plan, Kevin's team size, Agnes' friend
+      MT.HeroTraits.refresh(this);
       const units = this.units();
       const supports = units.filter((t) => t.stats.buff);
       // Dru's Gold Rush: every pop near him pays more
@@ -800,14 +856,26 @@
             const sb = s.stats.buff;
             // a hero's partner tower gets double the aura, Legend Form doubles it again
             const k = s.hero ? (s.def.partner === t.type ? 2 : 1) * (s.legend > 0 ? 2 : 1) : 1;
+            // Kevin's Teamwork adds to his Command
+            const ex = s.hero ? MT.HeroTraits.buffExtra(s) : null;
             b = b || { range: 0, rate: 0, pierce: 0, dmg: 0, camo: false, armored: false, air: false };
             b.range = Math.max(b.range, (sb.range || 0) * Math.min(k, 2));
-            b.rate = Math.max(b.rate, Math.min(0.6, (sb.rate || 0) * k));
+            b.rate = Math.max(b.rate, Math.min(0.6, ((sb.rate || 0) + (ex ? ex.rate : 0)) * k));
             b.dmg = Math.max(b.dmg, Math.min(1, (sb.dmg || 0) * k));
-            b.pierce = Math.max(b.pierce, sb.pierce || 0);
+            b.pierce = Math.max(b.pierce, (sb.pierce || 0) + (ex ? ex.pierce : 0));
             b.camo = b.camo || !!sb.camo;
             b.armored = b.armored || !!sb.armored;
             b.air = b.air || !!sb.air;
+          }
+          // Agnes' Best Friend gets her favours on top of everything else
+          const fb = MT.HeroTraits.friendBuff(this, t);
+          if (fb) {
+            b = b || { range: 0, rate: 0, pierce: 0, dmg: 0, camo: false, armored: false, air: false };
+            b.rate = Math.min(0.6, b.rate + fb.rate);
+            b.range += fb.range;
+            b.pierce += fb.pierce;
+            b.dmg = Math.min(1, b.dmg + fb.dmg);
+            b.camo = b.camo || fb.camo;
           }
         }
         t.buffs = b;
@@ -833,6 +901,7 @@
         return;
       }
       this.round++;
+      this.beginRoundStat();
       this.roundActive = true;
       this.roundTime = 0;
       this.spawnIdx = 0;
@@ -866,7 +935,8 @@
         income += t.stats.flat;
         t.earned += t.stats.flat;
       }
-      return income + MT.Giants.roundEnd(this);
+      // + Dru's interest (and Agnes' hearts)
+      return income + MT.Giants.roundEnd(this) + MT.HeroTraits.roundEnd(this);
     }
 
     endRound() {
@@ -877,6 +947,7 @@
       // Bank of Evil: loan repayments come out of the round's bananas
       if (this.mapFx) this.money -= this.mapFx.roundEnd(income);
       this.collectAllPickups();
+      this.endRoundStat();
       const hero = this.towers.find((t) => t.hero);
       if (hero) {
         this.roundHeroXp(hero, 20 + this.round * 8);
@@ -930,6 +1001,7 @@
       if (this.mode === 'boss') first = MT.Save.bossWin(this.rush ? 'rush' : this.bossId, this.bossTier, this.stat.time);
       else if (!this.sandbox) first = MT.Save.award(this.mapDef.id, this.diff.id);
       this.firstWin = first;
+      this.endRoundStat();
       if (!this.sandbox) {
         MT.Save.addStats(this.totalPops - this.popsBanked, this.round, true);
         this.popsBanked = this.totalPops;
@@ -958,6 +1030,7 @@
       this.over = true;
       this.lives = 0;
       this.defeatReason = reason || null;
+      this.endRoundStat();
       MT.Save.addStats(this.totalPops - this.popsBanked, this.round, false);
       this.popsBanked = this.totalPops;
       MT.Progress.defeat(this);
@@ -993,6 +1066,7 @@
         return;
       }
       this.stat.livesLost += Math.min(cost, Math.max(0, this.lives));
+      this.stat.leaks++;
       this.lives -= cost;
       e.leaked = true;
       e.destroy();
@@ -1108,6 +1182,9 @@
       }
       // Alchemist gold: the mutant pays extra when it pops
       if (p.gold && !e.boss) e.gold = Math.max(e.gold || 0, p.gold);
+      // hero traits: Lucy marks, Vector's reverse squid shoves back
+      if (p.mark) MT.HeroTraits.mark(this, e, p.mark, tower);
+      if (p.reverse) MT.HeroTraits.reverse(this, e, p.reverse, tower);
       if (p.knockBoss && e.boss && !e.def.final && !e.def.bossFight) e.dist = Math.max(0, e.dist - p.knockBoss * 3);
       if (p.slow && (!e.boss || p.slow.moab)) {
         const strong = tower && ((tower.type === 'jelly' && tower.tiers[2] >= 4) || tower.fused);
@@ -1177,6 +1254,8 @@
 
     damageEnemy(e, d, tower) {
       if (e.dead) return [];
+      // Lucy's Agent Mark: marked mutants take more damage from everything
+      if (e.markT > 0) d *= 1 + e.markAmp;
       if (tower) tower.dmg += Math.min(d, Math.max(0, e.hp));
       e.hp -= d;
       // a regrow mutant that keeps getting hit never gets the chance to grow back
@@ -1211,11 +1290,14 @@
       if (e.gold) cash += e.gold;
       if (this.timed.length && this.timed.some((f) => f.type === 'goldenTouch')) cash *= 3;
       if (tower && tower.cashBonus) cash *= 1 + tower.cashBonus;
+      if (this.plan.heist) cash *= 1 + this.plan.heist;
       if (cash > this.cashMul && Math.random() < 0.35) this.fx.sparkle(e.x, e.y - 6, 0xffd740);
       this.money += cash;
       this.totalPops++;
       if (e.regrow) this.cnt.regrow++;
       if (e.type === 'healer') this.cnt.healer++;
+      if (e.def.bossFight || e.def.final) this.stat.villains++;
+      else if (e.boss) this.stat.giants++;
       if (tower) {
         tower.pops++;
         tower.earned += cash;
@@ -1251,6 +1333,12 @@
           k.applySlow(e.slowMul, e.slowT, true, e.slowAcid);
           if (e.dot) k.dot = Object.assign({}, e.dot);
         }
+        // Lucy's mark sticks to every layer, and Vector can't shove the pieces back forever
+        if (e.markT > 0) {
+          k.markT = e.markT;
+          k.markAmp = e.markAmp;
+        }
+        k.reversed = e.reversed;
         this.enemies.push(k);
         kids.push(k);
         if (k.boss) MT.Bosses.onSpawn(this, k);
@@ -1697,6 +1785,8 @@
         if (e.type === 'bananaFrenzy' && t.type === 'banana') m *= 0.33;
         if (e.type === 'overdrive' && U.dist(t.x, t.y, e.x, e.y) <= e.r) m *= 0.5;
       }
+      // Gru's ASSAULT plan
+      if (this.plan.assault) m *= 1 - this.plan.assault;
       return m;
     }
 
@@ -1706,6 +1796,8 @@
         if (f.type === 'jellyStorm') m *= e.boss ? 0.75 : 0.5;
         if (f.type === 'snowstorm' && e.boss) m *= 0.5;
       }
+      // Gru's LOCKDOWN plan
+      if (this.plan.lockdown) m *= 1 - this.plan.lockdown * (e.boss ? 0.5 : 1);
       return m;
     }
 
@@ -1832,7 +1924,7 @@
         // unlimited bananas and lives
         if (this.money < 1e9) this.money = 1e9;
         this.lives = this.diff.lives;
-      }
+      } else if (this.money > this.stat.peak) this.stat.peak = Math.floor(this.money);
       if (this.mode === 'boss') MT.BossFight.step(this, dt);
       if (this.sbQueue.length) {
         this.sbT -= dt;
@@ -1856,11 +1948,14 @@
           }
         }
       }
+      // El Macho grabs mutants before they move
+      MT.HeroTraits.preStep(this, dt);
       for (const e of this.enemies) if (!e.dead) e.update(dt);
       if (this.over) return;
       this.rebuildGrid();
       this.assignShields();
       for (const t of this.towers) t.update(dt);
+      MT.HeroTraits.step(this, dt);
       if (this.mapFx) this.mapFx.step(dt);
       for (const p of this.projectiles) if (!p.dead) p.update(dt);
       this.stepZones(dt);
@@ -1873,7 +1968,9 @@
         this.timed[i].t -= dt;
         if (this.timed[i].t <= 0) this.timed.splice(i, 1);
       }
-      for (const t of this.units()) for (const k in t.abilityCd) if (t.abilityCd[k] > 0) t.abilityCd[k] -= dt;
+      // Gru's MOON SHOT plan recharges every ability faster
+      const cdStep = dt * (1 + this.plan.moonshot);
+      for (const t of this.units()) for (const k in t.abilityCd) if (t.abilityCd[k] > 0) t.abilityCd[k] -= cdStep;
       for (const pk of this.pickups) {
         if (pk.auto != null && !pk.done) {
           pk.auto -= dt;
@@ -1934,11 +2031,15 @@
         g.fillStyle(f > 0.5 ? 0x7be35a : f > 0.25 ? 0xffc61a : 0xff4a3a, 1);
         g.fillRoundedRect(x, y, Math.max(2, w * f), 5, 2.5);
       }
+      // hero traits: Lucy's marks, El Macho's Guard, gadgets, labels, the Best Friend's heart
+      MT.HeroTraits.render(this, g, dt, time);
       MT.Bosses.drawBar(this, this.gTop, time);
       // range / placement preview
       const rg = this.gRange;
       rg.clear();
-      if (this.powerPlacing) {
+      if (MT.HeroTraits.preview(this, rg, time)) {
+        // picking a gadget spot or Agnes' Best Friend
+      } else if (this.powerPlacing) {
         MT.Powers.preview(this, rg, time);
       } else if (this.spotting) {
         // picking a Catapult's target spot
@@ -2033,6 +2134,7 @@
           rg.lineBetween(t.x, t.y - 20, t.spot.x, t.spot.y);
           this.drawCrosshair(rg, t.spot.x, t.spot.y, time, 0xff7043);
         }
+        if (t.hero) MT.HeroTraits.selectedExtras(this, rg, t, time);
         if (this.fuseHover) {
           // highlight the towers that would be fused
           const pulse = 0.55 + Math.sin(time * 0.012) * 0.35;

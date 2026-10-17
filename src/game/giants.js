@@ -74,7 +74,7 @@
     },
     // Roaming Tornado: rolls backwards down the track, blowing mutants back
     fart(g, t, dt) {
-      if (!every(t, 'nado', 4.5, dt)) return;
+      if (!every(t, 'nado', 3.5, dt)) return;
       const e = leader(near(g, t, t.stats.range + 40));
       if (!e) return retry(t, 'nado', 0.4);
       spawn(g, { kind: 'tornado', path: e.path, dist: e.dist + 60, end: e.dist - 700, speed: 300, hit: new Set(), tower: t, ph: 0 });
@@ -140,17 +140,17 @@
       if (!list.length) return;
       const e = U.pick(list);
       g.fx.lightning(e.x + U.rand(-50, 50), -20, e.x, e.y - 6, 0xd1b3ff, 2.6, 0.18);
-      g.applyHit(e, { dmg: 10, moabDmg: 40, stun: { dur: 0.2 }, type: 'energy' }, t);
+      g.applyHit(e, { dmg: 14, moabDmg: 80, stun: { dur: 0.2 }, type: 'energy' }, t);
       g.fx.sparks.explode(2, e.x, e.y);
       MT.Audio.play('thunder');
     },
     // Strafing Runs: bombers carpet-bomb the track around the carrier
     pilot(g, t, dt) {
-      if (!every(t, 'strafe', 5, dt)) return;
+      if (!every(t, 'strafe', 4, dt)) return;
       const r = t.stats.range + t.stats.orbit;
       const pts = g.trackPoints({ x: t.x, y: t.y, stats: { range: r } }).filter((_, i) => i % 4 === 0);
       if (!pts.length || !near(g, t, r).length) return retry(t, 'strafe', 0.5);
-      const p = { tex: 'p_rocket', type: 'explosive', explode: { r: 52, dmg: 12, pierce: 30 }, moabDmg: 160 };
+      const p = { tex: 'p_rocket', type: 'explosive', explode: { r: 52, dmg: 20, pierce: 30 }, moabDmg: 600 };
       pts.slice(0, 18).forEach((q, i) => spawn(g, { kind: 'shell', sx: q.x, sy: q.y - 70, tx: q.x, ty: q.y, age: 0, dur: 0.25, delay: i * 0.06, arc: 0, p, tower: t, tex: 'p_minibomb', scale: 1.4 }));
       const jet = g.add.image(pts[0].x - 60, pts[0].y - 80, 'fx_bomber').setScale(1 / S).setDepth(6600);
       const last = pts[Math.min(17, pts.length - 1)];
@@ -168,8 +168,8 @@
       const list = near(g, t, t.stats.range);
       if (!list.length) return;
       const p = drop
-        ? { dmg: 30, moabDmg: 70, knock: 18, stun: { dur: 0.8, moab: true }, type: 'normal' }
-        : { dmg: 6, moabDmg: 20, type: 'normal' };
+        ? { dmg: 40, moabDmg: 250, knock: 18, stun: { dur: 0.8, moab: true }, type: 'normal' }
+        : { dmg: 8, moabDmg: 60, type: 'normal' };
       list.slice(0, 120).forEach((e) => g.applyHit(e, p, t));
       g.fx.ring(t.x, t.y, t.stats.range, drop ? 0xff4081 : 0x40c4ff, { disc: drop, dur: drop ? 500 : 300 });
       if (drop) {
@@ -192,7 +192,7 @@
         } else retry(t, 'wall', 0.4);
       }
       if (every(t, 'slam', 5, dt) && near(g, t, t.stats.range).length) {
-        const sp = { tex: 'p_shrapnel', speed: 520, dmg: 6, pierce: 5, type: 'sharp', armored: true, r: 7, scale: 2.2 };
+        const sp = { tex: 'p_shrapnel', speed: 520, dmg: 6, pierce: 5, type: 'sharp', armored: true, r: 7, scale: 2.2, moabDmg: 40 };
         for (let i = 0; i < 18; i++) g.addProjectile(new MT.Projectile(g, t, t.x, t.y, (i / 18) * TAU, sp, { range: t.stats.range }));
         g.fx.shockwave(t.x, t.y + 10, 120, 0x90a4ae, 400);
         g.fx.dust.explode(12, t.x, t.y + 20);
@@ -207,7 +207,7 @@
       if (!e) return retry(t, 'grab', 0.3);
       if (e.boss) e.tryStun(1.2);
       else e.stun = Math.max(e.stun, 1.6);
-      spawn(g, { kind: 'tentacle', e, life: 1.6, dps: e.boss ? 320 : 30, tower: t, age: 0 });
+      spawn(g, { kind: 'tentacle', e, life: 1.6, dps: (e.boss ? 600 : 30) * t.dmgMul, tower: t, age: 0 });
       g.fx.splat(e.x, e.y, 26, 0x7e57c2);
     },
     // Banana Moons: three moons orbit and bonk mutants (+ interest at round end)
@@ -230,12 +230,12 @@
     },
     // Clone Troopers
     lab(g, t, dt) {
-      if (!every(t, 'clones', 3, dt)) return;
+      if (!every(t, 'clones', 2.2, dt)) return;
       const e = leader(near(g, t, t.stats.range));
       if (!e) return retry(t, 'clones', 0.4);
       for (let i = 0; i < 4; i++) {
         const start = e.dist + 90 + i * 22;
-        spawn(g, { kind: 'clone', path: e.path, dist: start, end: start - 650, speed: 170, hit: new Set(), pierce: 12, tower: t, ph: Math.random() * 6 });
+        spawn(g, { kind: 'clone', path: e.path, dist: start, end: start - 650, speed: 170, hit: new Set(), pierce: 25, tower: t, ph: Math.random() * 6 });
       }
       MT.Audio.play('bello');
     },
@@ -373,7 +373,7 @@
           e.stun = Math.max(e.stun, 0.12);
           if (e.path === o.path) e.dist += (o.d - e.dist) * Math.min(1, dt * 3);
         }
-        if (doHit && n++ < 40) g.applyHit(e, { dmg: 3, moabDmg: 40, type: 'energy' }, o.tower);
+        if (doHit && n++ < 40) g.applyHit(e, { dmg: 4, moabDmg: 100, type: 'energy' }, o.tower);
       }
       return o.life > 0;
     },
@@ -386,10 +386,10 @@
         if (e.dead || o.hit.has(e.id) || e.path !== o.path || U.dist2(p.x, p.y, e.x, e.y) > (32 + e.radius * 0.5) ** 2) continue;
         o.hit.add(e.id);
         if (e.boss) {
-          g.applyHit(e, { dmg: 0, moabDmg: 150, type: 'normal' }, o.tower);
+          g.applyHit(e, { dmg: 0, moabDmg: 600, type: 'normal' }, o.tower);
           e.dist = Math.max(0, e.dist - 25);
         } else {
-          const kids = g.applyHit(e, { dmg: 6, knock: 20, dot: { dmg: 2, every: 0.5, dur: 3 }, type: 'normal' }, o.tower);
+          const kids = g.applyHit(e, { dmg: 12, knock: 20, dot: { dmg: 4, every: 0.5, dur: 3 }, type: 'normal' }, o.tower);
           if (kids) kids.forEach((k) => o.hit.add(k.id));
         }
       }
@@ -416,8 +416,8 @@
         o.y = o.e.y;
       }
       if (o.age < o.dur) return true;
-      const p = { tex: 'p_ice', type: 'cold', armored: true, freeze: { dur: 1.2, moab: 0.35 }, brittle: true, explode: { r: 34, dmg: 5, pierce: 10 } };
-      if (!o.e.dead) g.applyHit(o.e, { dmg: 16, moabDmg: 70, type: 'cold', armored: true, freeze: { dur: 1.2, moab: 0.35 } }, o.tower);
+      const p = { tex: 'p_ice', type: 'cold', armored: true, freeze: { dur: 1.2, moab: 0.35 }, brittle: true, explode: { r: 34, dmg: 8, pierce: 10 } };
+      if (!o.e.dead) g.applyHit(o.e, { dmg: 24, moabDmg: 200, type: 'cold', armored: true, freeze: { dur: 1.2, moab: 0.35 } }, o.tower);
       g.explode(o.x, o.y, p, o.tower);
       return false;
     },
@@ -430,7 +430,7 @@
         for (const e of g.queryEnemies(o.x, o.y, o.r + 40)) {
           if (n >= 25) break;
           if (e.dead || U.dist2(o.x, o.y, e.x, e.y) > (o.r + e.radius * 0.4) ** 2) continue;
-          g.applyHit(e, { dmg: 4, moabDmg: 25, slow: { mul: 0.35, dur: 1.2, moab: true, look: o.slowLook }, type: 'normal' }, o.tower);
+          g.applyHit(e, { dmg: 8, moabDmg: 80, slow: { mul: 0.35, dur: 1.2, moab: true, look: o.slowLook }, type: 'normal' }, o.tower);
           n++;
         }
       }
@@ -452,7 +452,7 @@
         if (o.pierce <= 0) break;
         if (e.dead || o.hit.has(e.id) || U.dist2(p.x, p.y, e.x, e.y) > (e.radius + 12) ** 2) continue;
         o.hit.add(e.id);
-        const kids = g.applyHit(e, { dmg: 12, moabDmg: 80, knock: 8, type: 'normal' }, o.tower);
+        const kids = g.applyHit(e, { dmg: 40, moabDmg: 600, knock: 8, type: 'normal' }, o.tower);
         if (kids) kids.forEach((k) => o.hit.add(k.id));
         o.pierce--;
       }

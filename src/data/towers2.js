@@ -173,7 +173,7 @@
       name: 'Shadow Shogun', cost: 15000, color: '#9575cd',
       desc: 'A legendary ninja lord. Throws 6 huge golden shurikens that seek, cut armor and strip Camo, plus flash bombs that stun even giants.',
       base: { range: 190, rate: 0.15, attack: 'proj', count: 6, spread: 9, camo: true, ability: 'thousandCuts',
-        proj: P({ tex: 'p_shuriken_gold', scale: 1.4, speed: 760, dmg: 6, pierce: 8, r: 9, spin: 26, homing: true, armored: true, decamo: true, moabDmg: 12, bruteDmg: 6, trail: 0x7c4dff }),
+        proj: P({ tex: 'p_shuriken_gold', scale: 1.4, speed: 760, dmg: 7, pierce: 10, r: 9, spin: 26, homing: true, armored: true, decamo: true, moabDmg: 30, bruteDmg: 6, trail: 0x7c4dff }),
         alt: { every: 4, proj: P({ tex: 'p_flashbomb', speed: 560, dmg: 0, pierce: 1, type: 'normal', r: 8, explode: { r: 80, dmg: 10, pierce: 60 }, stun: { dur: 1.2, moab: true } }) } },
     },
     catapult: {
@@ -186,23 +186,23 @@
     potion: {
       name: 'Grand Alchemist', cost: 18000, color: '#00e676',
       desc: 'Master of potions. 4 homing mega flasks splash acid pools and turn mutants gold, and every tower nearby is brewed.',
-      base: { range: 200, rate: 0.25, attack: 'proj', count: 4, spread: 14, camo: true, ability: 'potionRain', buffRange: 200,
+      base: { range: 200, rate: 0.2, attack: 'proj', count: 4, spread: 14, camo: true, ability: 'potionRain', buffRange: 200,
         buff: { range: 0.1, rate: 0.15, pierce: 1, dmg: 0.25, camo: false, armored: false, discount: 0 },
-        proj: P({ tex: 'p_potion_big', scale: 1.3, speed: 520, dmg: 0, pierce: 1, type: 'normal', r: 10, spin: 8, homing: true, armored: true, gold: 5, moabDmg: 20, trail: 0x69f0ae,
-          explode: { r: 60, dmg: 6, pierce: 40 }, dot: { dmg: 6, every: 0.4, dur: 4 }, cloud: { r: 40, dur: 3, dmg: 4, every: 0.4, pierce: 25 }, cloudKind: 'acid' }) },
+        proj: P({ tex: 'p_potion_big', scale: 1.3, speed: 520, dmg: 0, pierce: 1, type: 'normal', r: 10, spin: 8, homing: true, armored: true, gold: 5, moabDmg: 60, trail: 0x69f0ae,
+          explode: { r: 60, dmg: 10, pierce: 40 }, dot: { dmg: 8, every: 0.4, dur: 4 }, cloud: { r: 40, dur: 3, dmg: 4, every: 0.4, pierce: 25 }, cloudKind: 'acid' }) },
     },
     fireman: {
       name: 'Bee-Do Brigade', cost: 16000, color: '#ff1744',
       desc: 'A whole fire brigade on a giant truck. 3 water cannons blast mutants far back and flood the track, and the siren stuns everything.',
       base: { range: 200, rate: 0.2, attack: 'proj', count: 3, spread: 12, camo: true, ability: 'megaSiren', siren: { every: 2, stun: 1, moab: true },
-        proj: P({ tex: 'p_waterball', scale: 1.4, speed: 620, dmg: 0, pierce: 1, type: 'normal', r: 10, knock: 12, knockBoss: 6, decamo: true, moabDmg: 40, trail: 0x4fc3f7,
+        proj: P({ tex: 'p_waterball', scale: 1.4, speed: 620, dmg: 0, pierce: 1, type: 'normal', r: 10, knock: 12, knockBoss: 6, decamo: true, moabDmg: 70, trail: 0x4fc3f7,
           explode: { r: 64, dmg: 12, pierce: 50 }, cloud: { r: 36, dur: 3, dmg: 3, every: 0.5, pierce: 25, slow: { mul: 0.5, dur: 1, look: 'wet' } }, cloudKind: 'water' }) },
     },
     vampire: {
       name: 'Count Minionula', cost: 20000, color: '#d50000',
       desc: 'The king of vampires. Releases swarms of 12 huge homing bats that bite through armor, drain giants and heal you all the time.',
       base: { range: 220, rate: 0.3, attack: 'proj', count: 12, spread: 12, camo: true, lifesteal: 6, healCap: 20, ability: 'eternalNight',
-        proj: P({ tex: 'p_bat_big', scale: 1.2, speed: 420, dmg: 8, pierce: 10, type: 'normal', r: 11, homing: true, armored: true, life: 2.4, moabDmg: 30, trail: 0xff1744, slow: { mul: 0.6, dur: 2, moab: true, look: 'bite' } }) },
+        proj: P({ tex: 'p_bat_big', scale: 1.2, speed: 420, dmg: 8, pierce: 10, type: 'normal', r: 11, homing: true, armored: true, life: 2.4, moabDmg: 55, trail: 0xff1744, slow: { mul: 0.6, dur: 2, moab: true, look: 'bite' } }) },
     },
   };
   const ULTIMATE = {

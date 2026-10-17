@@ -60,6 +60,10 @@
       this.enrage = 1;
       this.dance = 0;
       this.shredT = 0; // armor shredded by rockets: no armor, +1 damage taken
+      this.markT = 0; // Lucy's Agent Mark: takes markAmp more damage while it lasts
+      this.markAmp = 0;
+      this.held = false; // grabbed by El Macho's Roadblock
+      this.reversed = 0; // how often Vector's reverse squids shoved it back
       this.dead = false;
       this.leaked = false;
       this.dmgState = 0;
@@ -118,7 +122,9 @@
       this.slowT = Math.max(this.slowT, dur);
     }
     applyDot(dot, tower) {
-      if (!this.dot || dot.dmg >= this.dot.dmg) this.dot = { dmg: dot.dmg, every: dot.every, t: dot.every, left: dot.dur, tower };
+      // damage buffs (brews, Legend Form, POWER UP) count for the poison too
+      const dmg = tower && tower.dmgMul > 1 ? dot.dmg * tower.dmgMul : dot.dmg;
+      if (!this.dot || dmg >= this.dot.dmg) this.dot = { dmg, every: dot.every, t: dot.every, left: dot.dur, tower };
       else this.dot.left = Math.max(this.dot.left, dot.dur);
     }
     // giants can't be stun-locked: after a stun they shrug off stuns for a moment
@@ -134,7 +140,7 @@
     }
     speedNow() {
       if (this.burrowed) return this.speed * this.def.burrow.speed * this.enrage;
-      if (this.stun > 0 || this.freeze > 0 || this.dance > 0) return 0;
+      if (this.stun > 0 || this.freeze > 0 || this.dance > 0 || this.held) return 0;
       let m = this.auraMul * this.game.globalSlow(this) * this.enrage;
       if (this.slowT > 0) m *= this.slowMul;
       return this.speed * m;
@@ -162,6 +168,7 @@
       if (this.slowT > 0) this.slowT -= dt;
       if (this.dance > 0) this.dance -= dt;
       if (this.shredT > 0) this.shredT -= dt;
+      if (this.markT > 0) this.markT -= dt;
       if (this.immFx > 0) this.immFx -= dt;
       const def = this.def;
       // Magma Mutants melt every bit of ice straight away
@@ -659,6 +666,7 @@
       this.stars = 0; // hero ascension past level 10
       this.sxp = 0; // XP towards the next star
       this.legend = 0; // Legend Form time left
+      this.powerLv = 0; // POWER UP stars of an Ultimate or Omega Mech (Omega parts share them)
       this.dmgMul = 1;
       this.pops = 0;
       this.spent = 0;
@@ -731,6 +739,9 @@
       if (this.hero) return Math.max(0.5, Math.pow(0.95, this.stars)) * lab;
       return (this.ultimate ? 0.7 : this.component ? 0.8 : 1) * lab;
     }
+    get powerSpeed() {
+      return 1 + MT.POWER.speed * this.powerLv;
+    }
     get totalPops() {
       return this.omega ? this.subs.reduce((a, s) => a + s.pops, this.pops) : this.pops;
     }
@@ -791,6 +802,8 @@
         if (pk.range !== 1 && s.range < 1000) s.range *= pk.range;
         this.bonusPierce += pk.pierce || 0;
       }
+      // Kevin's Teamwork speeds up Kevin himself too
+      if (this.hero && s.teamwork) s.rate *= 1 - MT.HeroTraits.teamRate(this);
       if (this.giant > 0) {
         s.range *= 1.5;
         s.rate *= 0.35;
@@ -807,6 +820,14 @@
         s.rate *= 1 - (bw.rate || 0);
         this.bonusPierce += bw.pierce || 0;
         this.dmgMul *= 1 + (bw.dmg || 0);
+      }
+      // POWER UP stars: more damage, faster attacks and more income
+      if (this.powerLv > 0) {
+        const n = this.powerLv;
+        this.dmgMul *= 1 + MT.POWER.dmg * n;
+        if (s.rate < 900) s.rate /= 1 + MT.POWER.speed * n;
+        if (s.flat) s.flat = Math.round(s.flat * (1 + MT.POWER.income * n));
+        if (s.value) s.value = Math.round(s.value * (1 + MT.POWER.income * n));
       }
       // heroes and every fusion tier can shoot down flying mutants; a Lab radar grants it too
       if (this.hero || this.fused || this.omega || (b && b.air)) s.air = true;
@@ -844,10 +865,11 @@
         // the Omega Mech runs its three parts (they fire from its arms and back)
         // and charges the Omega Beam in its core
         for (const u of this.subs) u.update(dt);
-        MT.Giants.omegaUpdate(g, this, dt);
+        MT.Giants.omegaUpdate(g, this, dt * this.powerSpeed);
         return;
       }
-      if (this.ultimate) MT.Giants.update(g, this, dt);
+      // POWER UP stars make the giant attacks come faster too
+      if (this.ultimate) MT.Giants.update(g, this, dt * this.powerSpeed);
       // sonar pings strip Camo from mutants in range
       if (s.sonar) {
         this.sonarT -= dt;
@@ -1084,6 +1106,8 @@
       // Ninja caltrops: every few throws a pile lands right in front of the target
       if (s.caltrops && this.shots % s.caltrops.every === s.caltrops.every - 1) MT.NewTowers.caltrops(g, this, t);
       if (chord) p = Object.assign({}, p, { dmg: Math.max(1, p.dmg) * 3, pierce: p.pierce * 2, r: (p.r || 10) * 1.5, knock: (p.knock || 0) + 6, scale: (p.scale || 1) * 1.5 });
+      // Vector's REVERSE squid: a big one that shoves the mutants back where it lands
+      if (s.reverse && this.shots % s.reverse.every === s.reverse.every - 1) p = Object.assign({}, p, { reverse: s.reverse, explode: null, pierce: 1, r: (p.r || 8) * 1.4, scale: (p.scale || 1) * 1.6 });
       for (let i = 0; i < s.count; i++) {
         const a = base + (s.count > 1 ? ((i - (s.count - 1) / 2) * s.spread * Math.PI) / 180 : 0);
         g.addProjectile(new Projectile(g, this, sx, sy, a, p, { range: s.range, bonusPierce: this.bonusPierce, target: t }));
@@ -1328,6 +1352,8 @@
         });
       }
       if (this.subs) this.subs.forEach((u) => u.render(dt, time));
+      // the POWER UP ★ badge sits on top of the giant
+      if (this.badge && !this.hero) this.badge.setPosition(px, py - sp.displayHeight * sp.originY + 4).setDepth(1000 + this.y + 1);
       this.renderPlanes(time, dt);
       if (this.brewT > 0 && Math.random() < dt * 6) this.game.fx.sparkle(px + U.rand(-12, 12), py - U.rand(0, 34), 0xff5252);
     }
@@ -1393,6 +1419,14 @@
       if ((this.ultimate || this.omega) && !this.orbs) {
         const cols = this.omega ? this.subs.map((u) => MT.util.hexInt(u.def.fusion.color)) : [col, 0xffffff, col];
         this.orbs = cols.map((c) => g.add.image(this.x, this.y, 'fx_puff').setTint(c).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95));
+      }
+      // POWER UP: the aura grows with every star, and a ★ badge floats above
+      const n = this.powerLv;
+      if (n > 0) {
+        this.auraScale += n * 0.04;
+        this.aura.setAlpha(Math.min(0.95, 0.75 + n * 0.02));
+        if (!this.badge) this.badge = MT.text(g, this.x, this.y, '', 15, { title: true, strokeThickness: 4 });
+        this.badge.setText('★' + n).setColor(n >= MT.POWER.max ? '#ffd54f' : '#ffe082');
       }
     }
     // a boss attack knocked this tower out; the overlay pops when it recovers

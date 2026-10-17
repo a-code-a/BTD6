@@ -428,6 +428,9 @@
     const income = 250 + game.round * 50 + game.flatIncome();
     game.money += income;
     game.collectAllPickups();
+    // the stats screen keeps one entry per wave
+    game.endRoundStat();
+    game.beginRoundStat();
     game.growBananas(game.roundTime, T.wave);
     const hero = game.towers.find((t) => t.hero);
     if (hero) game.roundHeroXp(hero, 40 + game.round * 14);

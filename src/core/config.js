@@ -21,7 +21,10 @@ window.MT = window.MT || {};
     W, H, MAP_W, MAP_H: H, RES,
     SIDEBAR_X: MAP_W,
     START_CASH: 650,
-    CHEAT_MONEY: 1000000,
+    // quick picks on the +$ cheat menu; the custom picker steps 1-2-5 between CHEAT_MIN and CHEAT_MAX
+    CHEAT_PRESETS: [1000, 10000, 100000, 1000000, 10000000, 100000000],
+    CHEAT_MIN: 100,
+    CHEAT_MAX: 1000000000,
     SELL_RATE: 0.7,
     SPEED_UNIT: 42, // px per second for an enemy with speed 1
     FAST_SPEED: 3,

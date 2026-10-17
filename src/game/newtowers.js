@@ -341,7 +341,7 @@
   Object.assign(G.ULT, {
     // Shuriken Storm: huge spinning shurikens roll back down the track
     ninja(g, t, dt) {
-      if (!G.every(t, 'saw', 3.2, dt)) return;
+      if (!G.every(t, 'saw', 2.6, dt)) return;
       const e = G.leader(G.near(g, t, t.stats.range + 40).filter((x) => !x.flying));
       if (!e) return G.retry(t, 'saw', 0.4);
       t.aimAt(e);
@@ -364,7 +364,7 @@
     },
     // Acid Geysers: acid bursts out of the ground under the mutants
     potion(g, t, dt) {
-      if (!G.every(t, 'geyser', 0.7, dt)) return;
+      if (!G.every(t, 'geyser', 0.6, dt)) return;
       const list = G.near(g, t, t.stats.range).filter((x) => !x.flying);
       if (!list.length) return G.retry(t, 'geyser', 0.2);
       const e = Math.random() < 0.5 ? G.strongest(list) : U.pick(list);
@@ -378,7 +378,7 @@
       const e = G.leader(G.near(g, t, t.stats.range + 60).filter((x) => !x.flying));
       if (!e) return G.retry(t, 'flood', 0.4);
       t.aimAt(e);
-      floodWave(g, t, e.path, e.dist + 90, e.dist - 700, 360, { dmg: 10, moab: 160, push: 25, bossPush: 30 });
+      floodWave(g, t, e.path, e.dist + 90, e.dist - 700, 360, { dmg: 10, moab: 450, push: 25, bossPush: 30 });
       g.fx.floatText(t.x, t.y - 110, 'BEE-DO!', '#ff5252', 18);
       MT.Audio.play('beedoo');
       MT.Audio.play('splash');
@@ -390,7 +390,7 @@
       if (!list.length) return;
       const e = U.pick(list);
       const sx = t.x + U.rand(-34, 34), sy = t.y - 70 + U.rand(-10, 10);
-      const p = { tex: 'p_bat', speed: 520, dmg: 10, pierce: 2, type: 'normal', r: 8, homing: true, life: 1.6, moabDmg: 45 };
+      const p = { tex: 'p_bat', speed: 520, dmg: 10, pierce: 2, type: 'normal', r: 8, homing: true, life: 1.6, moabDmg: 90 };
       g.addProjectile(new MT.Projectile(g, t, sx, sy, Math.atan2(e.y - sy, e.x - sx) + U.rand(-0.5, 0.5), p, { range: 400, target: e }));
       if (Math.random() < 0.15) MT.Audio.play('bat', sx);
     },
@@ -407,10 +407,10 @@
         if (e.dead || o.hit.has(e.id) || e.path !== o.path || U.dist2(p.x, p.y, e.x, e.y) > (34 + e.radius * 0.5) ** 2) continue;
         o.hit.add(e.id);
         if (e.boss) {
-          g.applyHit(e, { dmg: 0, moabDmg: 260, type: 'normal' }, o.tower);
+          g.applyHit(e, { dmg: 0, moabDmg: 600, type: 'normal' }, o.tower);
           e.dist = Math.max(0, e.dist - 15);
         } else {
-          const kids = g.applyHit(e, { dmg: 14, knock: 6, type: 'sharp', armored: true, decamo: true }, o.tower);
+          const kids = g.applyHit(e, { dmg: 20, knock: 6, type: 'sharp', armored: true, decamo: true }, o.tower);
           if (kids) kids.forEach((k) => o.hit.add(k.id));
         }
         g.fx.sparks.explode(2, e.x, e.y);
@@ -420,7 +420,7 @@
     geyser(g, o, dt) {
       o.age += dt;
       if (o.age < o.dur) return true;
-      g.explode(o.x, o.y, { tex: 'p_potion_big', type: 'normal', armored: true, gold: 5, explode: { r: 54, dmg: 10, pierce: 30 }, moabDmg: 110, dot: { dmg: 6, every: 0.5, dur: 4 } }, o.tower);
+      g.explode(o.x, o.y, { tex: 'p_potion_big', type: 'normal', armored: true, gold: 5, explode: { r: 54, dmg: 14, pierce: 30 }, moabDmg: 300, dot: { dmg: 6, every: 0.5, dur: 4 } }, o.tower);
       G.spawn(g, { kind: 'puddle', x: o.x, y: o.y, r: 40, life: 4, max: 4, tick: 0, tower: o.tower, rot: Math.random() * 6.28, tint: 0x76ff03, fx: 'gas', slowLook: 'acid' });
       const col = g.add.image(o.x, o.y + 6, 'fx_geyser').setOrigin(0.5, 1).setScale(0.9 / S, 0.1 / S).setDepth(1000 + o.y + 5);
       g.tweens.add({ targets: col, scaleY: 1 / S, duration: 160, ease: 'Back.easeOut' });

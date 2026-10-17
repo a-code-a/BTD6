@@ -145,19 +145,41 @@
       const descT = MT.text(this, 452, 258, def.desc, 13, { ox: 0, oy: 0, align: 'left', wrap: 380, color: '#cfe0ff' });
       p.add(descT);
       let y = Math.max(304, 258 + descT.height + 12);
+      // the signature trait: what makes this hero play differently
+      if (def.trait) {
+        const tt = MT.text(this, 452, y, `★ ${def.trait.name.toUpperCase()}`, 16, { title: true, ox: 0, oy: 0, color: '#ff9cf0' });
+        const td = MT.text(this, 452, y + 22, def.trait.desc, 12, { ox: 0, oy: 0, align: 'left', wrap: 390, color: '#ffe9fb', strokeThickness: 3 });
+        p.add([tt, td]);
+        y += 22 + td.height + 12;
+      }
+      // the ten perks, packed tighter (smaller text, smaller gaps) until they fit in the panel
+      const perks = [];
       def.levels.forEach((lv, i) => {
         if (!lv) return;
-        const ab = /ability/i.test(lv.desc);
+        // a new ability (not just a perk that mentions abilities, like MOON SHOT)
+        const ab = /Ability:/.test(lv.desc);
         const g = this.add.graphics();
-        g.fillStyle(ab ? 0xffc61a : 0x24497f, 1);
-        g.fillCircle(466, y + 8, 12);
-        g.lineStyle(2, 0x2a1d14, 1);
-        g.strokeCircle(466, y + 8, 12);
-        const n = MT.text(this, 466, y + 8, String(i), 13, { title: true, strokeThickness: 2, shadow: false, color: ab ? '#2a1d14' : '#ffffff', stroke: ab ? false : undefined });
-        const t = MT.text(this, 488, y, lv.desc, 14, { ox: 0, oy: 0, align: 'left', wrap: 350, color: ab ? '#ffe28a' : '#ffffff', strokeThickness: 3 });
+        const n = MT.text(this, 466, 0, String(i), 13, { title: true, strokeThickness: 2, shadow: false, color: ab ? '#2a1d14' : '#ffffff', stroke: ab ? false : undefined });
+        const t = MT.text(this, 488, 0, lv.desc, 14, { ox: 0, oy: 0, align: 'left', wrap: 350, color: ab ? '#ffe28a' : '#ffffff', strokeThickness: 3 });
         p.add([g, n, t]);
-        y += Math.max(34, t.height + 10);
+        perks.push({ g, n, t, ab });
       });
+      const layout = (size, gap, minH, r) => {
+        let yy = y;
+        perks.forEach(({ g, n, t, ab }) => {
+          t.setFontSize(size).setY(yy);
+          g.clear();
+          g.fillStyle(ab ? 0xffc61a : 0x24497f, 1);
+          g.fillCircle(466, yy + r - 4, r);
+          g.lineStyle(2, 0x2a1d14, 1);
+          g.strokeCircle(466, yy + r - 4, r);
+          n.setFontSize(r + 1).setY(yy + r - 4);
+          yy += Math.max(minH, t.height + gap);
+        });
+        return yy;
+      };
+      const fits = [[14, 10, 34, 12], [13, 6, 26, 11], [12, 4, 22, 10], [11, 3, 19, 9]].find((f) => layout(...f) <= 700);
+      if (!fits) layout(11, 2, 17, 8);
       // ---- right: abilities
       p.add(MT.text(this, 880, 232, 'ABILITIES', 22, { title: true, ox: 0, color: '#ffd83a' }));
       const list = this.abilities(def).concat([{ id: 'legendForm', lv: '★' + MT.LEGEND_STAR }]);
@@ -294,7 +316,7 @@
             p.add(ui);
           }
           p.add(MT.text(this, 590, y + 4, `ULTIMATE: ${U.name}  ·  ${U.mech}`, 16, { title: true, ox: 0, oy: 0, align: 'left', color: '#ff9cf0' }));
-          p.add(MT.text(this, 590, y + 26, U.desc, 13, { ox: 0, oy: 0, align: 'left', wrap: 630, strokeThickness: 3 }));
+          p.add(MT.text(this, 590, y + 26, `${U.desc} POWER UP it with bananas, up to ★${MT.POWER.max}.`, 13, { ox: 0, oy: 0, align: 'left', wrap: 630, strokeThickness: 3 }));
         }
       }
     }

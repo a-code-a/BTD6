@@ -1,7 +1,7 @@
 // Saved games: a classic game is written to storage between rounds (see
 // GameScene.autosave) and can be continued later from the main menu or the
 // difficulty picker. Only what matters between two rounds is kept: towers
-// with their upgrades, fusions and hero levels, bananas, lives, the round,
+// with their upgrades, fusions, POWER UP stars and hero levels, bananas, lives, the round,
 // the report numbers and the power traps still lying on the track.
 (function () {
   const VERSION = 1;
@@ -18,13 +18,19 @@
       tm: t.targetName, cd: cooldowns(t),
     };
     if (t.spot) o.spot = t.spot;
-    if (t.hero) Object.assign(o, { hero: 1, level: t.level, xp: t.xp, stars: t.stars, sxp: t.sxp });
+    if (t.hero) {
+      Object.assign(o, { hero: 1, level: t.level, xp: t.xp, stars: t.stars, sxp: t.sxp });
+      // Gru's plan, Nefario's gadgets, Agnes' Best Friend
+      const tr = MT.HeroTraits.save(t);
+      if (tr) o.trait = tr;
+    }
     else if (t.omega) o.subs = t.subs.map((u) => ({ type: u.type, pops: u.pops, dmg: Math.round(u.dmg), earned: Math.round(u.earned), cd: cooldowns(u) }));
     else {
       o.tiers = t.tiers.slice();
       if (t.fused) o.fused = 1;
       if (t.ultimate) o.ult = 1;
     }
+    if (t.powerLv) o.pl = t.powerLv;
     return o;
   }
 
@@ -34,7 +40,7 @@
       mapName: g.mapDef.name, diffName: g.diff.name, heroName: g.heroDef.name,
       round: g.round, money: Math.floor(g.money), lives: g.lives, maxLives: g.maxLives,
       freeplay: g.freeplay, won: g.won, totalPops: g.totalPops, cheated: g.cheated, heroUsed: g.heroUsed, coinsEarned: g.coinsEarned,
-      stat: { time: Math.round(g.stat.time), livesLost: g.stat.livesLost, abilities: g.stat.abilities, built: g.stat.built, sold: g.stat.sold.slice(-40) },
+      stat: Object.assign({}, g.stat, { time: Math.round(g.stat.time), sold: g.stat.sold.slice(-40), rounds: g.stat.rounds.slice(-250) }),
       seenBoss: g.seenBoss, fusionHinted: g.fusionHinted, spawnCounter: g.spawnCounter % 2,
       towers: g.towers.filter((t) => !t.fusing && !t.dead).map(towerState),
       peels: g.traps.filter((tr) => tr.keep === 'peel' && !tr.gone).map((tr) => [Math.round(tr.x), Math.round(tr.y), tr.pierce]),
@@ -70,6 +76,7 @@
       t.recompute();
       t.refreshTexture();
       if (t.stars) t.makeHeroVisuals();
+      MT.HeroTraits.load(g, t, o.trait);
       g.heroPlaced = true;
     } else if (o.subs) {
       if (o.subs.some((u) => !MT.TOWERS[u.type])) return null;
@@ -96,6 +103,7 @@
       t.refreshTexture();
       if (t.fused) t.makeFusedVisuals();
     }
+    if (o.pl && (t.ultimate || t.omega)) MT.Fusion.setPower(t, o.pl);
     common(t, o);
     return t;
   }
@@ -114,6 +122,7 @@
     g.coinsEarned = run.coinsEarned || 0;
     Object.assign(g.stat, run.stat || {});
     g.stat.sold = (run.stat && run.stat.sold) || [];
+    g.stat.rounds = (run.stat && run.stat.rounds) || [];
     g.seenBoss = run.seenBoss || {};
     g.fusionHinted = run.fusionHinted || {};
     g.spawnCounter = run.spawnCounter || 0;
@@ -124,6 +133,7 @@
     });
     (run.peels || []).forEach(([x, y, n]) => MT.Powers.peelPile(g, x, y, n));
     (run.sprinklers || []).forEach(([x, y, n]) => MT.Powers.sprinkler(g, x, y, n));
+    MT.HeroTraits.afterLoad(g);
     g.recalcBuffs();
     g.hud.onTowersChanged();
     g.hud.onRoundState();

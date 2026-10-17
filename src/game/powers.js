@@ -213,5 +213,5 @@
     }
   }
 
-  MT.Powers = { use, drop, step, preview, count, peelPile, sprinkler };
+  MT.Powers = { use, drop, step, preview, count, peelPile, sprinkler, trackSpot };
 })();
